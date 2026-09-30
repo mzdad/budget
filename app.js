@@ -22,26 +22,27 @@ const SIGNED_IN_HINT_KEY = "budget.signedInAs";
 const INCOME_SECTION = {
 	key: "income",
 	title: "Indkomst",
-	hint: "Det du får ind hver måned, efter skat: løn, SU, børnepenge ...",
+	hint: "Det du får, efter skat.",
 	amountField: "amount",
 	addLabel: "+ Tilføj indkomst",
 	mostRows: MOST_INCOME_ROWS,
 	hasDates: true,
+	hasFrequency: true,   // income can come every few months too (børnepenge every 3rd month)
 };
 const FIXED_SECTION = {
 	key: "fixed",
 	title: "Faste udgifter",
-	hint: "Det der bliver trukket hver måned, uanset hvad: husleje, regninger, abonnementer ...",
+	hint: "Regninger og abonnementer.",
 	amountField: "amount",
 	addLabel: "+ Tilføj fast udgift",
 	mostRows: MOST_FIXED_ROWS,
 	hasDates: true,
-	hasFrequency: true,   // a fixed bill can come every few months, or once a year
+	hasFrequency: true,   // a bill can come every few months, or once a year
 };
 const CATEGORY_SECTION = {
 	key: "categories",
 	title: "Penge til hverdagen",
-	hint: "Hvor meget vil du højst bruge på hver slags udgift i denne måned?",
+	hint: "Hvor meget vil du højst bruge?",
 	amountField: "limit",
 	addLabel: "+ Tilføj kategori",
 	mostRows: MOST_CATEGORIES,
@@ -185,11 +186,12 @@ function getMonth(key) {
 }
 
 // Every change goes through here: get the month, let `change` edit it, save.
-function changeMonth(change) {
-	const month = getMonth(viewMonth);
+function changeMonth(change, key) {
+	const monthKey = key || viewMonth;
+	const month = getMonth(monthKey);
 	change(month);
-	data.months[viewMonth] = month;
-	saveMonth(viewMonth, month);
+	data.months[monthKey] = month;
+	saveMonth(monthKey, month);
 }
 
 
@@ -320,23 +322,19 @@ function overviewHtml(month) {
 	html += leftCardHtml(s);
 	html += addFormHtml(month);
 	html += categoryBarsHtml(s);
+	html += potCardsHtml();
+	potMessage = null;   // a message is shown once
 	return html;
 }
 
 function welcomeHtml() {
-	const accountTip = accountsAvailable() && accountName === null
-		? '<p class="hint" style="margin-top:10px">Vil du have dine tal på alle dine enheder? Lav en konto øverst under Plan.</p>'
-		: "";
 	return `
 		<section class="card">
-			<h2>Velkommen</h2>
-			<p>Sådan kommer du i gang:</p>
+			<h2>Kom i gang</h2>
 			<ol>
-				<li>Gå til <b>Plan</b> og skriv din indkomst og dine faste udgifter.</li>
-				<li>Bestem, hvor meget du vil bruge på mad, fritid osv.</li>
-				<li>Skriv hver udgift ind her under <b>Overblik</b>, når du har brugt penge.</li>
+				<li>Skriv din indkomst og dine faste udgifter under <b>Plan</b>.</li>
+				<li>Skriv hver udgift ind her.</li>
 			</ol>
-			${accountTip}
 			<button class="primary" data-tab="plan">Start med planen</button>
 		</section>`;
 }
@@ -375,7 +373,6 @@ function leftCardHtml(s) {
 				<span>Til rådighed <b>${formatKr(s.available)}</b></span>
 				<span>Brugt <b>${formatKr(s.spent)}</b></span>
 			</div>
-			<p class="hint" style="margin-top:8px">Til rådighed = indkomst minus faste udgifter og opsparing.</p>
 		</section>`;
 }
 
@@ -434,7 +431,7 @@ function categoryBarsHtml(s) {
 	let html = '<section class="card"><h2>Dine kategorier</h2>';
 
 	if (s.categories.length === 0 && s.otherSpent === 0) {
-		html += '<p class="hint">Ingen kategorier endnu. Lav dem under Plan.</p>';
+		html += '<p class="hint">Lav kategorier under Plan.</p>';
 	}
 
 	for (const category of s.categories) {
@@ -456,7 +453,7 @@ function categoryBarHtml(category) {
 
 	let note = "";
 	if (level === "nolimit") {
-		note = category.spent > 0 ? "Ingen grænse sat. Sæt en under Plan." : "Ingen grænse sat.";
+		note = "Ingen grænse";
 	} else if (level === "over") {
 		note = formatKr(-category.left) + " over grænsen";
 	} else {
@@ -492,7 +489,7 @@ function expensesHtml(month) {
 		</section>`;
 
 	if (month.spending.length === 0) {
-		return html + '<section class="card"><p class="hint">Ingen udgifter endnu. Skriv den første ind under Overblik.</p></section>';
+		return html + '<section class="card"><p class="hint">Ingen udgifter endnu.</p></section>';
 	}
 
 	html += '<section class="card">';
@@ -529,7 +526,7 @@ function futureHtml(month) {
 	return `
 		<section class="card">
 			<h2>Penge ved starten af ${esc(monthLabel(viewMonth).toLowerCase())}</h2>
-			<p class="hint">Hvor mange penge har du i alt, når måneden begynder? Lad feltet stå tomt, hvis du bare vil se, hvor meget du lægger til side.</p>
+			<p class="hint">${potBalances(data.months).length > 0 ? "Hele bunken, også børnenes penge." : "Hvor mange penge har du, når måneden begynder?"}</p>
 			<div class="single-row">
 				<label for="balance-input">Penge i alt</label>
 				<input id="balance-input" value="${amountToInput(month.startBalance)}" placeholder="0" inputmode="decimal" autocomplete="off">
@@ -543,7 +540,7 @@ function futureHtml(month) {
 function futureResultsHtml(month) {
 	const s = summarize(month, viewMonth);
 	if (s.income === 0) {
-		return '<section class="card"><p>Skriv din indkomst og dine udgifter under <b>Plan</b> først, så kan jeg regne fremad.</p></section>';
+		return '<section class="card"><p>Skriv din indkomst under <b>Plan</b> først.</p></section>';
 	}
 
 	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months);
@@ -552,11 +549,9 @@ function futureResultsHtml(month) {
 	// When you have set up later months differently (a new job, say), "the same every month"
 	// would be wrong, so the lines say that the amount changes and the table shows each month.
 	const perMonthText = f.varies
-		? `Lægges til: <b>${formatKr(f.perMonth)}</b> i ${esc(shortMonthLabel(viewMonth))}, og det ændrer sig senere (se tabellen)`
+		? `Lægges til: <b>${formatKr(f.perMonth)}</b> nu, ændrer sig senere`
 		: `Lægges til hver måned <b>${formatKr(f.perMonth)}</b>`;
-	const carefulText = f.carefulVaries
-		? `Kun opsparingen (den ændrer sig): <b>${formatKr(f.carefulEndTotal)}</b>`
-		: `Kun opsparingen (${formatKr(f.carefulPerMonth)} om måneden): <b>${formatKr(f.carefulEndTotal)}</b>`;
+	const carefulText = `Kun opsparingen: <b>${formatKr(f.carefulEndTotal)}</b>`;
 
 	let rows = "";
 	for (const row of f.rows) {
@@ -572,27 +567,45 @@ function futureResultsHtml(month) {
 		<section class="card">
 			<div class="label">Om ${FORECAST_MONTHS} måneder har du</div>
 			<div class="big-number ${tone}">${formatKr(f.endTotal)}</div>
-			<p>ved udgangen af ${esc(monthLabel(f.lastKey).toLowerCase())}, hvis du bruger præcis dine grænser.</p>
+			<p class="hint">Ved udgangen af ${esc(monthLabel(f.lastKey).toLowerCase())}.</p>
 			<div class="facts">
 				<span>${perMonthText}</span>
 			</div>
 			<div class="facts">
 				<span>${carefulText}</span>
 			</div>
-			<p class="hint" style="margin-top:8px">Det øverste tal regner med, at du bruger præcis det, du har sat af til hver kategori, og beholder resten. Det nederste regner med, at du bruger alt andet end opsparingen.</p>
+			${othersLineHtml(f.endTotal)}
+			<details class="explain">
+				<summary>Hvad betyder det?</summary>
+				<p class="hint">Det store tal: du bruger præcis dine grænser og beholder resten. "Kun opsparingen": du bruger alt andet end det, du har sat til side. Et regnestykke, ikke en forudsigelse.</p>
+			</details>
 		</section>
 		<section class="card">
-			<h2>Måned for måned</h2>
-			<div class="table-scroll">
-				<table>
-					<thead><tr><th>Måned</th><th>Lægges til</th><th>Penge i alt</th></tr></thead>
-					<tbody>
-						<tr><td>Start</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
-					</tbody>
-				</table>
-			</div>
-			<p class="hint" style="margin-top:8px">Det her er et regnestykke, ikke en forudsigelse. Det bruger planen for hver måned, du selv har sat op under Plan. En måned med * er ikke sat op endnu og bruger planen fra måneden før. Ændrer du en plan, ændrer tallene sig her.</p>
+			<details>
+				<summary class="fold-title">Måned for måned</summary>
+				<div class="table-scroll">
+					<table>
+						<thead><tr><th>Måned</th><th>Lægges til</th><th>Penge i alt</th></tr></thead>
+						<tbody>
+							<tr><td>Start</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
+						</tbody>
+					</table>
+				</div>
+				<p class="hint" style="margin-top:8px">* = måneden er ikke sat op og bruger planen fra måneden før.</p>
+			</details>
 		</section>`;
+}
+
+// "Of the pile, Nathan's is 4.200 and yours is 178.000": only when a kid has money in it.
+// Their share is what they have today; it is taken out of the total to show what is yours.
+function othersLineHtml(endTotal) {
+	const people = potBalances(data.months);
+	if (people.length === 0) {
+		return "";
+	}
+	const others = othersTotal(data.months);
+	const who = people.length === 1 ? people[0].person : "børnene";
+	return `<div class="facts"><span>Heraf ${esc(who)} (i dag): <b>${formatKr(others)}</b> · Dine egne: <b>${formatKr(endTotal - others)}</b></span></div>`;
 }
 
 function refreshFutureResults() {
@@ -615,7 +628,7 @@ function accountHtml() {
 		return `
 			<section class="card">
 				<h2>Konto</h2>
-				<p>Logget ind som <b>${esc(accountName)}</b>. Dine tal er gemt online og er de samme på alle dine enheder.</p>
+				<p>Logget ind som <b>${esc(accountName)}</b>. Dine tal er gemt online.</p>
 				<button class="secondary" data-action="sign-out">Log ud</button>
 			</section>`;
 	}
@@ -623,7 +636,7 @@ function accountHtml() {
 	return `
 		<section class="card">
 			<h2>Gem dine tal på en konto</h2>
-			<p class="hint">Så er de de samme på din telefon og din computer, og de er ikke væk, hvis du mister telefonen.</p>
+			<p class="hint">Så følger dine tal dig overalt, og de går ikke tabt.</p>
 			<form id="account-form" autocomplete="on">
 				<label>Brugernavn
 					<input name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" required>
@@ -635,7 +648,7 @@ function accountHtml() {
 				<button type="button" class="secondary" data-action="create-account">Opret ny konto</button>
 				<p id="account-message" class="message" role="status"></p>
 			</form>
-			<p class="hint">Brugernavn: a–z, tal, - og _ (3–20 tegn, ingen æ, ø, å). Adgangskode: mindst 10 tegn, fx tre ord og et tal.</p>
+			<p class="hint">Brugernavn uden æ, ø, å. Adgangskode: mindst 10 tegn, fx tre ord og et tal.</p>
 		</section>`;
 }
 
@@ -646,6 +659,7 @@ function planHtml(month) {
 		+ planSectionHtml(FIXED_SECTION, month)
 		+ savingsHtml(month)
 		+ planSectionHtml(CATEGORY_SECTION, month)
+		+ addPersonHtml()
 		+ exportHtml()
 		+ backupHtml();
 }
@@ -659,7 +673,7 @@ function exportHtml() {
 	return `
 		<section class="card">
 			<h2>Eksport</h2>
-			<p class="hint">Se en rapport over en måned eller et helt år. Den kan hentes til Excel, eller udskrives og gemmes som PDF.</p>
+			<p class="hint">Hent en måned eller et helt år til Excel eller PDF.</p>
 			<label>Hvad vil du se?
 				<select id="export-scope">${options}</select>
 			</label>
@@ -691,9 +705,9 @@ function planSummaryHtml(month) {
 	html += "</div>";
 
 	if (s.unassigned < 0) {
-		html += '<p class="hint" style="margin-top:8px">Du har givet hverdagen mere, end du har til rådighed.</p>';
+		html += '<p class="hint" style="margin-top:8px">Du har fordelt mere, end du har.</p>';
 	}
-	html += '<p class="hint" style="margin-top:8px">Skriv beløb som 1250 eller 49,95. Alt bliver gemt med det samme. Ændringer gælder kun denne måned; en ny måned starter med en kopi af den forrige.</p>';
+	html += '<p class="hint" style="margin-top:8px">Alt gemmes med det samme. Ændringer gælder kun denne måned.</p>';
 	return html;
 }
 
@@ -758,7 +772,7 @@ function datesSummaryText(row, section) {
 	if (when !== "") {
 		return "Gælder " + when;
 	}
-	return section.hasFrequency ? EVERY_LABELS[1] : "Fra/til dato (valgfrit)";
+	return EVERY_LABELS[1];
 }
 
 // What the row means for the month on screen, so nobody has to work it out.
@@ -774,7 +788,7 @@ function dateNoteText(row) {
 	}
 
 	if (!row.from && !row.to) {
-		return "Uden datoer gælder rækken hele tiden.";
+		return "";   // nothing special to explain
 	}
 	if (row.from && row.to && row.from > row.to) {
 		return "Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.";
@@ -815,7 +829,7 @@ function savingsHtml(month) {
 	return `
 		<section class="card">
 			<h2>Opsparing</h2>
-			<p class="hint">Hvor meget vil du lægge til side hver måned, før du bruger af resten?</p>
+			<p class="hint">Hvor meget lægger du til side hver måned?</p>
 			<div class="single-row">
 				<label for="savings-input">Opsparing pr. måned</label>
 				<input id="savings-input" value="${amountToInput(month.savings)}" placeholder="0" inputmode="decimal" autocomplete="off">
@@ -824,161 +838,20 @@ function savingsHtml(month) {
 }
 
 function backupHtml() {
+	// Safari can clear a web page's saved numbers after a week. An account makes that harmless.
+	const iPhoneTip = accountName === null
+		? " På iPhone: Del → Føj til hjemmeskærm, så Safari ikke rydder dine tal."
+		: "";
 	return `
 		<section class="card">
 			<h2>Sikkerhedskopi</h2>
-			<p class="hint">Dine tal bliver kun gemt i denne browser, på denne enhed. Gem en kopi, hvis du skifter telefon eller rydder browserdata. På iPhone: tryk Del og vælg "Føj til hjemmeskærm", så Safari ikke rydder dine tal, hvis du ikke åbner siden i en uge.</p>
+			<p class="hint">Gem en kopi som ekstra sikkerhed.${iPhoneTip}</p>
 			<button class="secondary" data-action="export">Gem kopi som fil</button>
 			<label class="button secondary">Hent kopi fra fil
 				<input type="file" id="import-file" accept="application/json,.json" hidden>
 			</label>
 			<p id="backup-message" class="message" role="status"></p>
 		</section>`;
-}
-
-
-// ---- The report (opened from Plan -> Eksport) -------------------------------------
-//
-// One screen that is also what gets printed: the buttons carry the class "no-print", which the
-// print styles hide. The numbers come from monthReport() / yearReport() in budget.js, the same
-// ones the spreadsheet is made from.
-
-// A table from a list of headings and a list of rows; every cell is already HTML.
-// A cell can be { html, cls } to give it a class.
-function tableHtml(headings, rows, tableClass) {
-	let html = '<div class="table-scroll"><table' + (tableClass ? ' class="' + tableClass + '"' : "") + ">";
-	if (headings.length > 0) {
-		html += "<thead><tr>" + headings.map((heading) => `<th>${heading}</th>`).join("") + "</tr></thead>";
-	}
-	html += "<tbody>";
-	for (const row of rows) {
-		const isTotal = row.total === true;
-		html += isTotal ? '<tr class="total">' : "<tr>";
-		for (const cell of row.cells) {
-			const text = typeof cell === "object" ? cell.html : cell;
-			const cls = typeof cell === "object" && cell.cls ? ` class="${cell.cls}"` : "";
-			html += `<td${cls}>${text}</td>`;
-		}
-		html += "</tr>";
-	}
-	return html + "</tbody></table></div>";
-}
-
-// An amount that is red when it is negative.
-function amountCell(ore) {
-	return { html: formatKr(ore), cls: ore < 0 ? "bad" : "" };
-}
-
-function purchasesHtml(spending) {
-	if (spending.length === 0) {
-		return '<p class="hint">Ingen udgifter.</p>';
-	}
-	return tableHtml(["Dato", "Kategori", "Note", "Beløb"], spending.map((item) => ({
-		cells: [dateText(item.date).slice(0, 6), { html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
-	})), "purchases");
-}
-
-function monthReportHtml(report) {
-	const s = report.summary;
-	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || "(uden navn)"), formatKr(row.amount)] }));
-
-	let html = `<h2>Budget: ${esc(report.label)}</h2>`;
-	html += "<h3>Oversigt</h3>" + tableHtml([], [
-		{ cells: ["Indkomst", formatKr(s.income)] },
-		{ cells: ["Faste udgifter", formatKr(s.fixed)] },
-		{ cells: ["Opsparing", formatKr(s.savings)] },
-		{ cells: ["Til rådighed", formatKr(s.available)], total: true },
-		{ cells: ["Brugt", formatKr(s.spent)] },
-		{ cells: ["Tilbage", amountCell(s.left)], total: true },
-	]);
-	html += "<h3>Indkomst</h3>" + tableHtml([], nameRows(report.income));
-	html += "<h3>Faste udgifter</h3>" + tableHtml([], nameRows(report.fixed));
-
-	const categoryRows = report.categories.map((c) => ({
-		cells: [esc(c.name || "(uden navn)"), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
-	}));
-	if (report.otherSpent > 0) {
-		categoryRows.push({ cells: ["Uden kategori", "", formatKr(report.otherSpent), ""] });
-	}
-	html += "<h3>Kategorier</h3>" + tableHtml(["Kategori", "Grænse", "Brugt", "Tilbage"], categoryRows);
-	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
-	return html;
-}
-
-function yearReportHtml(report) {
-	if (report.rows.length === 0) {
-		return `<h2>Budget: ${esc(report.year)}</h2><p class="hint">Der er ingen gemte måneder i ${esc(report.year)}.</p>`;
-	}
-	const t = report.totals;
-
-	const monthRows = report.rows.map((row) => ({
-		cells: [esc(shortMonthLabel(row.key)), formatKr(row.income), formatKr(row.fixed), formatKr(row.savings), formatKr(row.available), formatKr(row.spent), amountCell(row.left)],
-	}));
-	monthRows.push({
-		cells: ["I alt", formatKr(t.income), formatKr(t.fixed), formatKr(t.savings), formatKr(t.available), formatKr(t.spent), amountCell(t.left)],
-		total: true,
-	});
-
-	const categoryRows = report.categories.map((c) => ({ cells: [esc(c.name), formatKr(c.total)] }));
-
-	let html = `<h2>Budget: ${esc(report.year)}</h2>`;
-	html += "<h3>Måned for måned</h3>" + tableHtml(["Måned", "Indkomst", "Faste", "Opsparing", "Til rådighed", "Brugt", "Tilbage"], monthRows);
-	html += '<p class="hint no-print">Stryg tabellen til siden for at se alle kolonner.</p>';
-	html += "<h3>Brugt pr. kategori</h3>" + tableHtml(["Kategori", "I alt"], categoryRows);
-	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
-	return html;
-}
-
-function reportHtml() {
-	let body = "";
-	if (reportScope.type === "month") {
-		body = monthReportHtml(monthReport(getMonth(reportScope.key), reportScope.key));
-	} else {
-		body = yearReportHtml(yearReport(data.months, reportScope.key));
-	}
-	return `
-		<section class="card no-print">
-			<div class="buttons">
-				<button class="primary" data-action="download-csv">Hent til Excel (.csv)</button>
-				<button class="secondary" data-action="print-report">Udskriv eller gem som PDF</button>
-				<button class="secondary" data-action="close-report">‹ Tilbage til Plan</button>
-			</div>
-		</section>
-		<section class="card report">${body}</section>`;
-}
-
-function openReport() {
-	const choice = document.getElementById("export-scope").value.split(":");
-	reportScope = { type: choice[0], key: choice[1] };
-	activeTab = "report";
-	render();
-	window.scrollTo(0, 0);
-}
-
-// The spreadsheet, as a file. A byte-order mark (﻿) first tells Excel the text is UTF-8,
-// so æ, ø and å come out right.
-function downloadReportCsv() {
-	let text = "";
-	let name = "";
-	if (reportScope.type === "month") {
-		text = monthCsv(monthReport(getMonth(reportScope.key), reportScope.key));
-		name = "budget-" + reportScope.key + ".csv";
-	} else {
-		text = yearCsv(yearReport(data.months, reportScope.key));
-		name = "budget-" + reportScope.key + ".csv";
-	}
-	downloadText(name, "﻿" + text, "text/csv;charset=utf-8");
-}
-
-// Hands the browser a file to save. Used by the spreadsheet and the backup.
-function downloadText(filename, text, mimeType) {
-	const link = document.createElement("a");
-	link.href = URL.createObjectURL(new Blob([text], { type: mimeType }));
-	link.download = filename;
-	document.body.appendChild(link);
-	link.click();
-	link.remove();
-	setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 
@@ -1027,6 +900,18 @@ document.addEventListener("click", (event) => {
 		case "clear-dates":
 			clearDates(button);
 			break;
+		case "pot-used":
+			saveOthersEntry(button, -1);
+			break;
+		case "pot-got":
+			saveOthersEntry(button, 1);
+			break;
+		case "delete-pot":
+			deleteOthersEntry(button.dataset.id, button.dataset.month);
+			break;
+		case "delete-person":
+			deletePerson(button.dataset.person);
+			break;
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
@@ -1067,6 +952,9 @@ document.addEventListener("submit", (event) => {
 	} else if (event.target.id === "account-form") {
 		event.preventDefault();
 		signInFromForm(event.target);
+	} else if (event.target.id === "person-form") {
+		event.preventDefault();
+		addPerson(event.target);
 	}
 });
 
@@ -1098,6 +986,174 @@ document.addEventListener("change", (event) => {
 		importBackup(input);
 	}
 });
+
+
+// ---- Børn: your kids' savings in your pile --------------------------------------
+//
+// You keep all your savings in one pile, and some of it is your kids'. Add each kid under Plan,
+// and they get a card on Overblik: "Nathan brugte 300 kr" and it says what he has left. Any
+// number of kids, any names. (In the code a kid is a "person" with entries; budget.js calls the
+// whole thing "pots": potBalances.) Each entry is saved in the month it happened in, like a
+// purchase.
+
+let potMessage = null;   // { person, text }: what to say in that person's card, once
+
+// One card for each person, on Overblik. Nothing at all until someone has been added (Plan).
+function potCardsHtml() {
+	return potBalances(data.months).map(potCardHtml).join("");
+}
+
+function potCardHtml(person) {
+	const name = esc(person.person);
+	const message = potMessage && potMessage.person === person.person ? potMessage.text : "";
+
+	let history = "";
+	for (const entry of person.entries.slice(0, 10)) {
+		const text = entry.note !== "" ? entry.note : (entry.amount < 0 ? "Brugte" : "Fik");
+		history += `
+			<li>
+				<div class="what">${esc(text)}<small>${esc(dateText(entry.date).slice(0, 6))}</small></div>
+				<span class="money ${entry.amount < 0 ? "bad-text" : ""}">${formatKr(entry.amount)}</span>
+				<button class="icon" data-action="delete-pot" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}" aria-label="Slet">✕</button>
+			</li>`;
+	}
+
+	return `
+		<section class="card pot">
+			<div class="label">${name} har</div>
+			<div class="big-number ${person.balance < 0 ? "bad" : ""}">${formatKr(person.balance)}</div>
+			<p class="message" role="status">${esc(message)}</p>
+			<div class="pot-form" data-person="${name}">
+				<label>Beløb i kroner
+					<input name="amount" inputmode="decimal" placeholder="fx 300" autocomplete="off">
+				</label>
+				<label>Hvad? (hvis du vil)
+					<input name="note" maxlength="${MAX_NOTE_LENGTH}" autocomplete="off">
+				</label>
+				<div class="pot-buttons">
+					<button type="button" class="primary" data-action="pot-used">${name} brugte</button>
+					<button type="button" class="secondary" data-action="pot-got">${name} fik</button>
+				</div>
+				<p class="message pot-error" role="status"></p>
+			</div>
+			<details class="explain">
+				<summary>Historik</summary>
+				<ul class="list">${history}</ul>
+				<button type="button" class="link" data-action="delete-person" data-person="${name}">Fjern ${name}</button>
+			</details>
+		</section>`;
+}
+
+// "Nathan brugte 300": sign is -1 (used) or +1 (got). Saves, then says what is left.
+function saveOthersEntry(button, sign) {
+	const form = button.closest(".pot-form");
+	const person = form.dataset.person;
+	const problem = form.querySelector(".pot-error");
+
+	const ore = parseAmount(form.querySelector('[name="amount"]').value);
+	if (ore === null || ore <= 0) {
+		problem.textContent = "Skriv et beløb, fx 300.";
+		problem.classList.add("bad");
+		return;
+	}
+	if (getMonth(viewMonth).pots.length >= MOST_POT_ENTRIES_PER_MONTH) {
+		problem.textContent = "For mange poster i denne måned.";
+		problem.classList.add("bad");
+		return;
+	}
+
+	// Dated today when the month on screen is this month, otherwise the 1st of it.
+	const today = dateKeyOf(new Date());
+	const date = today.slice(0, 7) === viewMonth ? today : viewMonth + "-01";
+	const note = form.querySelector('[name="note"]').value.trim().slice(0, MAX_NOTE_LENGTH);
+	changeMonth((month) => {
+		month.pots.push({ id: newId(), date: date, person: person, amount: sign * ore, note: note });
+	});
+
+	const now = potBalances(data.months).find((other) => other.person.toLowerCase() === person.toLowerCase());
+	const left = formatKr(now.balance);
+	potMessage = {
+		person: now.person,
+		text: sign < 0
+			? person + " brugte " + formatKr(ore) + " Nu har " + person + " " + left + " tilbage."
+			: person + " fik " + formatKr(ore) + " Nu har " + person + " " + left,
+	};
+	render();
+}
+
+function deleteOthersEntry(id, monthKey) {
+	if (!confirm("Slet den post?")) {
+		return;
+	}
+	changeMonth((month) => {
+		month.pots = month.pots.filter((entry) => entry.id !== id);
+	}, monthKey);
+	render();
+}
+
+// Takes a kid away with every entry they have, in every month. Asks first: it can't be undone.
+function deletePerson(person) {
+	if (!confirm("Fjern " + person + " og alle posterne? Det kan ikke fortrydes.")) {
+		return;
+	}
+	const wanted = person.toLowerCase();
+	for (const monthKey of Object.keys(data.months)) {
+		if (data.months[monthKey].pots.some((entry) => entry.person.trim().toLowerCase() === wanted)) {
+			changeMonth((month) => {
+				month.pots = month.pots.filter((entry) => entry.person.trim().toLowerCase() !== wanted);
+			}, monthKey);
+		}
+	}
+	render();
+}
+
+// The "Børn" box on Plan: a kid's name, and what they have now. Once a kid is added, their card
+// shows up on Overblik.
+function addPersonHtml() {
+	const people = potBalances(data.months);
+	const form = `
+		<form id="person-form" autocomplete="off">
+			<label>Barnets navn
+				<input name="person" maxlength="${MAX_NAME_LENGTH}" placeholder="fx Nathan" required>
+			</label>
+			<label>Hvor mange penge har barnet nu?
+				<input name="amount" inputmode="decimal" placeholder="0">
+			</label>
+			<button type="submit" class="secondary">Tilføj barn</button>
+			<p id="person-message" class="message" role="status"></p>
+		</form>`;
+	return `
+		<section class="card">
+			<h2>Børn</h2>
+			<p class="hint">Børnenes penge i din bunke.</p>
+			${people.length > 0 ? `<details class="explain"><summary>+ Tilføj et barn mere</summary>${form}</details>` : form}
+		</section>`;
+}
+
+function addPerson(form) {
+	const person = form.elements.person.value.trim().slice(0, MAX_NAME_LENGTH);
+	const ore = parseAmount(form.elements.amount.value);
+	if (person === "") {
+		setMessage("person-message", "Skriv barnets navn.", true);
+		return;
+	}
+	if (ore === null) {
+		setMessage("person-message", "Skriv et beløb, fx 5000.", true);
+		return;
+	}
+	if (potBalances(data.months).some((other) => other.person.toLowerCase() === person.toLowerCase())) {
+		setMessage("person-message", person + " findes allerede.", true);
+		return;
+	}
+
+	const today = dateKeyOf(new Date());
+	const date = today.slice(0, 7) === viewMonth ? today : viewMonth + "-01";
+	changeMonth((month) => {
+		month.pots.push({ id: newId(), date: date, person: person, amount: ore, note: "Start" });
+	});
+	render();
+	setMessage("person-message", person + " er tilføjet. Se under Overblik.", false);
+}
 
 
 // ---- Adding and deleting spending ----------------------------------------------

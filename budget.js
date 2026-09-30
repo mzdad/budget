@@ -35,6 +35,8 @@ const MOST_INCOME_ROWS = 50;
 const MOST_FIXED_ROWS = 100;
 const MOST_CATEGORIES = 50;
 const MOST_SPENDING_PER_MONTH = 2000;
+// Entries in the kids' money (Børn) that one month may hold.
+const MOST_POT_ENTRIES_PER_MONTH = 500;
 
 
 // --- Amounts ----------------------------------------------------------------
@@ -182,6 +184,7 @@ function starterMonth() {
 		categories: starterRows(STARTER_CATEGORIES, "limit"),
 		spending: [],
 		startBalance: 0,
+		pots: [],
 	};
 }
 
@@ -191,6 +194,7 @@ function copyPlanOf(month) {
 	const copy = JSON.parse(JSON.stringify(month));
 	copy.spending = [];
 	copy.startBalance = 0;
+	copy.pots = [];   // like purchases, these belong to the month they happened in
 	return copy;
 }
 
@@ -246,9 +250,16 @@ function mergeDeviceMonth(accountMonth, deviceMonth) {
 	const room = Math.max(0, MOST_SPENDING_PER_MONTH - accountMonth.spending.length);
 	const taken = newOnes.slice(0, room);
 
+	// Entries in other people's money: added by id too, never twice.
+	const knownPots = new Set((accountMonth.pots || []).map((entry) => entry.id));
+	const newPots = (deviceMonth.pots || []).filter((entry) => !knownPots.has(entry.id));
+	const potRoom = Math.max(0, MOST_POT_ENTRIES_PER_MONTH - (accountMonth.pots || []).length);
+	const takenPots = newPots.slice(0, potRoom);
+
 	const merged = JSON.parse(JSON.stringify(accountMonth));
 	merged.spending = accountMonth.spending.concat(taken);
-	return { month: merged, added: taken.length };
+	merged.pots = (accountMonth.pots || []).concat(takenPots);
+	return { month: merged, added: taken.length + takenPots.length };
 }
 
 // Newest date first. Within one day, the one added last comes first.
@@ -292,7 +303,7 @@ function activeDaysIn(row, key) {
 
 // --- Bills that do not come every month --------------------------------------
 
-// A fixed bill can come every 2nd, 3rd or 6th month, or once a year (row.every = 2, 3, 6 or 12;
+// A fixed bill (or an income, like børnepenge) can come every 2nd, 3rd or 6th month, or once a year (row.every = 2, 3, 6 or 12;
 // no `every` means every month). Its `from` date then says when the FIRST payment is, and only the
 // month counts, not the day: a bill from 2026-03-15 every 3rd month is due in March, June,
 // September and December. In a month it is due, the whole amount counts; in the others, nothing.
@@ -724,6 +735,52 @@ function yearCsv(report) {
 }
 
 
+// --- Kids' money in your pile (børn) ------------------------------------------
+
+// You keep all your savings in one pile, and some of it is your kids'. The page tracks each
+// kid's share on its own: what they have, and each time they used some or were given some. An entry is { id, date, person, amount, note }; the amount is in øre and
+// SIGNED: negative when the person used money, positive when they got some (the first entry is
+// what they have when you add them). A person is simply a name that has entries.
+// Entries live in the month they happened in, like purchases; the balance adds them all up.
+
+// Everyone with entries, each { person, balance, entries (newest first) }. The same name in
+// other capitals is the same person. People are listed in the order of their first entry.
+function potBalances(months) {
+	const byKey = {};
+	const order = [];
+	for (const monthKey of Object.keys(months).sort()) {
+		for (const entry of months[monthKey].pots || []) {
+			const key = entry.person.trim().toLowerCase();
+			if (key === "") {
+				continue;
+			}
+			if (!byKey[key]) {
+				byKey[key] = { person: entry.person.trim(), balance: 0, entries: [], firstDate: entry.date };
+				order.push(key);
+			}
+			const person = byKey[key];
+			person.balance += entry.amount;
+			person.entries.push({ id: entry.id, date: entry.date, amount: entry.amount, note: entry.note, monthKey: monthKey });
+			if (entry.date < person.firstDate) {
+				person.firstDate = entry.date;
+			}
+		}
+	}
+	const people = order.map((key) => byKey[key]);
+	people.sort((a, b) => (a.firstDate < b.firstDate ? -1 : a.firstDate > b.firstDate ? 1 : 0));
+	for (const person of people) {
+		// Newest first; the same day keeps the order things were added (latest first).
+		person.entries = person.entries.reverse().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+	}
+	return people;
+}
+
+// All the kids' balances added together: the part of your pile that is not yours.
+function othersTotal(months) {
+	return potBalances(months).reduce((sum, person) => sum + person.balance, 0);
+}
+
+
 // --- Notes you have used before (the suggestions under "Note") --------------
 
 const MOST_SUGGESTED_NOTES = 200;
@@ -789,6 +846,15 @@ function cleanAmount(value) {
 	return Math.min(n, MAX_AMOUNT);
 }
 
+// Like cleanAmount, but the amount may be negative (money a person used).
+function cleanSignedAmount(value) {
+	const n = Math.round(Number(value));
+	if (!Number.isFinite(n)) {
+		return 0;
+	}
+	return Math.max(-MAX_AMOUNT, Math.min(n, MAX_AMOUNT));
+}
+
 function cleanText(value, maxLength) {
 	if (value === undefined || value === null) {
 		return "";
@@ -802,7 +868,7 @@ function cleanId(value) {
 }
 
 // dated: income and fixed-bill rows may carry a "from" and a "to" day; other rows never do.
-// periodic: fixed bills may also come every 2, 3, 6 or 12 months (only with a "from" day).
+// periodic: income and fixed bills may also come every 2, 3, 6 or 12 months (only with a "from" day).
 function cleanRows(list, amountField, mostRows, dated, periodic) {
 	if (!Array.isArray(list)) {
 		return [];
@@ -841,15 +907,33 @@ function cleanSpending(list) {
 		}));
 }
 
+function cleanPots(list) {
+	if (!Array.isArray(list)) {
+		return [];
+	}
+	return list
+		.filter((entry) => entry && typeof entry === "object" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
+		.map((entry) => ({
+			id: cleanId(entry.id),
+			date: entry.date,
+			person: cleanText(entry.person, MAX_NAME_LENGTH).trim(),
+			amount: cleanSignedAmount(entry.amount),
+			note: cleanText(entry.note, MAX_NOTE_LENGTH),
+		}))
+		.filter((entry) => entry.person !== "")
+		.slice(0, MOST_POT_ENTRIES_PER_MONTH);
+}
+
 function cleanMonth(raw) {
 	const source = raw && typeof raw === "object" ? raw : {};
 	return {
-		income: cleanRows(source.income, "amount", MOST_INCOME_ROWS, true),
+		income: cleanRows(source.income, "amount", MOST_INCOME_ROWS, true, true),
 		fixed: cleanRows(source.fixed, "amount", MOST_FIXED_ROWS, true, true),
 		savings: cleanAmount(source.savings),
 		categories: cleanRows(source.categories, "limit", MOST_CATEGORIES),
 		spending: cleanSpending(source.spending),
 		startBalance: cleanAmount(source.startBalance),
+		pots: cleanPots(source.pots),
 	};
 }
 
@@ -882,6 +966,7 @@ if (typeof module !== "undefined") {
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
+		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,
 		noteHistory, categoryIdForNote,
 		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
 		FORECAST_MONTHS, forecast,

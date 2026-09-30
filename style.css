@@ -443,6 +443,26 @@ label.button.secondary {
 	margin-top: 6px;
 }
 
+/* Nothing to say: take no room. */
+.date-note:empty {
+	display: none;
+}
+
+/* Small "tap for more" lines, and the title of a folded card. */
+.explain summary {
+	color: var(--muted);
+	font-size: 0.85rem;
+	cursor: pointer;
+	padding: 6px 0 0;
+}
+
+.fold-title {
+	font-size: 1.05rem;
+	font-weight: 600;
+	cursor: pointer;
+	padding: 4px 0;
+}
+
 .single-row {
 	display: grid;
 	grid-template-columns: 1fr 112px;
@@ -525,6 +545,26 @@ label.button.secondary {
 	color: var(--accent);
 	font-weight: 700;
 	box-shadow: inset 0 3px 0 var(--accent);
+}
+
+/* ---- Other people's money (Nathan's savings) ---- */
+
+.pot-buttons {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.pot .message {
+	min-height: 0;
+}
+
+.pot .message:empty {
+	display: none;
+}
+
+.bad-text {
+	color: var(--bad);
 }
 
 /* ---- The version number at the bottom ---- */

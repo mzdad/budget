@@ -71,7 +71,8 @@ them. Until they are published, the page can't read or save anything in the acco
 **When `firestore.rules` changes, do this step again.** It changed once after the first version: the
 **Fremtid** screen's "Penge ved starten af ..." box needs the newer rules to save into an account.
 Until they are published, typing a number there says it could not be saved (everything else keeps
-working).
+working). It changed again for the **Børn** feature (an optional `pots` field): the kids' numbers
+need the newest rules to save into an account.
 
 ---
 

@@ -8,8 +8,8 @@ A small monthly budget page for phone and PC. Danish, kroner.
   want to spend on each kind of thing (food, transport, fun ...). An income or fixed-bill row can
   have a first and a last day ("Fra/til dato"), for a new job, a contract that ends, a new
   subscription. In a month where it counts for only some days, it counts pro rata by days. A fixed
-  bill can also come every 2nd, 3rd or 6th month, or once a year (the whole amount in the months
-  it is due).
+  bill or an income (børnepenge) can also come every 2nd, 3rd or 6th month, or once a year (the
+  whole amount in the months it is due).
 - **Overblik** - shows what is left to spend this month, and lets you write in every
   purchase (the Note box suggests notes you have used before, and picks their usual category). Each category has a bar that turns amber near its limit and red above it.
 - **Udgifter** - every purchase, newest first. Delete a mistake with the ✕.
@@ -20,6 +20,10 @@ A small monthly budget page for phone and PC. Danish, kroner.
   before it. It is arithmetic, not a prediction.
 - **Eksport** (on Plan) - a report for one month or a whole year, on screen. Download it for
   Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF.
+- **Børn** - add your kids under Plan, and each gets a card on Overblik with what they have,
+  "brugte" and "fik" buttons, and a history. All the kids' money sits in your one pile; Fremtid
+  shows how much of it is theirs. (In the code a kid is a "person" with entries, stored in the
+  month's `pots` field.)
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
   - **No account:** saved on the device only (the browser's localStorage). Nothing is sent

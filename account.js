@@ -132,6 +132,11 @@ async function saveAccountMonth(username, key, month) {
 	if (month.startBalance > 0) {
 		fields.startBalance = month.startBalance;
 	}
+	// Same for other people's money (Nathan's savings): only sent when there are entries, so a
+	// month without any passes the rules published before they existed.
+	if (month.pots && month.pots.length > 0) {
+		fields.pots = month.pots;
+	}
 	await setDoc(doc(firebase.db, BUDGET_FOLDER, username, MONTHS_FOLDER, key), fields);
 }
 

@@ -96,6 +96,7 @@ const month = {
 		{ id: "4", date: "2026-09-03", categoryId: "gone", amount: 5000, note: "" },
 	],
 	startBalance: 1000000,
+	pots: [],
 };
 const s = budget.summarize(month);
 check("income total", s.income, 2600000);
@@ -345,7 +346,15 @@ check("clean: a good `every` is kept on a fixed bill", cleanedEvery.fixed[0].eve
 check("clean: `every` without a first payment date is dropped", "every" in cleanedEvery.fixed[1], false);
 check("clean: an unusual `every` is dropped", "every" in cleanedEvery.fixed[2], false);
 check("clean: every 1 is not stored", "every" in cleanedEvery.fixed[3], false);
-check("clean: income rows never have `every`", "every" in cleanedEvery.income[0], false);
+check("clean: income rows can come every few months too", cleanedEvery.income[0].every, 3);
+const boernepenge = { id: "b", name: "Børnepenge", amount: 400000, every: 3, from: "2026-01-01" };
+check("income every 3rd month (børnepenge): due in January", budget.amountIn(boernepenge, "2026-01"), 400000);
+check("income every 3rd month: nothing in February", budget.amountIn(boernepenge, "2026-02"), 0);
+check("income every 3rd month: due again in April", budget.amountIn(boernepenge, "2026-04"), 400000);
+const withBoernepenge = { income: [{ id: "i", name: "Løn", amount: 2000000 }, boernepenge], fixed: [], savings: 0, categories: [], spending: [], startBalance: 0 };
+check("income every 3rd month: counts in the total only when due", [budget.summarize(withBoernepenge, "2026-03").income, budget.summarize(withBoernepenge, "2026-04").income], [2000000, 2400000]);
+check("income every 3rd month: the forecast follows", budget.forecast(withBoernepenge, "2026-03", 3, { "2026-03": withBoernepenge }).rows.map((row) => row.added), [2000000, 2400000, 2000000]);
+check("income every 3rd month: the report says so", budget.monthReport(withBoernepenge, "2026-04").income.map((row) => row.name), ["Løn", "Børnepenge (hver 3. måned fra 01.01.2026)"]);
 
 // --- Notes you have used before ---
 const septemberWithNotes = {
@@ -382,6 +391,51 @@ check("note -> category: a new note gives nothing", budget.categoryIdForNote(his
 check("note -> category: a note that had no category gives nothing", budget.categoryIdForNote(history, "Kiosk", octoberPlan), "");
 check("note -> category: a category this month lacks gives nothing", budget.categoryIdForNote(history, "Netto", { categories: [{ id: "z", name: "Sundhed", limit: 0 }] }), "");
 check("notes: no months, no suggestions", budget.noteHistory({}), []);
+
+// --- Other people's money (Nathan's savings) ---
+const potMonthA = { pots: [
+	{ id: "p1", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start" },
+	{ id: "p2", date: "2026-09-10", person: "Nathan", amount: -30000, note: "Legetøj" },
+] };
+const potMonthB = { pots: [
+	{ id: "p3", date: "2026-10-03", person: "nathan", amount: 20000, note: "Lommepenge" },
+	{ id: "p4", date: "2026-10-05", person: "Emma", amount: 100000, note: "Start" },
+	{ id: "p5", date: "2026-10-06", person: "Nathan", amount: -150000, note: "Cykel" },
+] };
+const people = budget.potBalances({ "2026-10": potMonthB, "2026-09": potMonthA });
+check("pots: one person per name, capitals don't matter", people.map((p) => p.person), ["Nathan", "Emma"]);
+check("pots: Nathan has what he got minus what he used", people[0].balance, 500000 - 30000 + 20000 - 150000);
+check("pots: Emma has her start amount", people[1].balance, 100000);
+check("pots: newest entry first", people[0].entries.map((e) => e.note), ["Cykel", "Lommepenge", "Legetøj", "Start"]);
+check("pots: everyone's money added together", budget.othersTotal({ "2026-10": potMonthB, "2026-09": potMonthA }), 340000 + 100000);
+check("pots: nobody, nothing", budget.potBalances({ "2026-09": { pots: [] } }), []);
+check("pots: a month from before pots existed is fine", budget.potBalances({ "2026-09": {} }), []);
+check("pots: a person can go below zero (used more than they had)", budget.potBalances({ "2026-09": { pots: [{ id: "a", date: "2026-09-01", person: "X", amount: 100, note: "" }, { id: "b", date: "2026-09-02", person: "X", amount: -250, note: "" }] } })[0].balance, -150);
+check("pots: a new person starting at 0 still exists", budget.potBalances({ "2026-09": { pots: [{ id: "a", date: "2026-09-01", person: "Ny", amount: 0, note: "Start" }] } }).length, 1);
+check("pots: a new month starts without entries", budget.copyPlanOf({ ...month, pots: potMonthA.pots }).pots, []);
+check("pots: the starter month has none", budget.starterMonth().pots, []);
+const cleanedPots = budget.cleanMonth({ pots: [
+	{ id: "a", date: "2026-09-01", person: "  Nathan  ", amount: -12.6, note: "x" },
+	{ id: "b", date: "nope", person: "Nathan", amount: 1 },
+	{ id: "c", date: "2026-09-01", person: "   ", amount: 1 },
+	{ id: "d", date: "2026-09-01", person: "Nathan", amount: "abc" },
+	{ id: "e", date: "2026-09-01", person: "Nathan", amount: 1e15 },
+] }).pots;
+check("clean pots: a good entry is tidied (name trimmed, amount rounded, negative kept)", cleanedPots[0], { id: "a", date: "2026-09-01", person: "Nathan", amount: -13, note: "x" });
+check("clean pots: a bad date is dropped, and so is a blank name", cleanedPots.map((e) => e.id), ["a", "d", "e"]);
+check("clean pots: text as amount becomes 0", cleanedPots[1].amount, 0);
+check("clean pots: a huge amount is capped", cleanedPots[2].amount, 1000000000);
+const manyPots = [];
+for (let i = 0; i < 600; i++) {
+	manyPots.push({ id: "m" + i, date: "2026-09-01", person: "N", amount: 1, note: "" });
+}
+check("clean pots: at most the limit per month", budget.cleanMonth({ pots: manyPots }).pots.length, budget.MOST_POT_ENTRIES_PER_MONTH);
+const accountWithPots = { ...accountSide, pots: [{ id: "p1", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start" }] };
+const deviceWithPots = { ...deviceSide, pots: [{ id: "p1", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start" }, { id: "p9", date: "2026-09-09", person: "Nathan", amount: -1000, note: "kun på enheden" }] };
+const mergedPots = budget.mergeDeviceMonth(accountWithPots, deviceWithPots);
+check("merge: a pot entry only on the device is added, one already there is not", mergedPots.month.pots.map((e) => e.id), ["p1", "p9"]);
+check("merge: pot entries count as added", mergedPots.added, 4 + 1);
+check("same data: a pot entry counts", budget.sameData({ months: { "2026-09": accountWithPots } }, { months: { "2026-09": { ...accountWithPots, pots: [] } } }), false);
 
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");

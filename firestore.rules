@@ -43,8 +43,10 @@ service cloud.firestore {
     // numbers as MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES and MOST_SPENDING_PER_MONTH
     // in budget.js. Savings is in øre (1 kr = 100 øre), at most 10 million kr.
     // startBalance ("money I have now", used by Fremtid) is optional: a month without it is fine.
+    // pots (other people's money in your pile, like a child's savings) is optional too, and at
+    // most 500 entries a month (MOST_POT_ENTRIES_PER_MONTH in budget.js).
     function isValidMonth(data) {
-      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'startBalance', 'updatedAt'])
+      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'startBalance', 'pots', 'updatedAt'])
         && data.keys().hasAll(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
         && data.income is list && data.income.size() <= 50
         && data.fixed is list && data.fixed.size() <= 100
@@ -53,6 +55,7 @@ service cloud.firestore {
         && data.spending is list && data.spending.size() <= 2000
         && (!('startBalance' in data)
             || (data.startBalance is int && data.startBalance >= 0 && data.startBalance <= 1000000000))
+        && (!('pots' in data) || (data.pots is list && data.pots.size() <= 500))
         && data.updatedAt == request.time;
     }
   }

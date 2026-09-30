@@ -3,6 +3,21 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.6.0 - 2026-09-30
+
+- **Børn: your kids' savings in your pile.** Under Plan -> "Børn" you add a kid (any name, any
+  number of kids) and what they have now. Each kid gets a card on Overblik: "Nathan har 4.450 kr.",
+  with one amount box and two buttons, "Nathan brugte" and "Nathan fik". It answers "Nathan brugte
+  300 kr. Nu har Nathan 4.450 kr. tilbage." The history is one tap away, and a kid can be removed
+  again. On Fremtid one extra line shows how much of the pile is the kids' and how much is yours.
+- **Income can come every few months too** (børnepenge every 3rd month): the same "Hver måned"
+  line as on fixed bills.
+- **Calmer screens.** The explanations are much shorter, and what is left sits behind small "tap for
+  more" lines. Fremtid went from 236 to 45 words, Plan from 284 to 186, and the month-by-month
+  table is folded until you want it.
+- **Firebase rules changed again** (an optional `pots` field): the new rules must be published for
+  the kids' numbers to save into an account. Nothing else is affected until then.
+
 ## 1.5.0 - 2026-09-30
 
 - **Fixed bills can come every few months, or once a year.** Under each fixed bill a small line says
