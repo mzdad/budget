@@ -338,32 +338,55 @@ function barLevel(spent, limit) {
 // How many months the "Fremtid" screen looks ahead.
 const FORECAST_MONTHS = 12;
 
-// A simple what-if: keep this month's plan going for `howMany` months, starting with the money
-// the month says you have at its start (startBalance). It is arithmetic, not a prediction.
+// A simple what-if over the next `howMany` months, starting with the money the month says you
+// have at its start (startBalance). It is arithmetic, not a prediction.
+//
+// Which plan does each month use? Its OWN, if you have set that month up (it is in `months`,
+// which holds every saved month). If not, the plan of the month before it carries on. So a
+// change of income - a new job from October, say - is followed once you have set up that month,
+// and everything after it repeats the newest plan.
 //
 // Two versions, because the plan leaves a gap between "what you may spend" and "what you save":
-// - perMonth: you spend exactly your category limits. Everything else stays yours, so your money
+// - added: you spend exactly your category limits. Everything else stays yours, so your money
 //   grows by income - fixed bills - limits (your savings, plus whatever you have not handed out).
-// - carefulPerMonth: only your planned savings grow and the rest is spent. Never more than
-//   perMonth, which matters when the limits add up to more than you have.
-function forecast(month, key, howMany) {
-	const s = summarize(month);
-	const perMonth = s.income - s.fixed - s.limits;
-	const carefulPerMonth = Math.min(s.savings, perMonth);
+// - carefulAdded: only your planned savings grow and the rest is spent. Never more than
+//   added, which matters when the limits add up to more than you have.
+function forecast(month, key, howMany, months) {
+	const savedMonths = months || {};
 
 	const rows = [];
 	let total = month.startBalance;
 	let carefulTotal = month.startBalance;
+	let plan = month;
 	for (let i = 0; i < howMany; i++) {
-		total += perMonth;
-		carefulTotal += carefulPerMonth;
-		rows.push({ key: shiftMonth(key, i), added: perMonth, total: total, carefulTotal: carefulTotal });
+		const rowKey = shiftMonth(key, i);
+		const ownPlan = i > 0 ? savedMonths[rowKey] : null;
+		if (ownPlan) {
+			plan = ownPlan;
+		}
+		const s = summarize(plan);
+		const added = s.income - s.fixed - s.limits;
+		const carefulAdded = Math.min(s.savings, added);
+		total += added;
+		carefulTotal += carefulAdded;
+		rows.push({
+			key: rowKey,
+			added: added,
+			carefulAdded: carefulAdded,
+			total: total,
+			carefulTotal: carefulTotal,
+			ownPlan: i === 0 || Boolean(ownPlan),
+		});
 	}
 
+	const first = rows[0];
 	return {
 		start: month.startBalance,
-		perMonth: perMonth,
-		carefulPerMonth: carefulPerMonth,
+		perMonth: first.added,
+		carefulPerMonth: first.carefulAdded,
+		// True when the plans of the months differ, so "the same every month" would be wrong.
+		varies: rows.some((row) => row.added !== first.added),
+		carefulVaries: rows.some((row) => row.carefulAdded !== first.carefulAdded),
 		rows: rows,
 		endTotal: total,
 		carefulEndTotal: carefulTotal,

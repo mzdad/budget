@@ -226,6 +226,24 @@ check("forecast: limits above income make the money shrink", tight.perMonth, -10
 check("forecast: careful is never more than the plain version", tight.carefulPerMonth, -100000);
 check("forecast: can go negative", tight.endTotal, -300000);
 
+// A change of income: dagpenge (15.000 kr) in September, a new job (30.000 kr) from the October
+// the user has set up. Fixed bills 5.000 and limits 4.000 stay the same. November isn't set up.
+const benefits = { income: [{ id: "i", name: "Dagpenge", amount: 1500000 }], fixed: [{ id: "f", name: "Husleje", amount: 500000 }], savings: 0, categories: [{ id: "c", name: "Mad", limit: 400000 }], spending: [], startBalance: 0 };
+const newJob = { ...benefits, income: [{ id: "i", name: "Løn", amount: 3000000 }] };
+const changeOfIncome = budget.forecast(benefits, "2026-09", 4, { "2026-09": benefits, "2026-10": newJob });
+check("income change: September uses its own plan", changeOfIncome.rows[0].added, 600000);
+check("income change: October uses its own plan", changeOfIncome.rows[1].added, 2100000);
+check("income change: November (not set up) repeats October", changeOfIncome.rows[2].added, 2100000);
+check("income change: December repeats it too", changeOfIncome.rows[3].added, 2100000);
+check("income change: the running total follows", changeOfIncome.rows.map((row) => row.total), [600000, 2700000, 4800000, 6900000]);
+check("income change: says the months differ", changeOfIncome.varies, true);
+check("income change: which months are set up", changeOfIncome.rows.map((row) => row.ownPlan), [true, true, false, false]);
+const sameEveryMonth = budget.forecast(benefits, "2026-09", 4, { "2026-09": benefits });
+check("no income change: says the months are alike", sameEveryMonth.varies, false);
+check("forecast from October ignores September", budget.forecast(newJob, "2026-10", 3, { "2026-09": benefits, "2026-10": newJob }).rows.map((row) => row.added), [2100000, 2100000, 2100000]);
+check("the month on screen wins over its saved copy", budget.forecast(newJob, "2026-09", 1, { "2026-09": benefits }).rows[0].added, 2100000);
+check("forecast without saved months still repeats the plan", budget.forecast(benefits, "2026-09", 3).rows.map((row) => row.added), [600000, 600000, 600000]);
+
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
 check("csv amount: zero", budget.csvAmount(0), "0,00");

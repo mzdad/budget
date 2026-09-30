@@ -532,14 +532,23 @@ function futureResultsHtml(month) {
 		return '<section class="card"><p>Skriv din indkomst og dine udgifter under <b>Plan</b> først, så kan jeg regne fremad.</p></section>';
 	}
 
-	const f = forecast(month, viewMonth, FORECAST_MONTHS);
+	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months);
 	const tone = f.endTotal < 0 ? "bad" : "good";
+
+	// When you have set up later months differently (a new job, say), "the same every month"
+	// would be wrong, so the lines say that the amount changes and the table shows each month.
+	const perMonthText = f.varies
+		? `Lægges til: <b>${formatKr(f.perMonth)}</b> i ${esc(shortMonthLabel(viewMonth))}, og det ændrer sig senere (se tabellen)`
+		: `Lægges til hver måned <b>${formatKr(f.perMonth)}</b>`;
+	const carefulText = f.carefulVaries
+		? `Kun opsparingen (den ændrer sig): <b>${formatKr(f.carefulEndTotal)}</b>`
+		: `Kun opsparingen (${formatKr(f.carefulPerMonth)} om måneden): <b>${formatKr(f.carefulEndTotal)}</b>`;
 
 	let rows = "";
 	for (const row of f.rows) {
 		rows += `
 			<tr>
-				<td>${esc(shortMonthLabel(row.key))}</td>
+				<td>${esc(shortMonthLabel(row.key))}${row.ownPlan ? "" : " *"}</td>
 				<td class="${row.added < 0 ? "bad" : ""}">${formatKr(row.added)}</td>
 				<td class="${row.total < 0 ? "bad" : ""}">${formatKr(row.total)}</td>
 			</tr>`;
@@ -551,10 +560,10 @@ function futureResultsHtml(month) {
 			<div class="big-number ${tone}">${formatKr(f.endTotal)}</div>
 			<p>ved udgangen af ${esc(monthLabel(f.lastKey).toLowerCase())}, hvis du bruger præcis dine grænser.</p>
 			<div class="facts">
-				<span>Lægges til hver måned <b>${formatKr(f.perMonth)}</b></span>
+				<span>${perMonthText}</span>
 			</div>
 			<div class="facts">
-				<span>Kun opsparingen (${formatKr(f.carefulPerMonth)} om måneden): <b>${formatKr(f.carefulEndTotal)}</b></span>
+				<span>${carefulText}</span>
 			</div>
 			<p class="hint" style="margin-top:8px">Det øverste tal regner med, at du bruger præcis det, du har sat af til hver kategori, og beholder resten. Det nederste regner med, at du bruger alt andet end opsparingen.</p>
 		</section>
@@ -568,7 +577,7 @@ function futureResultsHtml(month) {
 					</tbody>
 				</table>
 			</div>
-			<p class="hint" style="margin-top:8px">Det her er et regnestykke, ikke en forudsigelse: det bruger planen for ${esc(monthLabel(viewMonth).toLowerCase())} ens hver måned. Ændrer du planen under Plan, ændrer tallene sig her.</p>
+			<p class="hint" style="margin-top:8px">Det her er et regnestykke, ikke en forudsigelse. Det bruger planen for hver måned, du selv har sat op under Plan. En måned med * er ikke sat op endnu og bruger planen fra måneden før. Ændrer du en plan, ændrer tallene sig her.</p>
 		</section>`;
 }
 

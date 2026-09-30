@@ -10,9 +10,10 @@ A small monthly budget page for phone and PC. Danish, kroner.
   purchase. Each category has a bar that turns amber near its limit and red above it.
 - **Udgifter** - every purchase, newest first. Delete a mistake with the ✕.
 - **Fremtid** - type how much money you have at the start of the month, and it keeps the
-  month's plan going for 12 months and shows what you would have (two versions: spending
-  exactly your category limits, and only saving your planned savings). It is arithmetic,
-  not a prediction.
+  plan going for 12 months and shows what you would have (two versions: spending exactly your
+  category limits, and only saving your planned savings). Each month uses its own plan if you
+  have set it up (a new job from October, say); a month you have not set up repeats the month
+  before it. It is arithmetic, not a prediction.
 - **Eksport** (on Plan) - a report for one month or a whole year, on screen. Download it for
   Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF.
 - A new month starts as a copy of the last month's plan, with no spending.
