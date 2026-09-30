@@ -3,6 +3,13 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.7.0 - 2026-09-30
+
+- **The categories card on Overblik can be folded.** Tap "Dine kategorier" to fold it. Folded, it
+  shows a small view instead: one line per category with a thin bar and what is left ("200 kr.
+  over" in red when a limit is passed). The fold is remembered, also when you add an expense or
+  come back later.
+
 ## 1.6.0 - 2026-09-30
 
 - **Børn: your kids' savings in your pile.** Under Plan -> "Børn" you add a kid (any name, any

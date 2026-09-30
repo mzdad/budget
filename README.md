@@ -11,7 +11,8 @@ A small monthly budget page for phone and PC. Danish, kroner.
   bill or an income (børnepenge) can also come every 2nd, 3rd or 6th month, or once a year (the
   whole amount in the months it is due).
 - **Overblik** - shows what is left to spend this month, and lets you write in every
-  purchase (the Note box suggests notes you have used before, and picks their usual category). Each category has a bar that turns amber near its limit and red above it.
+  purchase (the Note box suggests notes you have used before, and picks their usual category).
+  The categories card can be folded to a small view. Each category has a bar that turns amber near its limit and red above it.
 - **Udgifter** - every purchase, newest first. Delete a mistake with the ✕.
 - **Fremtid** - type how much money you have at the start of the month, and it keeps the
   plan going for 12 months and shows what you would have (two versions: spending exactly your

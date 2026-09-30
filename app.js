@@ -13,6 +13,8 @@
 const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev";
 
 const STORAGE_KEY = "budget.v1";
+// Whether the categories card on Overblik is open or folded. Only a convenience, kept on this device.
+const CATEGORIES_OPEN_KEY = "budget.categoriesOpen";
 // Remembers which account was signed in, so that at the next start the page waits for that
 // account's numbers instead of showing (and letting you edit) this device's own copy.
 const SIGNED_IN_HINT_KEY = "budget.signedInAs";
@@ -73,6 +75,7 @@ let viewMonth = monthKeyOf(new Date());       // the month on screen
 let activeTab = "overview";                   // "overview", "expenses", "future", "plan" or "report"
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
 let lastCategoryId = "";                      // so the next purchase starts on the same category
+let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 
 
 // --- Saving and loading ------------------------------------------------------
@@ -123,6 +126,22 @@ function checkStorage() {
 		worked = false;
 	}
 	setWarning(worked ? "" : NO_STORAGE_WARNING);
+}
+
+function loadCategoriesOpen() {
+	try {
+		return localStorage.getItem(CATEGORIES_OPEN_KEY) !== "0";   // open unless it was folded
+	} catch (error) {
+		return true;
+	}
+}
+
+function saveCategoriesOpen(isOpen) {
+	try {
+		localStorage.setItem(CATEGORIES_OPEN_KEY, isOpen ? "1" : "0");
+	} catch (error) {
+		// Only a convenience; the page works without it.
+	}
 }
 
 function loadSignedInHint() {
@@ -427,24 +446,58 @@ function addFormHtml(month) {
 		</form>`;
 }
 
+// The categories card: a fold. Open, each category has a bar and a note. Folded, it shows a
+// small view instead - one line per category with a thin bar and what is left - so you can still
+// see how you are doing without the space. The fold is remembered (categoriesOpen).
 function categoryBarsHtml(s) {
-	let html = '<section class="card"><h2>Dine kategorier</h2>';
-
 	if (s.categories.length === 0 && s.otherSpent === 0) {
-		html += '<p class="hint">Lav kategorier under Plan.</p>';
+		return '<section class="card"><h2>Dine kategorier</h2><p class="hint">Lav kategorier under Plan.</p></section>';
 	}
 
+	let full = "";
+	let mini = "";
 	for (const category of s.categories) {
-		html += categoryBarHtml(category);
+		full += categoryBarHtml(category);
+		mini += categoryMiniHtml(category);
 	}
-
 	if (s.otherSpent > 0) {
-		html += `
+		full += `
 			<div class="category">
 				<div class="category-top"><span>Uden kategori</span><span class="amounts">${formatKr(s.otherSpent)}</span></div>
 			</div>`;
+		mini += `<span class="mini-row"><span class="mini-name">Uden kategori</span><span></span><span class="mini-amount">${formatKr(s.otherSpent)}</span></span>`;
 	}
-	return html + "</section>";
+
+	return `
+		<section class="card categories-card">
+			<details id="categories-details" ${categoriesOpen ? "open" : ""}>
+				<summary><h2>Dine kategorier</h2><span class="mini">${mini}</span></summary>
+				${full}
+			</details>
+		</section>`;
+}
+
+// One category as a single line for the folded card: name, a thin bar, and what is left
+// ("over" in red when the limit is passed; just what is spent when there is no limit).
+function categoryMiniHtml(category) {
+	const level = barLevel(category.spent, category.limit);
+	const width = Math.round(barShare(category.spent, category.limit) * 100);
+
+	let amount = "";
+	if (level === "nolimit") {
+		amount = formatKr(category.spent);
+	} else if (level === "over") {
+		amount = formatKr(-category.left) + " over";
+	} else {
+		amount = formatKr(category.left);
+	}
+
+	return `
+		<span class="mini-row">
+			<span class="mini-name">${esc(category.name || "(uden navn)")}</span>
+			<span class="bar mini-bar" role="img" aria-label="${width} procent brugt"><span class="fill ${level}" style="width:${width}%"></span></span>
+			<span class="mini-amount ${level === "over" ? "over" : ""}">${amount}</span>
+		</span>`;
 }
 
 function categoryBarHtml(category) {
@@ -961,6 +1014,16 @@ document.addEventListener("submit", (event) => {
 // The "Gemmer … / Gemt" line also depends on whether the device is online.
 window.addEventListener("online", showSyncStatus);
 window.addEventListener("offline", showSyncStatus);
+
+// A <details> tells us when it is opened or folded with a "toggle" event, which does not bubble:
+// listening in the capture phase catches it anyway. We remember the categories card's state, so
+// it stays as you left it when the screen is drawn again (every time you add an expense).
+document.addEventListener("toggle", (event) => {
+	if (event.target.id === "categories-details") {
+		categoriesOpen = event.target.open;
+		saveCategoriesOpen(categoriesOpen);
+	}
+}, true);
 
 // Typing in the Note box: if it is a note you have used before, fill in its usual category.
 document.addEventListener("input", (event) => {

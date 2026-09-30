@@ -360,6 +360,64 @@ label.button.secondary {
 	font-weight: 600;
 }
 
+/* ---- The categories card: a fold with a small view when it is folded ---- */
+
+.categories-card summary {
+	cursor: pointer;
+}
+
+/* The title sits on the same line as the fold arrow. */
+.categories-card summary h2 {
+	display: inline;
+	margin: 0;
+}
+
+/* The small view: only there while the card is folded. */
+.mini {
+	display: none;
+	margin-top: 8px;
+}
+
+.categories-card details:not([open]) .mini {
+	display: block;
+}
+
+.mini-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 64px auto;
+	gap: 10px;
+	align-items: center;
+	padding: 3px 0;
+	font-size: 0.85rem;
+	font-weight: 400;
+}
+
+.mini-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mini-bar {
+	margin-top: 0;
+	height: 6px;
+}
+
+.mini-bar .fill {
+	display: block;
+}
+
+.mini-amount {
+	color: var(--muted);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.mini-amount.over {
+	color: var(--bad);
+	font-weight: 600;
+}
+
 /* ---- Spending list ---- */
 
 .list {
