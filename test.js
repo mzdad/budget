@@ -168,6 +168,41 @@ changed.months["2026-09"].spending[0].amount += 1;
 check("same data: a changed amount counts", budget.sameData(one, changed), false);
 check("same data: an extra month counts", budget.sameData(one, { months: { "2026-09": month, "2026-10": month } }), false);
 
+// --- Signing in on a device that has its own numbers (merging a month) ---
+const accountSide = {
+	income: [{ id: "i1", name: "Løn", amount: 2000000 }], fixed: [], savings: 0, startBalance: 0,
+	categories: [{ id: "a-mad", name: "Mad og dagligvarer", limit: 300000 }, { id: "a-fri", name: "Fritid", limit: 100000 }],
+	spending: [{ id: "p1", date: "2026-09-01", categoryId: "a-mad", amount: 10000, note: "på kontoen" }],
+};
+const deviceSide = {
+	income: [{ id: "x1", name: "Andet navn", amount: 1 }], fixed: [], savings: 99, startBalance: 5,
+	categories: [{ id: "d-mad", name: "  mad og DAGLIGVARER ", limit: 1 }, { id: "d-ferie", name: "Ferie", limit: 1 }, { id: "a-fri", name: "Fritid", limit: 1 }],
+	spending: [
+		{ id: "p1", date: "2026-09-01", categoryId: "a-mad", amount: 10000, note: "allerede på kontoen" },
+		{ id: "q1", date: "2026-09-02", categoryId: "d-mad", amount: 4500, note: "samme navn, andet id" },
+		{ id: "q2", date: "2026-09-03", categoryId: "d-ferie", amount: 9900, note: "kategori findes ikke på kontoen" },
+		{ id: "q3", date: "2026-09-04", categoryId: "a-fri", amount: 100, note: "samme id som på kontoen" },
+		{ id: "q4", date: "2026-09-05", categoryId: "slettet", amount: 1, note: "kategori slettet for længst" },
+	],
+};
+const merged = budget.mergeDeviceMonth(accountSide, deviceSide);
+check("merge: only purchases the account doesn't have are added", merged.added, 4);
+check("merge: the account's own purchase is kept once", merged.month.spending.filter((x) => x.id === "p1").length, 1);
+check("merge: the account's version of a shared purchase wins", merged.month.spending[0].note, "på kontoen");
+check("merge: the account's plan stays (income)", merged.month.income, accountSide.income);
+check("merge: the account's plan stays (savings)", merged.month.savings, 0);
+check("merge: the account's plan stays (categories)", merged.month.categories, accountSide.categories);
+check("merge: same category name -> the account's category", merged.month.spending.find((x) => x.id === "q1").categoryId, "a-mad");
+check("merge: a category the account lacks -> no category", merged.month.spending.find((x) => x.id === "q2").categoryId, "");
+check("merge: same category id is kept", merged.month.spending.find((x) => x.id === "q3").categoryId, "a-fri");
+check("merge: a long-deleted category -> no category", merged.month.spending.find((x) => x.id === "q4").categoryId, "");
+check("merge: the total is the sum", merged.month.spending.reduce((sum, x) => sum + x.amount, 0), 10000 + 4500 + 9900 + 100 + 1);
+check("merge: the original account month is not changed", accountSide.spending.length, 1);
+check("merge: merging twice adds nothing new", budget.mergeDeviceMonth(merged.month, deviceSide).added, 0);
+const fullMonth = { ...accountSide, spending: tooMany.slice(0, 1999) };
+check("merge: never goes over the most purchases in a month", budget.mergeDeviceMonth(fullMonth, deviceSide).month.spending.length, budget.MOST_SPENDING_PER_MONTH);
+check("merge: says how many were really added when full", budget.mergeDeviceMonth(fullMonth, deviceSide).added, 1);
+
 // --- The money I have now (startBalance) ---
 check("clean month: balance is kept", budget.cleanMonth({ startBalance: 1000000 }).startBalance, 1000000);
 check("clean month: a month from before the balance existed gets 0", budget.cleanMonth({}).startBalance, 0);
@@ -248,6 +283,20 @@ const starter = budget.starterMonth();
 check("starter has income rows", starter.income.length > 0, true);
 check("starter ids are stable between calls", budget.starterMonth().fixed[0].id, starter.fixed[0].id);
 check("starter amounts are 0", budget.summarize(starter).available, 0);
+
+// --- The version number in index.html (the release rule) ---
+// Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps
+// an old file next to a new index.html would otherwise mix versions.
+const fs = require("fs");
+const indexText = fs.readFileSync(__dirname + "/index.html", "utf8");
+const ownFiles = [...indexText.matchAll(/(?:src|href)="([^"]+\.(?:js|css))(\?v=[^"]*)?"/g)]
+	.filter((match) => !match[1].startsWith("http"));
+check("version: index.html loads our own files", ownFiles.length >= 6, true);
+const versions = new Set(ownFiles.map((match) => match[2]));
+check("version: every own file has the same ?v=x.y.z", versions.size === 1 && /^\?v=\d+\.\d+\.\d+$/.test([...versions][0]), true);
+const changelog = fs.readFileSync(__dirname + "/CHANGELOG.md", "utf8");
+const currentVersion = ownFiles[0][2].slice(3);
+check("version: CHANGELOG.md has a section for the current version", changelog.includes("## " + currentVersion), true);
 
 console.log("");
 if (failures > 0) {

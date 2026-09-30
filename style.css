@@ -500,6 +500,22 @@ label.button.secondary {
 	box-shadow: inset 0 3px 0 var(--accent);
 }
 
+/* ---- The version number at the bottom ---- */
+
+.app-footer {
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 0 16px 16px;
+	text-align: center;
+}
+
+.app-footer p {
+	margin: 0;
+	color: var(--muted);
+	font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	font-size: 0.75rem;
+}
+
 /* ---- Tables (the forecast and the reports) ---- */
 
 /* Wide tables scroll sideways inside their box instead of breaking the page. */
@@ -583,6 +599,7 @@ td.good,
 	.tabs,
 	.sync-status,
 	.warning,
+	.app-footer,
 	.no-print {
 		display: none !important;
 	}

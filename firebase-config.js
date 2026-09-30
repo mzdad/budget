@@ -18,7 +18,9 @@ const FIREBASE_CONFIG = {
 // For testing on this computer only. http://localhost:8767/?emulator talks to Firebase's local
 // test copy (started with "firebase emulators:start") instead of any real project, using a
 // "demo-" project name that Firebase keeps entirely offline.
-const USE_FIREBASE_EMULATOR = location.hostname === "localhost"
+// http://127.0.0.1:8767/?emulator works too. To the browser it is a different website from
+// localhost, with its own saved data, so the two can play "my phone" and "my computer".
+const USE_FIREBASE_EMULATOR = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
 	&& new URLSearchParams(location.search).has("emulator");
 const EMULATOR_CONFIG = {
 	apiKey: "demo-key",

@@ -39,7 +39,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
 | `firestore.rules` | The privacy rules, published by hand in the Firebase console |
 | `firebase.json` | Settings for Firebase's local test copy |
 | `SETUP-ACCOUNTS.md` | The 10-minute Firebase setup, step by step |
-| `test.js` | Checks for `budget.js` |
+| `test.js` | Checks for `budget.js`, and that every own file in `index.html` has the same version |
+| `CHANGELOG.md` | What changed in each version |
+| `dev_set_version.py` | Sets the version number in `index.html` (not part of the app) |
 | `dev_rules_checks.js` | Checks for `firestore.rules` against the local test copy |
 | `manifest.webmanifest`, `icon-*.png` | So it can sit on the home screen like an app |
 | `dev_make_icons.py` | Draws the icons (not part of the app) |
@@ -74,6 +76,19 @@ node dev_rules_checks.js
 
 and the page itself can use that test copy at http://localhost:8767/?emulator (a fake
 account can be made there without touching any real project).
+
+## Releasing a new version
+
+The version number (shown at the bottom of the page) lives in one place: the `?v=...` at the end of
+each of our own files in `index.html`. To release:
+
+```
+python dev_set_version.py 1.3.0
+```
+
+then add a `## 1.3.0` section to `CHANGELOG.md`, run `node test.js` (it checks that every file has the
+same version and that the changelog has a section for it), commit and push. Phones then fetch the new
+files because their addresses changed.
 
 ## Money rule
 

@@ -7,6 +7,11 @@
 // text and puts it into <main id="view">. After every change we simply draw the
 // whole screen again from the saved numbers - simple, and never out of date.
 
+// The version number lives in one place: the ?v=... at the end of this file's own address in
+// index.html (see dev_set_version.py). Reading it from there means it can never disagree with
+// the files the phone actually loaded. "dev" when the page is opened without one.
+const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") || "dev";
+
 const STORAGE_KEY = "budget.v1";
 // Remembers which account was signed in, so that at the next start the page waits for that
 // account's numbers instead of showing (and letting you edit) this device's own copy.
@@ -1336,8 +1341,10 @@ function onAccountProblem(error) {
 }
 
 // Right after signing in by hand: numbers already kept on this device can join the account.
-// Months the account already has are left alone. The device copy is put aside (not deleted),
-// so nothing can be lost.
+// - A month the account doesn't have is added as it is.
+// - A month the account has keeps the account's plan, and gets the purchases that exist only on
+//   this device (mergeDeviceMonth in budget.js), so nothing written here is lost.
+// The device copy is put aside (not deleted), so nothing can be lost.
 const MOVED_DEVICE_COPY_KEY = "budget.v1.movedToAccount";
 
 function offerToMoveDeviceData() {
@@ -1352,7 +1359,7 @@ function offerToMoveDeviceData() {
 		return;
 	}
 	const question = "Du har tal gemt på denne enhed fra før (" + monthsText(deviceKeys.length) + "). "
-		+ "Skal de lægges ind på kontoen? Måneder, som kontoen allerede har, bliver ikke ændret.";
+		+ "Skal de lægges ind på kontoen? En måned, kontoen allerede har, beholder kontoens plan og får lagt de udgifter til, som kun står på denne enhed.";
 	if (!confirm(question)) {
 		return;
 	}
@@ -1361,6 +1368,12 @@ function offerToMoveDeviceData() {
 		if (!data.months[key]) {
 			data.months[key] = device.months[key];
 			saveMonth(key, device.months[key]);
+			continue;
+		}
+		const merge = mergeDeviceMonth(data.months[key], device.months[key]);
+		if (merge.added > 0) {
+			data.months[key] = merge.month;
+			saveMonth(key, merge.month);
 		}
 	}
 	try {
@@ -1375,6 +1388,7 @@ function offerToMoveDeviceData() {
 
 // --- Start ---------------------------------------------------------------------------
 
+document.getElementById("app-version").textContent = "Version " + APP_VERSION;
 checkStorage();
 render();
 

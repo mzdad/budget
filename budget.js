@@ -209,6 +209,48 @@ function nearestMonthWithData(months, key) {
 	return before || after;
 }
 
+// Signing in on a device that already has numbers of its own, for a month the account has too:
+// the account's plan stays as it is, and the purchases that exist only on the device are added.
+// Every purchase has its own id, so one that is already in the account is never added twice.
+//
+// A device purchase points at a category of the DEVICE's plan. If the account has no category
+// with that id, it is matched by name instead ("Mad og dagligvarer" -> the account's category of
+// the same name), and failing that it becomes "Uden kategori". Returns { month, added }.
+function mergeDeviceMonth(accountMonth, deviceMonth) {
+	const known = new Set(accountMonth.spending.map((item) => item.id));
+	const accountIds = new Set(accountMonth.categories.map((category) => category.id));
+
+	const idByName = {};
+	for (const category of accountMonth.categories) {
+		const name = category.name.trim().toLowerCase();
+		if (name !== "" && !idByName[name]) {
+			idByName[name] = category.id;
+		}
+	}
+
+	const newOnes = [];
+	for (const item of deviceMonth.spending) {
+		if (known.has(item.id)) {
+			continue;
+		}
+		let categoryId = item.categoryId;
+		if (!accountIds.has(categoryId)) {
+			const own = deviceMonth.categories.find((category) => category.id === categoryId);
+			const name = own ? own.name.trim().toLowerCase() : "";
+			categoryId = name !== "" && idByName[name] ? idByName[name] : "";
+		}
+		newOnes.push({ id: item.id, date: item.date, categoryId: categoryId, amount: item.amount, note: item.note });
+	}
+
+	// A month holds at most MOST_SPENDING_PER_MONTH purchases (firestore.rules says the same).
+	const room = Math.max(0, MOST_SPENDING_PER_MONTH - accountMonth.spending.length);
+	const taken = newOnes.slice(0, room);
+
+	const merged = JSON.parse(JSON.stringify(accountMonth));
+	merged.spending = accountMonth.spending.concat(taken);
+	return { month: merged, added: taken.length };
+}
+
 // Newest date first. Within one day, the one added last comes first.
 function spendingNewestFirst(list) {
 	return [...list].reverse().sort((a, b) => {
@@ -609,7 +651,7 @@ if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, spendingNewestFirst,
+		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
 		summarize, barShare, barLevel,
 		FORECAST_MONTHS, forecast,
 		dateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
