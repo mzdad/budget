@@ -36,6 +36,7 @@ const FIXED_SECTION = {
 	addLabel: "+ Tilføj fast udgift",
 	mostRows: MOST_FIXED_ROWS,
 	hasDates: true,
+	hasFrequency: true,   // a fixed bill can come every few months, or once a year
 };
 const CATEGORY_SECTION = {
 	key: "categories",
@@ -390,6 +391,16 @@ function categoryOptionsHtml(month) {
 	return html;
 }
 
+// The notes you have used before, offered while you type in the Note box (a <datalist>: the
+// browser shows the matching ones itself). Picking one also picks its usual category (see
+// pickCategoryFromNote). Rebuilt each time the form is drawn, so a note you just added is in it.
+let noteSuggestions = [];
+
+function noteOptionsHtml() {
+	noteSuggestions = noteHistory(data.months);
+	return noteSuggestions.map((entry) => `<option value="${esc(entry.note)}"></option>`).join("");
+}
+
 // The form for writing in a purchase. The date box only allows days in the month
 // on screen, so a purchase can never end up in the wrong month.
 function addFormHtml(month) {
@@ -404,11 +415,12 @@ function addFormHtml(month) {
 			<label>Beløb i kroner
 				<input name="amount" inputmode="decimal" placeholder="fx 49,95" required>
 			</label>
+			<label>Note (hvis du vil)
+				<input name="note" list="note-suggestions" maxlength="${MAX_NOTE_LENGTH}" placeholder="fx Rema 1000">
+				<datalist id="note-suggestions">${noteOptionsHtml()}</datalist>
+			</label>
 			<label>Kategori
 				<select name="category">${categoryOptionsHtml(month)}</select>
-			</label>
-			<label>Note (hvis du vil)
-				<input name="note" maxlength="${MAX_NOTE_LENGTH}" placeholder="fx Netto">
 			</label>
 			<label>Dato
 				<input type="date" name="date" value="${dateValue}" min="${firstDay}" max="${lastDay}" required>
@@ -707,40 +719,66 @@ function rowHtml(section, row) {
 			<input data-field="name" value="${esc(row.name)}" placeholder="Navn" maxlength="${MAX_NAME_LENGTH}" aria-label="Navn" autocomplete="off">
 			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="Beløb i kroner" autocomplete="off">
 			<button class="icon" data-action="delete-row" aria-label="Slet rækken">✕</button>
-			${section.hasDates ? datesHtml(row) : ""}
+			${section.hasDates ? datesHtml(row, section) : ""}
 		</div>`;
 }
 
-// The small "from / to date" box under an income or fixed-bill row. It is a <details>: folded
-// to one line of small text until you need it, and open from the start for a row that has dates.
-// (The maths is in budget.js: activeDaysIn, amountIn.)
-function datesHtml(row) {
+// The small box under an income or fixed-bill row. It is a <details>: folded to one line of small
+// text (which also says what the row is now) until you need it, and open from the start for a
+// row that has dates or a frequency. (The maths is in budget.js: amountIn, isDueIn.)
+// A fixed bill can also say how often it comes: every month, every 2nd/3rd/6th month, or once a
+// year. Then the date means "first payment" (only the month counts).
+const EVERY_LABELS = { 1: "Hver måned", 2: "Hver 2. måned", 3: "Hver 3. måned", 6: "Hver 6. måned", 12: "Hvert år" };
+
+function datesHtml(row, section) {
+	let frequencyBox = "";
+	if (section.hasFrequency) {
+		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${EVERY_LABELS[every]}</option>`).join("");
+		frequencyBox = `<label>Hvor ofte? <select data-field="every">${options}</select></label>`;
+	}
 	return `
-		<details class="dates" ${row.from || row.to ? "open" : ""}>
-			<summary>${esc(datesSummaryText(row))}</summary>
+		<details class="dates" ${row.from || row.to || row.every > 1 ? "open" : ""}>
+			<summary>${esc(datesSummaryText(row, section))}</summary>
+			${frequencyBox}
 			<div class="dates-line">
-				<label>Fra <input type="date" data-field="from" value="${esc(row.from || "")}"></label>
+				<label><span class="from-label">${row.every > 1 ? "Første betaling" : "Fra"}</span> <input type="date" data-field="from" value="${esc(row.from || "")}"></label>
 				<label>Til <input type="date" data-field="to" value="${esc(row.to || "")}"></label>
 			</div>
 			<p class="hint date-note">${esc(dateNoteText(row))}</p>
-			<button type="button" class="link" data-action="clear-dates">Ryd datoer</button>
+			<button type="button" class="link" data-action="clear-dates">Ryd</button>
 		</details>`;
 }
 
-function datesSummaryText(row) {
+function datesSummaryText(row, section) {
+	if (row.every > 1) {
+		const first = row.from ? ", første gang " + dateText(row.from) : "";
+		return EVERY_LABELS[row.every] + first;
+	}
 	const when = windowText(row);
-	return when === "" ? "Fra/til dato (valgfrit)" : "Gælder " + when;
+	if (when !== "") {
+		return "Gælder " + when;
+	}
+	return section.hasFrequency ? EVERY_LABELS[1] : "Fra/til dato (valgfrit)";
 }
 
-// What the dates mean for the month on screen, so nobody has to work it out.
+// What the row means for the month on screen, so nobody has to work it out.
 function dateNoteText(row) {
+	const month = monthLabel(viewMonth).toLowerCase();
+
+	if (isPeriodic(row)) {
+		if (isDueIn(row, viewMonth)) {
+			return "Betales i " + month + ": " + formatKr(row.amount);
+		}
+		const next = nextDueKey(row, viewMonth);
+		return next ? "Betales ikke i " + month + ". Næste gang: " + monthLabel(next).toLowerCase() : "Betales ikke flere gange.";
+	}
+
 	if (!row.from && !row.to) {
 		return "Uden datoer gælder rækken hele tiden.";
 	}
 	if (row.from && row.to && row.from > row.to) {
 		return "Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.";
 	}
-	const month = monthLabel(viewMonth).toLowerCase();
 	const days = lastDayOfMonth(viewMonth);
 	const active = activeDaysIn(row, viewMonth);
 	if (active === 0) {
@@ -752,13 +790,24 @@ function dateNoteText(row) {
 	return "I " + month + " tæller " + active + " af " + days + " dage: " + formatKr(amountIn(row, viewMonth));
 }
 
-// Redraws the two small texts of a row's date box after something in the row changed.
-function refreshDatesOf(rowElement, row) {
+// Redraws everything in a row's box from the saved row, after something in the row changed: the
+// two texts, the label of the date, and the boxes themselves (a choice can set or clear a date).
+function refreshDatesOf(rowElement, row, section) {
+	if (!row) {
+		return;
+	}
 	const summary = rowElement.querySelector(".dates summary");
-	const note = rowElement.querySelector(".date-note");
-	if (summary && note && row) {
-		summary.textContent = datesSummaryText(row);
-		note.textContent = dateNoteText(row);
+	if (!summary) {
+		return;
+	}
+	summary.textContent = datesSummaryText(row, section);
+	rowElement.querySelector(".date-note").textContent = dateNoteText(row);
+	rowElement.querySelector(".from-label").textContent = row.every > 1 ? "Første betaling" : "Fra";
+	rowElement.querySelector('[data-field="from"]').value = row.from || "";
+	rowElement.querySelector('[data-field="to"]').value = row.to || "";
+	const every = rowElement.querySelector('[data-field="every"]');
+	if (every) {
+		every.value = String(row.every || 1);
 	}
 }
 
@@ -1025,9 +1074,20 @@ document.addEventListener("submit", (event) => {
 window.addEventListener("online", showSyncStatus);
 window.addEventListener("offline", showSyncStatus);
 
+// Typing in the Note box: if it is a note you have used before, fill in its usual category.
+document.addEventListener("input", (event) => {
+	if (event.target.name === "note" && event.target.form && event.target.form.id === "add-form") {
+		pickCategoryFromNote(event.target);
+	}
+});
+
 // "change" fires when you leave a box (or press Enter) after editing it.
 document.addEventListener("change", (event) => {
 	const input = event.target;
+	if (input.name === "category" && input.form && input.form.id === "add-form") {
+		input.dataset.touched = "1";   // you chose a category yourself: a note won't change it
+		return;
+	}
 	if (input.closest(".row")) {
 		editRow(input);
 	} else if (input.id === "savings-input") {
@@ -1041,6 +1101,20 @@ document.addEventListener("change", (event) => {
 
 
 // ---- Adding and deleting spending ----------------------------------------------
+
+// A note you have used before brings its usual category with it: type "Rema 1000" (or pick it from
+// the suggestions) and "Mad og dagligvarer" is chosen for you. Only when the note matches one you
+// used before, and only if you have not picked a category yourself in this form.
+function pickCategoryFromNote(noteBox) {
+	const select = noteBox.form.elements.category;
+	if (select.dataset.touched) {
+		return;
+	}
+	const id = categoryIdForNote(noteSuggestions, noteBox.value, getMonth(viewMonth));
+	if (id !== "") {
+		select.value = id;
+	}
+}
 
 function addSpending(form) {
 	const amount = parseAmount(form.elements.amount.value);
@@ -1109,9 +1183,26 @@ function editRow(input) {
 				row.name = name;
 			}
 		});
+	} else if (field === "every") {
+		// "Hver måned" (1) is the normal case and stores nothing. Anything else needs a first
+		// payment date to count from: if there is none, this month's first day is filled in, so the
+		// choice works at once and there is nothing more to do.
+		const every = Number(input.value);
+		changeMonth((month) => {
+			const row = findRow(month[section.key], id);
+			if (row && every > 1) {
+				row.every = every;
+				if (!row.from) {
+					row.from = viewMonth + "-01";
+				}
+			} else if (row) {
+				delete row.every;
+			}
+		});
 	} else if (field === "from" || field === "to") {
 		// A date box gives "2026-10-12", or "" when it is cleared. A row without a date simply
-		// has no such field.
+		// has no such field. A bill that comes every few months can't lose its first payment date:
+		// clearing it makes the bill monthly again.
 		const day = input.value;
 		changeMonth((month) => {
 			const row = findRow(month[section.key], id);
@@ -1119,6 +1210,9 @@ function editRow(input) {
 				row[field] = day;
 			} else if (row) {
 				delete row[field];
+				if (field === "from") {
+					delete row.every;
+				}
 			}
 		});
 	} else {
@@ -1139,12 +1233,12 @@ function editRow(input) {
 	}
 
 	if (section.hasDates) {
-		refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id));
+		refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id), section);
 	}
 	refreshPlanSummary();
 }
 
-// "Ryd datoer": takes both dates off a row.
+// "Ryd": takes the dates (and how often) off a row, so it counts every month again.
 function clearDates(button) {
 	const rowElement = button.closest(".row");
 	const section = SECTIONS[rowElement.dataset.section];
@@ -1154,12 +1248,10 @@ function clearDates(button) {
 		if (row) {
 			delete row.from;
 			delete row.to;
+			delete row.every;
 		}
 	});
-	for (const box of rowElement.querySelectorAll('input[type="date"]')) {
-		box.value = "";
-	}
-	refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id));
+	refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id), section);
 	refreshPlanSummary();
 }
 

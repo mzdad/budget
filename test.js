@@ -295,6 +295,94 @@ check("clean: fixed bills keep dates too", cleanedDates.fixed[0].to, "2026-10-11
 check("clean: categories never have dates", "from" in cleanedDates.categories[0], false);
 check("same data: a changed date counts", budget.sameData({ months: { "2026-10": oneJobPlan } }, { months: { "2026-10": { ...oneJobPlan, income: [{ ...dagpenge, to: "2026-10-12" }, lon] } } }), false);
 
+// --- Bills that come every few months, or once a year ---
+const yearly = { id: "y", name: "Forsikring", amount: 360000, every: 12, from: "2026-03-15" };
+const quarterly = { id: "q", name: "Vand", amount: 90000, every: 3, from: "2026-01-01" };
+const due = (row, key) => budget.amountIn(row, key);
+check("yearly: due in the month of the first payment (only the month counts)", due(yearly, "2026-03"), 360000);
+check("yearly: nothing in the months after", [due(yearly, "2026-04"), due(yearly, "2026-12"), due(yearly, "2027-02")], [0, 0, 0]);
+check("yearly: nothing before the first payment", due(yearly, "2026-02"), 0);
+check("yearly: due again a year later", due(yearly, "2027-03"), 360000);
+check("yearly: due two years later", due(yearly, "2028-03"), 360000);
+check("quarterly: due in January, April, July, October", ["2026-01", "2026-04", "2026-07", "2026-10"].map((key) => due(quarterly, key)), [90000, 90000, 90000, 90000]);
+check("quarterly: not due in between", ["2026-02", "2026-03", "2026-05", "2026-09", "2026-12"].map((key) => due(quarterly, key)), [0, 0, 0, 0, 0]);
+check("quarterly: rolls over the new year", due(quarterly, "2027-01"), 90000);
+check("every 2nd month", budget.amountIn({ amount: 100, every: 2, from: "2026-01-10" }, "2026-03"), 100);
+check("every 2nd month: the months between", budget.amountIn({ amount: 100, every: 2, from: "2026-01-10" }, "2026-02"), 0);
+const endingQuarterly = { ...quarterly, to: "2026-07-31" };
+check("ends: still due in the month of its last day", due(endingQuarterly, "2026-07"), 90000);
+check("ends: not due after", due(endingQuarterly, "2026-10"), 0);
+check("next due: from September", budget.nextDueKey(quarterly, "2026-09"), "2026-10");
+check("next due: this month counts", budget.nextDueKey(quarterly, "2026-10"), "2026-10");
+check("next due: a yearly bill before its first payment", budget.nextDueKey(yearly, "2025-06"), "2026-03");
+check("next due: a yearly bill after this year's", budget.nextDueKey(yearly, "2026-04"), "2027-03");
+check("next due: never again once it has ended", budget.nextDueKey(endingQuarterly, "2026-08"), null);
+check("periodic: needs a first payment date", budget.isPeriodic({ amount: 1, every: 3 }), false);
+check("periodic: every month is not periodic", budget.isPeriodic({ amount: 1, every: 1, from: "2026-01-01" }), false);
+check("periodic: a bill without `every` counts in full every month", budget.amountIn({ amount: 500 }, "2026-05"), 500);
+check("periodic: without a month the whole amount counts", budget.amountIn(yearly), 360000);
+check("months between", budget.monthsBetween("2026-03", "2027-01"), 10);
+check("every text", [2, 3, 6, 12].map(budget.everyText), ["hver 2. måned", "hver 3. måned", "hver 6. måned", "hvert år"]);
+check("window text: a yearly bill", budget.windowText(yearly), "hvert år fra 15.03.2026");
+check("window text: a quarterly bill that ends", budget.windowText(endingQuarterly), "hver 3. måned fra 01.01.2026 til 31.07.2026");
+const withYearly = { income: [{ id: "i", name: "Løn", amount: 2000000 }], fixed: [{ id: "f", name: "Husleje", amount: 500000 }, yearly], savings: 0, categories: [{ id: "c", name: "Mad", limit: 400000 }], spending: [], startBalance: 0 };
+check("summary: fixed bills in the month the yearly bill is due", budget.summarize(withYearly, "2026-03").fixed, 860000);
+check("summary: fixed bills in other months", budget.summarize(withYearly, "2026-04").fixed, 500000);
+const yearlyForecast = budget.forecast(withYearly, "2026-02", 3, { "2026-02": withYearly });
+check("forecast: the yearly bill dips only the month it is due", yearlyForecast.rows.map((row) => row.added), [1100000, 740000, 1100000]);
+check("report: the bill says how often it comes", budget.monthReport(withYearly, "2026-03").fixed.map((row) => row.name), ["Husleje", "Forsikring (hvert år fra 15.03.2026)"]);
+check("report: and what counts that month", budget.monthReport(withYearly, "2026-04").fixed.map((row) => row.amount), [500000, 0]);
+const cleanedEvery = budget.cleanMonth({
+	income: [{ id: "a", name: "x", amount: 1, every: 3, from: "2026-01-01" }],
+	fixed: [
+		{ id: "b", name: "kept", amount: 1, every: 3, from: "2026-01-01" },
+		{ id: "c", name: "no first payment", amount: 1, every: 3 },
+		{ id: "d", name: "odd number", amount: 1, every: 5, from: "2026-01-01" },
+		{ id: "e", name: "monthly", amount: 1, every: 1, from: "2026-01-01" },
+	],
+});
+check("clean: a good `every` is kept on a fixed bill", cleanedEvery.fixed[0].every, 3);
+check("clean: `every` without a first payment date is dropped", "every" in cleanedEvery.fixed[1], false);
+check("clean: an unusual `every` is dropped", "every" in cleanedEvery.fixed[2], false);
+check("clean: every 1 is not stored", "every" in cleanedEvery.fixed[3], false);
+check("clean: income rows never have `every`", "every" in cleanedEvery.income[0], false);
+
+// --- Notes you have used before ---
+const septemberWithNotes = {
+	categories: [{ id: "mad", name: "Mad og dagligvarer", limit: 0 }, { id: "fri", name: "Fritid", limit: 0 }],
+	spending: [
+		{ id: "1", date: "2026-09-01", categoryId: "mad", amount: 100, note: "Rema 1000" },
+		{ id: "2", date: "2026-09-05", categoryId: "mad", amount: 100, note: "rema 1000 " },
+		{ id: "3", date: "2026-09-06", categoryId: "fri", amount: 100, note: "Biograf" },
+		{ id: "4", date: "2026-09-07", categoryId: "", amount: 100, note: "Kiosk" },
+		{ id: "5", date: "2026-09-08", categoryId: "mad", amount: 100, note: "   " },
+		{ id: "6", date: "2026-09-09", categoryId: "mad", amount: 100, note: "" },
+	],
+};
+const octoberWithNotes = {
+	categories: [{ id: "o-mad", name: "mad og dagligvarer", limit: 0 }],
+	spending: [
+		{ id: "7", date: "2026-10-02", categoryId: "o-mad", amount: 100, note: "Netto" },
+		{ id: "8", date: "2026-10-03", categoryId: "o-mad", amount: 100, note: "Biograf" },
+		{ id: "9", date: "2026-10-04", categoryId: "o-mad", amount: 100, note: "Netto" },
+		{ id: "10", date: "2026-10-05", categoryId: "o-mad", amount: 100, note: "Netto" },
+	],
+};
+const history = budget.noteHistory({ "2026-09": septemberWithNotes, "2026-10": octoberWithNotes });
+check("notes: one entry per note (capitals and spaces don't matter), most used first, a tie by most recent", history.map((entry) => entry.note), ["Netto", "Biograf", "rema 1000", "Kiosk"]);
+check("notes: how many times each was used", history.map((entry) => entry.count), [3, 2, 2, 1]);
+check("notes: the text is as it was written last", history.find((entry) => entry.lastDate === "2026-09-05").note, "rema 1000");
+check("notes: blank notes are left out", history.some((entry) => entry.note.trim() === ""), false);
+check("notes: the category of the latest use", history.find((entry) => entry.count === 2 && entry.note === "Biograf").categoryName, "mad og dagligvarer");
+check("notes: no category gives an empty name", history.find((entry) => entry.note === "Kiosk").categoryName, "");
+const octoberPlan = { categories: [{ id: "x-mad", name: "Mad og dagligvarer", limit: 0 }, { id: "x-fri", name: "Fritid", limit: 0 }] };
+check("note -> category: matched by name, in this month's plan", budget.categoryIdForNote(history, "Netto", octoberPlan), "x-mad");
+check("note -> category: capitals don't matter", budget.categoryIdForNote(history, "REMA 1000", octoberPlan), "x-mad");
+check("note -> category: a new note gives nothing", budget.categoryIdForNote(history, "Føtex", octoberPlan), "");
+check("note -> category: a note that had no category gives nothing", budget.categoryIdForNote(history, "Kiosk", octoberPlan), "");
+check("note -> category: a category this month lacks gives nothing", budget.categoryIdForNote(history, "Netto", { categories: [{ id: "z", name: "Sundhed", limit: 0 }] }), "");
+check("notes: no months, no suggestions", budget.noteHistory({}), []);
+
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
 check("csv amount: zero", budget.csvAmount(0), "0,00");

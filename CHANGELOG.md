@@ -3,6 +3,18 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.5.0 - 2026-09-30
+
+- **Fixed bills can come every few months, or once a year.** Under each fixed bill a small line says
+  "Hver måned". Tap it to choose "Hver 2. / 3. / 6. måned" or "Hvert år", and the first payment
+  date (only the month counts). In the months it is due the whole amount counts, in the others
+  nothing. Overblik, Fremtid (you see the dips) and the reports follow. Choosing a frequency fills
+  in this month as the first payment, so it works at once.
+- **A cleverer Note in "Tilføj udgift".** As you type, the notes you have used before are suggested
+  (most used first). Picking one, or typing one in full, also picks the category you used for it
+  last time - unless you have chosen a category yourself. Note now comes before Kategori in the form.
+- No Firebase rules change is needed.
+
 ## 1.4.0 - 2026-09-30
 
 - **From / to dates on income and fixed bills** (Plan: "Fra/til dato" under each such row). A row

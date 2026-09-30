@@ -289,10 +289,75 @@ function activeDaysIn(row, key) {
 	return Number(end.slice(8)) - Number(start.slice(8)) + 1;
 }
 
+
+// --- Bills that do not come every month --------------------------------------
+
+// A fixed bill can come every 2nd, 3rd or 6th month, or once a year (row.every = 2, 3, 6 or 12;
+// no `every` means every month). Its `from` date then says when the FIRST payment is, and only the
+// month counts, not the day: a bill from 2026-03-15 every 3rd month is due in March, June,
+// September and December. In a month it is due, the whole amount counts; in the others, nothing.
+// (It is not spread out over the months: that is what the bank account will show.)
+// A bill that comes less often than monthly always has a `from` date; the page and cleanRows both
+// make sure of that.
+const EVERY_CHOICES = [1, 2, 3, 6, 12];
+
+function isPeriodic(row) {
+	return row.every > 1 && Boolean(row.from);
+}
+
+// How many months from the month fromKey to the month toKey ("2026-03" -> "2026-06" is 3).
+function monthsBetween(fromKey, toKey) {
+	const a = splitMonthKey(fromKey);
+	const b = splitMonthKey(toKey);
+	return (b.year - a.year) * 12 + (b.month - a.month);
+}
+
+// Is a bill that comes every few months due in the month `key`?
+function isDueIn(row, key) {
+	const firstKey = row.from.slice(0, 7);
+	if (key < firstKey) {
+		return false;
+	}
+	if (row.to && key > row.to.slice(0, 7)) {
+		return false;
+	}
+	return monthsBetween(firstKey, key) % row.every === 0;
+}
+
+// The first month from `key` on (key included) in which the bill is due, or null if it never is
+// again (its last day has passed).
+function nextDueKey(row, key) {
+	for (let step = 0; step < 120; step++) {
+		const candidate = shiftMonth(key, step);
+		if (row.to && candidate > row.to.slice(0, 7)) {
+			return null;
+		}
+		if (isDueIn(row, candidate)) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+// "hver 3. måned", "hvert år"
+function everyText(every) {
+	if (every === 12) {
+		return "hvert år";
+	}
+	return "hver " + every + ". måned";
+}
+
+
 // A row's amount as it counts in the month `key` (the whole amount when the row has no dates or
 // no month is given). Whole-number maths: the result is rounded to whole øre.
 function amountIn(row, key) {
-	if (!key || (!row.from && !row.to)) {
+	if (!key) {
+		return row.amount;
+	}
+	if (isPeriodic(row)) {
+		return isDueIn(row, key) ? row.amount : 0;
+	}
+	if (!row.from && !row.to) {
 		return row.amount;
 	}
 	const days = lastDayOfMonth(key);
@@ -311,9 +376,13 @@ function sumIn(rows, key) {
 	return total;
 }
 
-// "fra 12.10.2026", "til 11.10.2026", "fra 12.10.2026 til 30.11.2026", or "" without dates.
+// "fra 12.10.2026", "til 11.10.2026", "fra 12.10.2026 til 30.11.2026", "hvert år fra 15.03.2026",
+// or "" for a row that counts every month without dates.
 function windowText(row) {
 	const parts = [];
+	if (isPeriodic(row)) {
+		parts.push(everyText(row.every));
+	}
 	if (row.from) {
 		parts.push("fra " + dateText(row.from));
 	}
@@ -655,6 +724,58 @@ function yearCsv(report) {
 }
 
 
+// --- Notes you have used before (the suggestions under "Note") --------------
+
+const MOST_SUGGESTED_NOTES = 200;
+
+// Every note used on a purchase in any month, for the suggestions while typing. Same note with
+// different capitals ("rema 1000", "Rema 1000") counts as one. Most-used first, then most recent.
+// Each entry: { note, count, lastDate, categoryName } - the text as it was written last, how many
+// times it was used, and the category of its latest use ("" if that had none).
+function noteHistory(months) {
+	const byKey = {};
+	for (const monthKey of Object.keys(months)) {
+		const month = months[monthKey];
+		for (const item of month.spending) {
+			const note = item.note.trim();
+			if (note === "") {
+				continue;
+			}
+			const key = note.toLowerCase();
+			const category = categoryNameIn(month, item.categoryId);
+			const entry = byKey[key];
+			if (!entry) {
+				byKey[key] = { note: note, count: 1, lastDate: item.date, categoryName: category === "Uden kategori" ? "" : category };
+				continue;
+			}
+			entry.count += 1;
+			if (item.date >= entry.lastDate) {
+				entry.lastDate = item.date;
+				entry.note = note;
+				entry.categoryName = category === "Uden kategori" ? "" : category;
+			}
+		}
+	}
+	return Object.values(byKey)
+		.sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0) || a.note.localeCompare(b.note, "da"))
+		.slice(0, MOST_SUGGESTED_NOTES);
+}
+
+// The id of the category of the month `month` that this note usually goes in, or "" when the note
+// is new, or its usual category doesn't exist in this month. Matched by name, because the same
+// category has a different id in another month's plan only if it was made again.
+function categoryIdForNote(history, note, month) {
+	const key = note.trim().toLowerCase();
+	const entry = history.find((other) => other.note.toLowerCase() === key);
+	if (!entry || entry.categoryName === "") {
+		return "";
+	}
+	const wanted = entry.categoryName.trim().toLowerCase();
+	const category = month.categories.find((other) => other.name.trim().toLowerCase() === wanted);
+	return category ? category.id : "";
+}
+
+
 // --- Cleaning saved data ----------------------------------------------------
 //
 // Saved data and backup files are read back with these, so that a damaged or
@@ -681,7 +802,8 @@ function cleanId(value) {
 }
 
 // dated: income and fixed-bill rows may carry a "from" and a "to" day; other rows never do.
-function cleanRows(list, amountField, mostRows, dated) {
+// periodic: fixed bills may also come every 2, 3, 6 or 12 months (only with a "from" day).
+function cleanRows(list, amountField, mostRows, dated, periodic) {
 	if (!Array.isArray(list)) {
 		return [];
 	}
@@ -695,6 +817,9 @@ function cleanRows(list, amountField, mostRows, dated) {
 					clean[field] = row[field];
 				}
 			}
+		}
+		if (periodic && clean.from && EVERY_CHOICES.includes(row.every) && row.every > 1) {
+			clean.every = row.every;
 		}
 		return clean;
 	});
@@ -720,7 +845,7 @@ function cleanMonth(raw) {
 	const source = raw && typeof raw === "object" ? raw : {};
 	return {
 		income: cleanRows(source.income, "amount", MOST_INCOME_ROWS, true),
-		fixed: cleanRows(source.fixed, "amount", MOST_FIXED_ROWS, true),
+		fixed: cleanRows(source.fixed, "amount", MOST_FIXED_ROWS, true, true),
 		savings: cleanAmount(source.savings),
 		categories: cleanRows(source.categories, "limit", MOST_CATEGORIES),
 		spending: cleanSpending(source.spending),
@@ -757,6 +882,8 @@ if (typeof module !== "undefined") {
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
+		noteHistory, categoryIdForNote,
+		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
 		FORECAST_MONTHS, forecast,
 		dateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
 		cleanAmount, cleanMonth, cleanData, sameData,
