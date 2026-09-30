@@ -50,7 +50,7 @@ function checkNewPassword(password, username) {
 	}
 	const score = zxcvbn(password, [username, ...APP_WORDS].filter(Boolean)).score;
 	if (score < MIN_PASSWORD_SCORE) {
-		return { ok: false, message: "Adgangskoden er for nem at gætte. Brug fx tre almindelige ord og et tal, som \"lilla-tiger-raket-47\"." };
+		return { ok: false, message: "Adgangskoden er for nem at gætte. Brug fx tre almindelige ord og et tal, som \"Lilla-tiger-raket-47\"." };
 	}
 	return { ok: true, message: "" };
 }

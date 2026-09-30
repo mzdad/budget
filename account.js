@@ -144,7 +144,9 @@ function accountProblemText(error) {
 			return "For mange forsøg. Vent lidt og prøv igen.";
 		case "auth/weak-password":
 		case "auth/password-does-not-meet-requirements":
-			return "Adgangskoden er ikke stærk nok. Brug mindst 10 tegn.";
+			// Firebase can also require a capital letter, a small letter and a digit, depending on
+			// what is ticked in its console (see SETUP-ACCOUNTS.md, step 4).
+			return "Firebase afviste adgangskoden. Den skal være mindst 10 tegn, og Firebase kan også kræve store og små bogstaver og tal. Brug fx \"Lilla-tiger-raket-47\".";
 		case "auth/operation-not-allowed":
 		case "auth/admin-restricted-operation":
 			return "Det er lukket for nye konti lige nu.";

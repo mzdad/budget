@@ -42,9 +42,13 @@ so no emails are ever sent.
 ## 4. Require long passwords on Firebase's side too
 
 1. Still in Authentication: **Settings** tab → **Password policy**.
-2. Tick **Require enforcement** and set **Minimum length** to **10**. Leave the
-   uppercase / number / symbol requirements unticked: the page checks strength itself,
-   and allows easy-to-remember phrases like "purple tiger eats rockets". **Save**.
+2. Tick **Require enforcement** and set **Minimum length** to **10**. Firebase often switches
+   on the requirements for **uppercase**, **lowercase** and **numeric** characters by default:
+   untick them (and leave **symbol** unticked too). The page checks strength itself, and allows
+   easy-to-remember phrases like "purple tiger eats rockets". **Save**.
+
+   If you leave those requirements on, it still works: use a password with a capital letter,
+   a small letter and a digit, like `Lilla-tiger-raket-47`.
 
 ## 5. Create the database for the numbers
 
@@ -73,7 +77,7 @@ them. Until they are published, the page can't read or save anything in the acco
 **Make your account** in the page: **Plan** → **Gem dine tal på en konto** → a username and a
 password → **Opret ny konto**. Usernames can use a–z, numbers, `-` and `_` (no æ, ø, å).
 Passwords need at least 10 characters and must be hard to guess; three words and a number
-work well, like `lilla-tiger-raket-47`. If you already wrote numbers on that device before
+work well, like `Lilla-tiger-raket-47`. If you already wrote numbers on that device before
 making the account, the page asks whether to move them in.
 
 **Sign in on another phone or computer** the same way, with **Log ind**.
