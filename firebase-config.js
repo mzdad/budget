@@ -6,7 +6,14 @@
 //
 // These values are not secret: every visitor's browser needs them to find the project.
 // What keeps each account's numbers private is firestore.rules, which runs on Firebase's side.
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+	apiKey: "AIzaSyAycW0Neo4hlTuXZhvE6Tf3i4xQBOV3NGA",
+	authDomain: "maanedsbudget.firebaseapp.com",
+	projectId: "maanedsbudget",
+	storageBucket: "maanedsbudget.firebasestorage.app",
+	messagingSenderId: "329993781979",
+	appId: "1:329993781979:web:d3925979e22556c41502fe",
+};
 
 // For testing on this computer only. http://localhost:8767/?emulator talks to Firebase's local
 // test copy (started with "firebase emulators:start") instead of any real project, using a
