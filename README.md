@@ -9,6 +9,12 @@ A small monthly budget page for phone and PC. Danish, kroner.
 - **Overblik** - shows what is left to spend this month, and lets you write in every
   purchase. Each category has a bar that turns amber near its limit and red above it.
 - **Udgifter** - every purchase, newest first. Delete a mistake with the ✕.
+- **Fremtid** - type how much money you have at the start of the month, and it keeps the
+  month's plan going for 12 months and shows what you would have (two versions: spending
+  exactly your category limits, and only saving your planned savings). It is arithmetic,
+  not a prediction.
+- **Eksport** (on Plan) - a report for one month or a whole year, on screen. Download it for
+  Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF.
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
   - **No account:** saved on the device only (the browser's localStorage). Nothing is sent
@@ -25,7 +31,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
 |---|---|
 | `index.html` | The page frame, top bar and tab bar |
 | `style.css` | How it looks (colours at the top; dark mode follows the phone) |
-| `budget.js` | The maths: reading amounts, totals, months. No screen code |
+| `budget.js` | The maths: amounts, totals, months, the forecast, the reports and spreadsheet text. No screen code |
 | `app.js` | The screens, taps, saving, and the sign-in flow |
 | `account.js` | Talks to Firebase (sign in, save and watch the months). No screen code |
 | `password.js` | Decides whether a new password is strong enough |

@@ -60,7 +60,8 @@ check("next month", budget.shiftMonth("2026-09", 1), "2026-10");
 check("next month over new year", budget.shiftMonth("2026-12", 1), "2027-01");
 check("previous month over new year", budget.shiftMonth("2027-01", -1), "2026-12");
 check("month label", budget.monthLabel("2026-09"), "September 2026");
-check("day label", budget.dayLabel("2026-09-30"), "onsdag 30. september");
+check("short month label", budget.shortMonthLabel("2026-09"), "sep. 2026");
+check("day label",budget.dayLabel("2026-09-30"), "onsdag 30. september");
 check("last day of september", budget.lastDayOfMonth("2026-09"), 30);
 check("last day of february 2028 (leap)", budget.lastDayOfMonth("2028-02"), 29);
 check("days left on the 30th of 30", budget.daysLeftInMonth("2026-09", new Date(2026, 8, 30)), 1);
@@ -94,6 +95,7 @@ const month = {
 		{ id: "3", date: "2026-09-02", categoryId: "fri", amount: 120000, note: "" },
 		{ id: "4", date: "2026-09-03", categoryId: "gone", amount: 5000, note: "" },
 	],
+	startBalance: 1000000,
 };
 const s = budget.summarize(month);
 check("income total", s.income, 2600000);
@@ -165,6 +167,81 @@ const changed = JSON.parse(JSON.stringify(one));
 changed.months["2026-09"].spending[0].amount += 1;
 check("same data: a changed amount counts", budget.sameData(one, changed), false);
 check("same data: an extra month counts", budget.sameData(one, { months: { "2026-09": month, "2026-10": month } }), false);
+
+// --- The money I have now (startBalance) ---
+check("clean month: balance is kept", budget.cleanMonth({ startBalance: 1000000 }).startBalance, 1000000);
+check("clean month: a month from before the balance existed gets 0", budget.cleanMonth({}).startBalance, 0);
+check("clean month: negative balance becomes 0", budget.cleanMonth({ startBalance: -5 }).startBalance, 0);
+check("a new month does not copy the balance", budget.copyPlanOf(month).startBalance, 0);
+
+// --- Looking ahead ---
+// month: income 26.000, fixed 9.500, savings 2.000, limits 4.000 (in kr), balance 10.000.
+const future = budget.forecast(month, "2026-09", 12);
+check("forecast: grows by income - fixed - limits each month", future.perMonth, 1250000);
+check("forecast: careful version grows by the savings only", future.carefulPerMonth, 200000);
+check("forecast: has 12 rows", future.rows.length, 12);
+check("forecast: first row is the month itself", future.rows[0].key, "2026-09");
+check("forecast: first month's total", future.rows[0].total, 2250000);
+check("forecast: last row is 11 months later", future.lastKey, "2027-08");
+check("forecast: money after 12 months", future.endTotal, 1000000 + 12 * 1250000);
+check("forecast: careful money after 12 months", future.carefulEndTotal, 1000000 + 12 * 200000);
+check("forecast: rows line up with the end total", future.rows[11].total, future.endTotal);
+const tight = budget.forecast({ income: [{ id: "i", name: "", amount: 100000 }], fixed: [], savings: 50000, categories: [{ id: "c", name: "", limit: 200000 }], spending: [], startBalance: 0 }, "2026-09", 3);
+check("forecast: limits above income make the money shrink", tight.perMonth, -100000);
+check("forecast: careful is never more than the plain version", tight.carefulPerMonth, -100000);
+check("forecast: can go negative", tight.endTotal, -300000);
+
+// --- Spreadsheet text ---
+check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
+check("csv amount: zero", budget.csvAmount(0), "0,00");
+check("csv amount: 5 øre", budget.csvAmount(5), "0,05");
+check("csv amount: negative", budget.csvAmount(-15000), "-150,00");
+check("csv amount: negative øre only", budget.csvAmount(-5), "-0,05");
+check("csv text: plain", budget.csvText("Mad"), "Mad");
+check("csv text: semicolon is quoted", budget.csvText("a;b"), '"a;b"');
+check("csv text: quote is doubled", budget.csvText('say "hi"'), '"say ""hi"""');
+check("csv text: a formula is defused", budget.csvText("=1+1"), "'=1+1");
+check("csv text: a leading minus is defused", budget.csvText("-5 kr"), "'-5 kr");
+check("csv text: a leading plus is defused", budget.csvText("+45 1234"), "'+45 1234");
+check("csv text: Danish letters survive", budget.csvText("Smørrebrød og åbent"), "Smørrebrød og åbent");
+check("date text", budget.dateText("2026-09-30"), "30.09.2026");
+
+// --- Month report ---
+const report = budget.monthReport(month, "2026-09");
+check("month report: label", report.label, "September 2026");
+check("month report: purchases oldest first", report.spending.map((x) => x.date), ["2026-09-01", "2026-09-02", "2026-09-02", "2026-09-03"]);
+check("month report: same-day purchases keep their order", report.spending.map((x) => x.amount), [45050, 10000, 120000, 5000]);
+check("month report: category names are looked up", report.spending.map((x) => x.category), ["Mad", "Mad", "Fritid", "Uden kategori"]);
+const csv = budget.monthCsv(report).split("\r\n");
+check("month csv: title", csv[0], "Budget;September 2026");
+check("month csv: income line", csv[3], "Indkomst;26000,00");
+check("month csv: left line", csv[8], "Tilbage;12699,50");
+check("month csv: a purchase line", csv.includes("02.09.2026;Fritid;;1200,00"), true);
+check("month csv: category line with overspending", csv.includes("Fritid;1000,00;1200,00;-200,00"), true);
+check("month csv: no-category spending", csv.includes("Uden kategori;;50,00;"), true);
+
+// --- Year report ---
+const october = JSON.parse(JSON.stringify(month));
+october.spending = [{ id: "o1", date: "2026-10-05", categoryId: "mad", amount: 20000, note: "Føtex; stor indkøb" }];
+const twentyFive = JSON.parse(JSON.stringify(month));
+twentyFive.spending = [];
+const all = { "2026-09": month, "2026-10": october, "2027-01": twentyFive };
+check("years with data", budget.yearsWithData(all), ["2026", "2027"]);
+const year = budget.yearReport(all, "2026");
+check("year report: only that year's months", year.monthKeys, ["2026-09", "2026-10"]);
+check("year report: spent adds up", year.totals.spent, 180050 + 20000);
+check("year report: income adds up", year.totals.income, 2 * 2600000);
+check("year report: Mad adds across months", year.categories.find((c) => c.name === "Mad").total, 55050 + 20000);
+check("year report: Mad per month", year.categories.find((c) => c.name === "Mad").perMonth, { "2026-09": 55050, "2026-10": 20000 });
+check("year report: no-category spending has its own row", year.categories.find((c) => c.name === "Uden kategori").total, 5000);
+check("year report: every purchase is listed", year.spending.length, 5);
+const yearLines = budget.yearCsv(year).split("\r\n");
+check("year csv: title", yearLines[0], "Budget;2026");
+check("year csv: header", yearLines[3], "Måned;Indkomst;Faste udgifter;Opsparing;Til rådighed;Brugt;Tilbage");
+check("year csv: total row", yearLines.includes("I alt;52000,00;19000,00;4000,00;29000,00;2000,50;26999,50"), true);
+check("year csv: category matrix", yearLines.includes("Mad;550,50;200,00;750,50"), true);
+check("year csv: a note with a semicolon is quoted", yearLines.some((l) => l.includes('"Føtex; stor indkøb"')), true);
+check("year report of a year with no data is empty", budget.yearReport(all, "2030").rows, []);
 
 // --- Starter month ---
 const starter = budget.starterMonth();

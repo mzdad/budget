@@ -42,14 +42,17 @@ service cloud.firestore {
     // Only the fields the page writes, and sensible amounts of rows. The row limits are the same
     // numbers as MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES and MOST_SPENDING_PER_MONTH
     // in budget.js. Savings is in øre (1 kr = 100 øre), at most 10 million kr.
+    // startBalance ("money I have now", used by Fremtid) is optional: a month without it is fine.
     function isValidMonth(data) {
-      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
+      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'startBalance', 'updatedAt'])
         && data.keys().hasAll(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
         && data.income is list && data.income.size() <= 50
         && data.fixed is list && data.fixed.size() <= 100
         && data.savings is int && data.savings >= 0 && data.savings <= 1000000000
         && data.categories is list && data.categories.size() <= 50
         && data.spending is list && data.spending.size() <= 2000
+        && (!('startBalance' in data)
+            || (data.startBalance is int && data.startBalance >= 0 && data.startBalance <= 1000000000))
         && data.updatedAt == request.time;
     }
   }

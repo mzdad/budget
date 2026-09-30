@@ -127,6 +127,12 @@ function monthLabel(key) {
 	return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// "2026-09" -> "sep. 2026" (short, for tables)
+function shortMonthLabel(key) {
+	const { year, month } = splitMonthKey(key);
+	return new Intl.DateTimeFormat("da-DK", { month: "short", year: "numeric" }).format(new Date(year, month - 1, 1));
+}
+
 // "2026-09-30" -> "onsdag 30. september"
 function dayLabel(dateKey) {
 	const parts = dateKey.split("-").map(Number);
@@ -175,13 +181,16 @@ function starterMonth() {
 		savings: 0,
 		categories: starterRows(STARTER_CATEGORIES, "limit"),
 		spending: [],
+		startBalance: 0,
 	};
 }
 
-// A new month starts with last month's plan but no spending.
+// A new month starts with last month's plan but no spending. The "money I have now" number
+// is NOT carried over: it was true on a particular day, and would be stale a month later.
 function copyPlanOf(month) {
 	const copy = JSON.parse(JSON.stringify(month));
 	copy.spending = [];
+	copy.startBalance = 0;
 	return copy;
 }
 
@@ -282,6 +291,234 @@ function barLevel(spent, limit) {
 }
 
 
+// --- Looking ahead ----------------------------------------------------------
+
+// How many months the "Fremtid" screen looks ahead.
+const FORECAST_MONTHS = 12;
+
+// A simple what-if: keep this month's plan going for `howMany` months, starting with the money
+// the month says you have at its start (startBalance). It is arithmetic, not a prediction.
+//
+// Two versions, because the plan leaves a gap between "what you may spend" and "what you save":
+// - perMonth: you spend exactly your category limits. Everything else stays yours, so your money
+//   grows by income - fixed bills - limits (your savings, plus whatever you have not handed out).
+// - carefulPerMonth: only your planned savings grow and the rest is spent. Never more than
+//   perMonth, which matters when the limits add up to more than you have.
+function forecast(month, key, howMany) {
+	const s = summarize(month);
+	const perMonth = s.income - s.fixed - s.limits;
+	const carefulPerMonth = Math.min(s.savings, perMonth);
+
+	const rows = [];
+	let total = month.startBalance;
+	let carefulTotal = month.startBalance;
+	for (let i = 0; i < howMany; i++) {
+		total += perMonth;
+		carefulTotal += carefulPerMonth;
+		rows.push({ key: shiftMonth(key, i), added: perMonth, total: total, carefulTotal: carefulTotal });
+	}
+
+	return {
+		start: month.startBalance,
+		perMonth: perMonth,
+		carefulPerMonth: carefulPerMonth,
+		rows: rows,
+		endTotal: total,
+		carefulEndTotal: carefulTotal,
+		lastKey: shiftMonth(key, howMany - 1),
+	};
+}
+
+
+// --- Reports and export -----------------------------------------------------
+
+// "2026-09-30" -> "30.09.2026"
+function dateText(dateKey) {
+	const parts = dateKey.split("-");
+	return parts[2] + "." + parts[1] + "." + parts[0];
+}
+
+function byDateOldestFirst(list) {
+	// Stable: purchases on the same day stay in the order they were added.
+	return [...list].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+function categoryNameIn(month, categoryId) {
+	const category = month.categories.find((other) => other.id === categoryId);
+	return category ? (category.name || "(uden navn)") : "Uden kategori";
+}
+
+// Everything the report for one month shows. The screen, the printout and the spreadsheet
+// are all made from this, so they always agree.
+function monthReport(month, key) {
+	const s = summarize(month);
+	return {
+		key: key,
+		label: monthLabel(key),
+		summary: s,
+		income: month.income,
+		fixed: month.fixed,
+		categories: s.categories,
+		otherSpent: s.otherSpent,
+		spending: byDateOldestFirst(month.spending).map((item) => ({
+			date: item.date,
+			category: categoryNameIn(month, item.categoryId),
+			note: item.note,
+			amount: item.amount,
+		})),
+	};
+}
+
+// The report for a whole year: only months that have been saved (a month nobody touched has
+// nothing to report).
+function yearReport(months, year) {
+	const keys = Object.keys(months).filter((key) => key.startsWith(year + "-")).sort();
+
+	const rows = [];
+	const totals = { income: 0, fixed: 0, savings: 0, available: 0, spent: 0, left: 0 };
+	const categoryNames = [];
+	const spentByCategory = {};   // category name -> { "2026-09": øre, ... }
+	const spending = [];
+
+	for (const key of keys) {
+		const month = months[key];
+		const s = summarize(month);
+		rows.push({
+			key: key, label: monthLabel(key),
+			income: s.income, fixed: s.fixed, savings: s.savings,
+			available: s.available, spent: s.spent, left: s.left,
+		});
+		for (const field of Object.keys(totals)) {
+			totals[field] += s[field];
+		}
+
+		// Spending per category NAME, so a category that exists in several months adds up.
+		const spentHere = s.categories.map((c) => ({ name: c.name || "(uden navn)", spent: c.spent }));
+		if (s.otherSpent > 0) {
+			spentHere.push({ name: "Uden kategori", spent: s.otherSpent });
+		}
+		for (const entry of spentHere) {
+			if (!spentByCategory[entry.name]) {
+				spentByCategory[entry.name] = {};
+				categoryNames.push(entry.name);
+			}
+			spentByCategory[entry.name][key] = (spentByCategory[entry.name][key] || 0) + entry.spent;
+		}
+
+		for (const item of byDateOldestFirst(month.spending)) {
+			spending.push({ date: item.date, category: categoryNameIn(month, item.categoryId), note: item.note, amount: item.amount });
+		}
+	}
+
+	const categories = categoryNames.map((name) => ({
+		name: name,
+		perMonth: spentByCategory[name],
+		total: Object.values(spentByCategory[name]).reduce((sum, amount) => sum + amount, 0),
+	}));
+
+	return { year: year, monthKeys: keys, rows: rows, totals: totals, categories: categories, spending: spending };
+}
+
+// The years that have any saved month, oldest first: ["2026", "2027"].
+function yearsWithData(months) {
+	const years = new Set(Object.keys(months).map((key) => key.slice(0, 4)));
+	return [...years].sort();
+}
+
+// Spreadsheet text. Danish Excel expects ; between cells and , as the decimal mark.
+//
+// An amount as a spreadsheet cell: 4995 -> "49,95", -150 -> "-150,00". Whole-number maths,
+// so there are never rounding surprises.
+function csvAmount(ore) {
+	const sign = ore < 0 ? "-" : "";
+	const absolute = Math.abs(ore);
+	return sign + Math.floor(absolute / 100) + "," + String(absolute % 100).padStart(2, "0");
+}
+
+// Text as a spreadsheet cell. Two protections:
+// - a cell that starts with = + - @ would be run as a formula by Excel, so it gets a ' in front;
+// - a cell with ; or a quote or a line break is wrapped in quotes.
+function csvText(text) {
+	let cell = String(text);
+	if (/^[=+\-@\t\r]/.test(cell)) {
+		cell = "'" + cell;
+	}
+	if (/[;"\n\r]/.test(cell)) {
+		cell = '"' + cell.replace(/"/g, '""') + '"';
+	}
+	return cell;
+}
+
+function csvLine(cells) {
+	return cells.join(";");
+}
+
+// The spreadsheet for one month, as text (lines joined with \r\n, as Excel likes).
+function monthCsv(report) {
+	const s = report.summary;
+	const lines = [
+		csvLine([csvText("Budget"), csvText(report.label)]),
+		"",
+		csvText("Oversigt"),
+		csvLine([csvText("Indkomst"), csvAmount(s.income)]),
+		csvLine([csvText("Faste udgifter"), csvAmount(s.fixed)]),
+		csvLine([csvText("Opsparing"), csvAmount(s.savings)]),
+		csvLine([csvText("Til rådighed"), csvAmount(s.available)]),
+		csvLine([csvText("Brugt"), csvAmount(s.spent)]),
+		csvLine([csvText("Tilbage"), csvAmount(s.left)]),
+		"",
+		csvText("Indkomst"),
+	];
+	for (const row of report.income) {
+		lines.push(csvLine([csvText(row.name), csvAmount(row.amount)]));
+	}
+	lines.push("", csvText("Faste udgifter"));
+	for (const row of report.fixed) {
+		lines.push(csvLine([csvText(row.name), csvAmount(row.amount)]));
+	}
+	lines.push("", csvText("Kategorier"), csvLine([csvText("Kategori"), csvText("Grænse"), csvText("Brugt"), csvText("Tilbage")]));
+	for (const c of report.categories) {
+		lines.push(csvLine([csvText(c.name || "(uden navn)"), csvAmount(c.limit), csvAmount(c.spent), csvAmount(c.left)]));
+	}
+	if (report.otherSpent > 0) {
+		lines.push(csvLine([csvText("Uden kategori"), "", csvAmount(report.otherSpent), ""]));
+	}
+	lines.push("", csvText("Udgifter"), csvLine([csvText("Dato"), csvText("Kategori"), csvText("Note"), csvText("Beløb")]));
+	for (const item of report.spending) {
+		lines.push(csvLine([csvText(dateText(item.date)), csvText(item.category), csvText(item.note), csvAmount(item.amount)]));
+	}
+	return lines.join("\r\n");
+}
+
+// The spreadsheet for a whole year: a row per month, spending per category per month, and
+// every purchase.
+function yearCsv(report) {
+	const lines = [
+		csvLine([csvText("Budget"), csvText(report.year)]),
+		"",
+		csvText("Måned for måned"),
+		csvLine(["Måned", "Indkomst", "Faste udgifter", "Opsparing", "Til rådighed", "Brugt", "Tilbage"].map(csvText)),
+	];
+	for (const row of report.rows) {
+		lines.push(csvLine([csvText(row.label), csvAmount(row.income), csvAmount(row.fixed), csvAmount(row.savings), csvAmount(row.available), csvAmount(row.spent), csvAmount(row.left)]));
+	}
+	const t = report.totals;
+	lines.push(csvLine([csvText("I alt"), csvAmount(t.income), csvAmount(t.fixed), csvAmount(t.savings), csvAmount(t.available), csvAmount(t.spent), csvAmount(t.left)]));
+
+	lines.push("", csvText("Brugt pr. kategori"));
+	lines.push(csvLine([csvText("Kategori"), ...report.monthKeys.map((key) => csvText(monthLabel(key))), csvText("I alt")]));
+	for (const c of report.categories) {
+		lines.push(csvLine([csvText(c.name), ...report.monthKeys.map((key) => csvAmount(c.perMonth[key] || 0)), csvAmount(c.total)]));
+	}
+
+	lines.push("", csvText("Udgifter"), csvLine(["Dato", "Kategori", "Note", "Beløb"].map(csvText)));
+	for (const item of report.spending) {
+		lines.push(csvLine([csvText(dateText(item.date)), csvText(item.category), csvText(item.note), csvAmount(item.amount)]));
+	}
+	return lines.join("\r\n");
+}
+
+
 // --- Cleaning saved data ----------------------------------------------------
 //
 // Saved data and backup files are read back with these, so that a damaged or
@@ -342,6 +579,7 @@ function cleanMonth(raw) {
 		savings: cleanAmount(source.savings),
 		categories: cleanRows(source.categories, "limit", MOST_CATEGORIES),
 		spending: cleanSpending(source.spending),
+		startBalance: cleanAmount(source.startBalance),
 	};
 }
 
@@ -370,9 +608,11 @@ function sameData(a, b) {
 if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, formatKr, amountToInput, sumOf,
-		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
+		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, spendingNewestFirst,
 		summarize, barShare, barLevel,
+		FORECAST_MONTHS, forecast,
+		dateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
 		cleanAmount, cleanMonth, cleanData, sameData,
 		MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES, MOST_SPENDING_PER_MONTH,
 	};

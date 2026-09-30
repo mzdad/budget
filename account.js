@@ -119,14 +119,20 @@ function watchAccountMonths(username, onMonths, onProblem) {
 // Saves one whole month. The promise finishes when Firebase has it; offline, that is later.
 async function saveAccountMonth(username, key, month) {
 	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;
-	await setDoc(doc(firebase.db, BUDGET_FOLDER, username, MONTHS_FOLDER, key), {
+	const fields = {
 		income: month.income,
 		fixed: month.fixed,
 		savings: month.savings,
 		categories: month.categories,
 		spending: month.spending,
 		updatedAt: serverTimestamp(),
-	});
+	};
+	// "Money I have now" (Fremtid) was added later. It is only sent when it is set, so a month
+	// without one still passes the rules published before it existed.
+	if (month.startBalance > 0) {
+		fields.startBalance = month.startBalance;
+	}
+	await setDoc(doc(firebase.db, BUDGET_FOLDER, username, MONTHS_FOLDER, key), fields);
 }
 
 // Turns a Firebase error into a message for the user, in Danish.

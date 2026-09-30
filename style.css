@@ -499,3 +499,139 @@ label.button.secondary {
 	font-weight: 700;
 	box-shadow: inset 0 3px 0 var(--accent);
 }
+
+/* ---- Tables (the forecast and the reports) ---- */
+
+/* Wide tables scroll sideways inside their box instead of breaking the page. */
+.table-scroll {
+	overflow-x: auto;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+	font-size: 0.95rem;
+}
+
+th,
+td {
+	padding: 7px 6px;
+	text-align: right;
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+	text-align: left;
+}
+
+/* Text columns (a purchase's category and note) sit on the left and may wrap, but never
+   shrink to nothing: on a narrow phone the table scrolls sideways instead. */
+td.wrap {
+	white-space: normal;
+	text-align: left;
+	overflow-wrap: anywhere;
+	min-width: 5.5em;
+}
+
+.purchases th:nth-child(2),
+.purchases th:nth-child(3) {
+	text-align: left;
+}
+
+th {
+	color: var(--muted);
+	font-weight: 600;
+	font-size: 0.85rem;
+}
+
+tr.total td {
+	font-weight: 700;
+	border-top: 2px solid var(--line);
+}
+
+td.bad,
+.bad-text {
+	color: var(--bad);
+}
+
+td.good,
+.good-text {
+	color: var(--accent);
+}
+
+.report h2 {
+	font-size: 1.25rem;
+	margin-bottom: 6px;
+}
+
+.report h3 {
+	margin: 20px 0 4px;
+}
+
+.buttons {
+	display: flex;
+	flex-direction: column;
+}
+
+/* ---- Printing: only the report, on white paper ---- */
+
+@media print {
+	.top,
+	.tabs,
+	.sync-status,
+	.warning,
+	.no-print {
+		display: none !important;
+	}
+
+	body {
+		background: #fff;
+		color: #000;
+		padding: 0;
+	}
+
+	main {
+		max-width: none;
+		padding: 0;
+	}
+
+	.card {
+		background: #fff;
+		border: none;
+		padding: 0;
+	}
+
+	th,
+	td {
+		border-bottom: 1px solid #bbb;
+		color: #000;
+	}
+
+	th {
+		color: #444;
+	}
+
+	td.bad {
+		color: #b00020;
+	}
+
+	td.good {
+		color: #000;
+	}
+
+	.table-scroll {
+		overflow: visible;
+	}
+
+	/* Keep a table row from being cut in half across two pages. */
+	tr {
+		break-inside: avoid;
+	}
+
+	h3 {
+		break-after: avoid;
+	}
+}

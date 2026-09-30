@@ -61,7 +61,8 @@ let syncState = "saved";                      // "saved" or "saving"
 
 let data = accountName === null ? loadData() : { months: {} };   // { months: { "2026-09": {...} } }
 let viewMonth = monthKeyOf(new Date());       // the month on screen
-let activeTab = "overview";                   // "overview", "expenses" or "plan"
+let activeTab = "overview";                   // "overview", "expenses", "future", "plan" or "report"
+let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 
 
@@ -246,14 +247,20 @@ function render() {
 		html = overviewHtml(month);
 	} else if (activeTab === "expenses") {
 		html = expensesHtml(month);
+	} else if (activeTab === "future") {
+		html = futureHtml(month);
+	} else if (activeTab === "report" && reportScope !== null) {
+		html = reportHtml();
 	} else {
 		html = planHtml(month);
 	}
 	document.getElementById("view").innerHTML = html;
 	showSyncStatus();
 
+	// The report is opened from Plan and has no tab of its own, so Plan stays lit.
+	const litTab = activeTab === "report" ? "plan" : activeTab;
 	for (const button of document.querySelectorAll(".tabs button")) {
-		const isActive = button.dataset.tab === activeTab;
+		const isActive = button.dataset.tab === litTab;
 		button.classList.toggle("active", isActive);
 		if (isActive) {
 			button.setAttribute("aria-current", "page");
@@ -494,7 +501,81 @@ function expensesHtml(month) {
 }
 
 
-// ---- Screen 3: Plan ------------------------------------------------------------
+// ---- Screen 3: Fremtid -----------------------------------------------------------
+//
+// "How much money will I have in a year?" It takes the plan of the month on screen and keeps it
+// going for FORECAST_MONTHS months (the maths is forecast() in budget.js).
+
+function futureHtml(month) {
+	return `
+		<section class="card">
+			<h2>Penge ved starten af ${esc(monthLabel(viewMonth).toLowerCase())}</h2>
+			<p class="hint">Hvor mange penge har du i alt, når måneden begynder? Lad feltet stå tomt, hvis du bare vil se, hvor meget du lægger til side.</p>
+			<div class="single-row">
+				<label for="balance-input">Penge i alt</label>
+				<input id="balance-input" value="${amountToInput(month.startBalance)}" placeholder="0" inputmode="decimal" autocomplete="off">
+			</div>
+		</section>
+		<div id="future-results">${futureResultsHtml(month)}</div>`;
+}
+
+// The results are redrawn on their own after the balance is changed (refreshFutureResults),
+// so the box you just typed in is left alone.
+function futureResultsHtml(month) {
+	const s = summarize(month);
+	if (s.income === 0) {
+		return '<section class="card"><p>Skriv din indkomst og dine udgifter under <b>Plan</b> først, så kan jeg regne fremad.</p></section>';
+	}
+
+	const f = forecast(month, viewMonth, FORECAST_MONTHS);
+	const tone = f.endTotal < 0 ? "bad" : "good";
+
+	let rows = "";
+	for (const row of f.rows) {
+		rows += `
+			<tr>
+				<td>${esc(shortMonthLabel(row.key))}</td>
+				<td class="${row.added < 0 ? "bad" : ""}">${formatKr(row.added)}</td>
+				<td class="${row.total < 0 ? "bad" : ""}">${formatKr(row.total)}</td>
+			</tr>`;
+	}
+
+	return `
+		<section class="card">
+			<div class="label">Om ${FORECAST_MONTHS} måneder har du</div>
+			<div class="big-number ${tone}">${formatKr(f.endTotal)}</div>
+			<p>ved udgangen af ${esc(monthLabel(f.lastKey).toLowerCase())}, hvis du bruger præcis dine grænser.</p>
+			<div class="facts">
+				<span>Lægges til hver måned <b>${formatKr(f.perMonth)}</b></span>
+			</div>
+			<div class="facts">
+				<span>Kun opsparingen (${formatKr(f.carefulPerMonth)} om måneden): <b>${formatKr(f.carefulEndTotal)}</b></span>
+			</div>
+			<p class="hint" style="margin-top:8px">Det øverste tal regner med, at du bruger præcis det, du har sat af til hver kategori, og beholder resten. Det nederste regner med, at du bruger alt andet end opsparingen.</p>
+		</section>
+		<section class="card">
+			<h2>Måned for måned</h2>
+			<div class="table-scroll">
+				<table>
+					<thead><tr><th>Måned</th><th>Lægges til</th><th>Penge i alt</th></tr></thead>
+					<tbody>
+						<tr><td>Start</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
+					</tbody>
+				</table>
+			</div>
+			<p class="hint" style="margin-top:8px">Det her er et regnestykke, ikke en forudsigelse: det bruger planen for ${esc(monthLabel(viewMonth).toLowerCase())} ens hver måned. Ændrer du planen under Plan, ændrer tallene sig her.</p>
+		</section>`;
+}
+
+function refreshFutureResults() {
+	const box = document.getElementById("future-results");
+	if (box) {
+		box.innerHTML = futureResultsHtml(getMonth(viewMonth));
+	}
+}
+
+
+// ---- Screen 4: Plan ------------------------------------------------------------
 
 // The account box at the top of Plan. Hidden until accounts are set up (firebase-config.js).
 function accountHtml() {
@@ -537,7 +618,25 @@ function planHtml(month) {
 		+ planSectionHtml(FIXED_SECTION, month)
 		+ savingsHtml(month)
 		+ planSectionHtml(CATEGORY_SECTION, month)
+		+ exportHtml()
 		+ backupHtml();
+}
+
+// The "Eksport" box on Plan: pick a month or a year and open its report.
+function exportHtml() {
+	let options = `<option value="month:${viewMonth}">Denne måned: ${esc(monthLabel(viewMonth))}</option>`;
+	for (const year of yearsWithData(data.months)) {
+		options += `<option value="year:${year}">Hele året ${year}</option>`;
+	}
+	return `
+		<section class="card">
+			<h2>Eksport</h2>
+			<p class="hint">Se en rapport over en måned eller et helt år. Den kan hentes til Excel, eller udskrives og gemmes som PDF.</p>
+			<label>Hvad vil du se?
+				<select id="export-scope">${options}</select>
+			</label>
+			<button class="secondary" data-action="open-report">Åbn rapport</button>
+		</section>`;
 }
 
 function summaryLineHtml(label, text, extraClass) {
@@ -621,6 +720,151 @@ function backupHtml() {
 }
 
 
+// ---- The report (opened from Plan -> Eksport) -------------------------------------
+//
+// One screen that is also what gets printed: the buttons carry the class "no-print", which the
+// print styles hide. The numbers come from monthReport() / yearReport() in budget.js, the same
+// ones the spreadsheet is made from.
+
+// A table from a list of headings and a list of rows; every cell is already HTML.
+// A cell can be { html, cls } to give it a class.
+function tableHtml(headings, rows, tableClass) {
+	let html = '<div class="table-scroll"><table' + (tableClass ? ' class="' + tableClass + '"' : "") + ">";
+	if (headings.length > 0) {
+		html += "<thead><tr>" + headings.map((heading) => `<th>${heading}</th>`).join("") + "</tr></thead>";
+	}
+	html += "<tbody>";
+	for (const row of rows) {
+		const isTotal = row.total === true;
+		html += isTotal ? '<tr class="total">' : "<tr>";
+		for (const cell of row.cells) {
+			const text = typeof cell === "object" ? cell.html : cell;
+			const cls = typeof cell === "object" && cell.cls ? ` class="${cell.cls}"` : "";
+			html += `<td${cls}>${text}</td>`;
+		}
+		html += "</tr>";
+	}
+	return html + "</tbody></table></div>";
+}
+
+// An amount that is red when it is negative.
+function amountCell(ore) {
+	return { html: formatKr(ore), cls: ore < 0 ? "bad" : "" };
+}
+
+function purchasesHtml(spending) {
+	if (spending.length === 0) {
+		return '<p class="hint">Ingen udgifter.</p>';
+	}
+	return tableHtml(["Dato", "Kategori", "Note", "Beløb"], spending.map((item) => ({
+		cells: [dateText(item.date).slice(0, 6), { html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
+	})), "purchases");
+}
+
+function monthReportHtml(report) {
+	const s = report.summary;
+	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || "(uden navn)"), formatKr(row.amount)] }));
+
+	let html = `<h2>Budget: ${esc(report.label)}</h2>`;
+	html += "<h3>Oversigt</h3>" + tableHtml([], [
+		{ cells: ["Indkomst", formatKr(s.income)] },
+		{ cells: ["Faste udgifter", formatKr(s.fixed)] },
+		{ cells: ["Opsparing", formatKr(s.savings)] },
+		{ cells: ["Til rådighed", formatKr(s.available)], total: true },
+		{ cells: ["Brugt", formatKr(s.spent)] },
+		{ cells: ["Tilbage", amountCell(s.left)], total: true },
+	]);
+	html += "<h3>Indkomst</h3>" + tableHtml([], nameRows(report.income));
+	html += "<h3>Faste udgifter</h3>" + tableHtml([], nameRows(report.fixed));
+
+	const categoryRows = report.categories.map((c) => ({
+		cells: [esc(c.name || "(uden navn)"), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
+	}));
+	if (report.otherSpent > 0) {
+		categoryRows.push({ cells: ["Uden kategori", "", formatKr(report.otherSpent), ""] });
+	}
+	html += "<h3>Kategorier</h3>" + tableHtml(["Kategori", "Grænse", "Brugt", "Tilbage"], categoryRows);
+	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	return html;
+}
+
+function yearReportHtml(report) {
+	if (report.rows.length === 0) {
+		return `<h2>Budget: ${esc(report.year)}</h2><p class="hint">Der er ingen gemte måneder i ${esc(report.year)}.</p>`;
+	}
+	const t = report.totals;
+
+	const monthRows = report.rows.map((row) => ({
+		cells: [esc(shortMonthLabel(row.key)), formatKr(row.income), formatKr(row.fixed), formatKr(row.savings), formatKr(row.available), formatKr(row.spent), amountCell(row.left)],
+	}));
+	monthRows.push({
+		cells: ["I alt", formatKr(t.income), formatKr(t.fixed), formatKr(t.savings), formatKr(t.available), formatKr(t.spent), amountCell(t.left)],
+		total: true,
+	});
+
+	const categoryRows = report.categories.map((c) => ({ cells: [esc(c.name), formatKr(c.total)] }));
+
+	let html = `<h2>Budget: ${esc(report.year)}</h2>`;
+	html += "<h3>Måned for måned</h3>" + tableHtml(["Måned", "Indkomst", "Faste", "Opsparing", "Til rådighed", "Brugt", "Tilbage"], monthRows);
+	html += '<p class="hint no-print">Stryg tabellen til siden for at se alle kolonner.</p>';
+	html += "<h3>Brugt pr. kategori</h3>" + tableHtml(["Kategori", "I alt"], categoryRows);
+	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	return html;
+}
+
+function reportHtml() {
+	let body = "";
+	if (reportScope.type === "month") {
+		body = monthReportHtml(monthReport(getMonth(reportScope.key), reportScope.key));
+	} else {
+		body = yearReportHtml(yearReport(data.months, reportScope.key));
+	}
+	return `
+		<section class="card no-print">
+			<div class="buttons">
+				<button class="primary" data-action="download-csv">Hent til Excel (.csv)</button>
+				<button class="secondary" data-action="print-report">Udskriv eller gem som PDF</button>
+				<button class="secondary" data-action="close-report">‹ Tilbage til Plan</button>
+			</div>
+		</section>
+		<section class="card report">${body}</section>`;
+}
+
+function openReport() {
+	const choice = document.getElementById("export-scope").value.split(":");
+	reportScope = { type: choice[0], key: choice[1] };
+	activeTab = "report";
+	render();
+	window.scrollTo(0, 0);
+}
+
+// The spreadsheet, as a file. A byte-order mark (﻿) first tells Excel the text is UTF-8,
+// so æ, ø and å come out right.
+function downloadReportCsv() {
+	let text = "";
+	let name = "";
+	if (reportScope.type === "month") {
+		text = monthCsv(monthReport(getMonth(reportScope.key), reportScope.key));
+		name = "budget-" + reportScope.key + ".csv";
+	} else {
+		text = yearCsv(yearReport(data.months, reportScope.key));
+		name = "budget-" + reportScope.key + ".csv";
+	}
+	downloadText(name, "﻿" + text, "text/csv;charset=utf-8");
+}
+
+// Hands the browser a file to save. Used by the spreadsheet and the backup.
+function downloadText(filename, text, mimeType) {
+	const link = document.createElement("a");
+	link.href = URL.createObjectURL(new Blob([text], { type: mimeType }));
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+
 // --- Reacting to the user -----------------------------------------------------
 //
 // One listener for the whole page ("event delegation"): instead of hooking up
@@ -669,6 +913,20 @@ document.addEventListener("click", (event) => {
 		case "export":
 			exportBackup();
 			break;
+		case "open-report":
+			openReport();
+			break;
+		case "close-report":
+			activeTab = "plan";
+			render();
+			window.scrollTo(0, 0);
+			break;
+		case "download-csv":
+			downloadReportCsv();
+			break;
+		case "print-report":
+			window.print();
+			break;
 		case "create-account":
 			createAccountFromForm(document.getElementById("account-form"));
 			break;
@@ -703,6 +961,8 @@ document.addEventListener("change", (event) => {
 		editRow(input);
 	} else if (input.id === "savings-input") {
 		editSavings(input);
+	} else if (input.id === "balance-input") {
+		editBalance(input);
 	} else if (input.id === "import-file") {
 		importBackup(input);
 	}
@@ -810,6 +1070,21 @@ function editSavings(input) {
 	refreshPlanSummary();
 }
 
+// The "money I have now" box on Fremtid.
+function editBalance(input) {
+	const ore = parseAmount(input.value);
+	if (ore === null) {
+		input.classList.add("bad");
+		return;
+	}
+	input.classList.remove("bad");
+	changeMonth((month) => {
+		month.startBalance = ore;
+	});
+	input.value = amountToInput(ore);
+	refreshFutureResults();
+}
+
 function addRow(section) {
 	if (getMonth(viewMonth)[section.key].length >= section.mostRows) {
 		window.alert("Der kan højst være " + section.mostRows + " rækker her.");
@@ -860,14 +1135,7 @@ function deleteRow(button) {
 // ---- Backup ----------------------------------------------------------------------
 
 function exportBackup() {
-	const text = JSON.stringify(data, null, 2);
-	const link = document.createElement("a");
-	link.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-	link.download = "budget-kopi-" + dateKeyOf(new Date()) + ".json";
-	document.body.appendChild(link);
-	link.click();
-	link.remove();
-	setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+	downloadText("budget-kopi-" + dateKeyOf(new Date()) + ".json", JSON.stringify(data, null, 2), "application/json");
 	setMessage("backup-message", "Kopien er gemt som en fil.", false);
 }
 

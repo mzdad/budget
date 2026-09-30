@@ -124,7 +124,12 @@ async function main() {
 	check("negative savings", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), savings: int(-1) }), "DENY");
 	check("savings as text", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), savings: str("5") }), "DENY");
 	check("savings over 10 million kr", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), savings: int(1000000001) }), "DENY");
-	check("income is not a list", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), income: str("x") }), "DENY");
+	check("money-I-have-now added (optional field)", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), startBalance: int(1500000) }), "ALLOW");
+	check("money-I-have-now of 0", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), startBalance: int(0) }), "ALLOW");
+	check("money-I-have-now negative", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: int(-1) }), "DENY");
+	check("money-I-have-now as text", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: str("5") }), "DENY");
+	check("money-I-have-now over 10 million kr", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: int(1000000001) }), "DENY");
+	check("income is not a list",await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), income: str("x") }), "DENY");
 	check("bad month name 2026-13", await write(alice, "budgets/alice/months/2026-13", goodFields()), "DENY");
 	check("bad month name abcd", await write(alice, "budgets/alice/months/abcd", goodFields()), "DENY");
 	check("bad month name with extra text", await write(alice, "budgets/alice/months/2026-09x", goodFields()), "DENY");

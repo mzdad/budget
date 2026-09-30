@@ -68,7 +68,10 @@ so no emails are ever sent.
 These rules are what keep your numbers private: only your own account can read or change
 them. Until they are published, the page can't read or save anything in the account.
 
-**When `firestore.rules` changes, do this step again.**
+**When `firestore.rules` changes, do this step again.** It changed once after the first version: the
+**Fremtid** screen's "Penge ved starten af ..." box needs the newer rules to save into an account.
+Until they are published, typing a number there says it could not be saved (everything else keeps
+working).
 
 ---
 
