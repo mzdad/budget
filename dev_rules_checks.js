@@ -138,6 +138,32 @@ async function main() {
 	check("pots: 500 entries (the most)", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), pots: list(Array.from({ length: 500 }, (_, i) => potEntry(i))) }), "ALLOW");
 	check("pots: 501 entries", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), pots: list(Array.from({ length: 501 }, (_, i) => potEntry(i))) }), "DENY");
 	check("pots: not a list", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), pots: str("x") }), "DENY");
+	// "Money now" (Lønkonto / Opsparing on Fremtid): { account: { amount, at }, savings: { amount, at } }
+	const map = (fields) => ({ mapValue: { fields } });
+	const typedNumber = (amount, at) => map({ amount: int(amount), at: int(at) });
+	const NOW = 1790000000000;   // a moment in milliseconds, around October 2026
+	const balancesOf = (fields) => ({ ...goodFields(), balances: map(fields) });
+	check("balances: both numbers (optional field)", await write(alice, "budgets/alice/months/2026-10", balancesOf({ account: typedNumber(1200000, NOW), savings: typedNumber(18000000, NOW) })), "ALLOW");
+	check("balances: only one of them", await write(alice, "budgets/alice/months/2026-10", balancesOf({ savings: typedNumber(18000000, NOW) })), "ALLOW");
+	check("balances: none at all (empty map)", await write(alice, "budgets/alice/months/2026-10", balancesOf({})), "ALLOW");
+	check("balances: an overdrawn account (negative)", await write(alice, "budgets/alice/months/2026-10", balancesOf({ account: typedNumber(-30000, NOW) })), "ALLOW");
+	check("balances: 0 kr", await write(alice, "budgets/alice/months/2026-10", balancesOf({ account: typedNumber(0, NOW) })), "ALLOW");
+	check("balances: exactly 10 million kr", await write(alice, "budgets/alice/months/2026-10", balancesOf({ account: typedNumber(1000000000, NOW) })), "ALLOW");
+	check("balances: over 10 million kr", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: typedNumber(1000000001, NOW) })), "DENY");
+	check("balances: below minus 10 million kr", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: typedNumber(-1000000001, NOW) })), "DENY");
+	check("balances: amount as text", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: map({ amount: str("5"), at: int(NOW) }) })), "DENY");
+	check("balances: a decimal amount", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: map({ amount: { doubleValue: 5.5 }, at: int(NOW) }) })), "DENY");
+	check("balances: no moment", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: map({ amount: int(5) }) })), "DENY");
+	check("balances: no amount", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: map({ at: int(NOW) }) })), "DENY");
+	check("balances: moment of 0", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: typedNumber(5, 0) })), "DENY");
+	check("balances: moment far in the future", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: typedNumber(5, 100000000000001) })), "DENY");
+	check("balances: an extra field inside a number", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: map({ amount: int(5), at: int(NOW), sneaky: str("x") }) })), "DENY");
+	check("balances: a third account name", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: typedNumber(5, NOW), pension: typedNumber(5, NOW) })), "DENY");
+	check("balances: a number that is not a map", await write(alice, "budgets/alice/months/2026-11", balancesOf({ account: int(5) })), "DENY");
+	check("balances: not a map", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), balances: str("x") }), "DENY");
+	check("balances: a list", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), balances: list([]) }), "DENY");
+	const startEntry = { mapValue: { fields: { id: str("p1"), date: str("2026-10-05"), person: str("Nathan"), amount: int(500000), note: str("Start"), at: int(NOW), start: { booleanValue: true } } } };
+	check("pots: an entry with a moment and the start mark", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), pots: list([startEntry]) }), "ALLOW");
 	check("income is not a list",await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), income: str("x") }), "DENY");
 	check("bad month name 2026-13", await write(alice, "budgets/alice/months/2026-13", goodFields()), "DENY");
 	check("bad month name abcd", await write(alice, "budgets/alice/months/abcd", goodFields()), "DENY");

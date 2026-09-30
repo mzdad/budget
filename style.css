@@ -534,6 +534,18 @@ label.button.secondary {
 	text-align: right;
 }
 
+/* The small line under a number box: when it was typed ("Opdateret 1. okt."). Empty = gone. */
+.balance-note {
+	margin: 2px 0 0;
+	text-align: right;
+	font-size: 0.8rem;
+	color: var(--muted);
+}
+
+.balance-note:empty {
+	display: none;
+}
+
 .icon {
 	width: 44px;
 	height: 44px;

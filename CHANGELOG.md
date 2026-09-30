@@ -3,6 +3,22 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.8.0 - 2026-10-01
+
+- **Penge nu: Lønkonto and Opsparing.** On Fremtid you type what is on your two accounts. Each
+  gets a small "Opdateret 1. okt." line, and Fremtid now starts from the total of the two. The
+  newest number you type always wins, so typing the real number from the bank is how you correct
+  it. (A number you typed on Fremtid before 1.8.0 is still used until you type the two new ones,
+  and it says so.)
+- **Opsparing follows the kids.** When a kid "brugte" money, Opsparing goes down by that; when a kid
+  "fik" money, it goes up. The kid's card says what Opsparing is now. Only things that happen
+  after you typed the number count (what came before is already in it), and the money you give a
+  kid when you add them (their start amount) never counts, because it was already in the pile.
+  Lønkonto never moves by itself. If a "fik" was only money moved inside the pile, type the real
+  Opsparing number again.
+- **Firebase rules changed again** (an optional `balances` field): publish the new rules for the two
+  numbers to save into an account. Nothing else is affected until then.
+
 ## 1.7.0 - 2026-09-30
 
 - **The categories card on Overblik can be folded.** Tap "Dine kategorier" to fold it. Folded, it

@@ -576,27 +576,92 @@ function expensesHtml(month) {
 // going for FORECAST_MONTHS months (the maths is forecast() in budget.js).
 
 function futureHtml(month) {
+	const now = moneyNow(data.months);
+	const hasKids = potBalances(data.months).length > 0;
 	return `
 		<section class="card">
-			<h2>Penge ved starten af ${esc(monthLabel(viewMonth).toLowerCase())}</h2>
-			<p class="hint">${potBalances(data.months).length > 0 ? "Hele bunken, også børnenes penge." : "Hvor mange penge har du, når måneden begynder?"}</p>
+			<h2>Penge nu</h2>
+			<p class="hint">${hasKids ? "Opsparing er hele bunken, også børnenes penge." : "Hvad står der på dine konti lige nu?"}</p>
 			<div class="single-row">
-				<label for="balance-input">Penge i alt</label>
-				<input id="balance-input" value="${amountToInput(month.startBalance)}" placeholder="0" inputmode="decimal" autocomplete="off">
+				<label for="account-balance">Lønkonto</label>
+				<input id="account-balance" data-balance="account" value="${balanceInputText(now.account, now.accountNow)}" placeholder="0" inputmode="decimal" autocomplete="off">
 			</div>
+			<p class="balance-note" id="account-note">${esc(accountNoteText(now))}</p>
+			<div class="single-row">
+				<label for="savings-balance">Opsparing</label>
+				<input id="savings-balance" data-balance="savings" value="${balanceInputText(now.savings, now.savingsNow)}" placeholder="0" inputmode="decimal" autocomplete="off">
+			</div>
+			<p class="balance-note" id="savings-note">${esc(savingsNoteText(now))}</p>
+			<div id="money-total">${moneyTotalHtml(month, now)}</div>
+			<details class="explain">
+				<summary>Hvad betyder det?</summary>
+				<p class="hint">Skriv tallene fra banken. Det nyeste, du skriver, gælder altid.${hasKids ? " Opsparing går ned, når et barn bruger penge, og op, når et barn får penge." : ""} Lønkonto ændrer sig ikke af sig selv.</p>
+			</details>
 		</section>
 		<div id="future-results">${futureResultsHtml(month)}</div>`;
 }
 
-// The results are redrawn on their own after the balance is changed (refreshFutureResults),
-// so the box you just typed in is left alone.
+// What goes in a number box: what was typed (0 shows as "0"), or an empty box if nothing was typed.
+function balanceInputText(typed, ore) {
+	if (!typed) {
+		return "";
+	}
+	return ore === 0 ? "0" : amountToInput(ore);
+}
+
+// "1. okt." (with the year when it is not this year)
+function momentText(moment) {
+	const date = new Date(moment);
+	const sameYear = date.getFullYear() === new Date().getFullYear();
+	const options = sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" };
+	return new Intl.DateTimeFormat("da-DK", options).format(date);
+}
+
+function accountNoteText(now) {
+	return now.account ? "Opdateret " + momentText(now.account.at) : "";
+}
+
+// "Opdateret 1. okt. · siden da: børnene −300 kr." - the last part only when a kid changed it.
+function savingsNoteText(now) {
+	if (!now.savings) {
+		return "";
+	}
+	let text = "Opdateret " + momentText(now.savings.at);
+	if (now.fromKids !== 0) {
+		text += " · siden da: børnene " + (now.fromKids < 0 ? "−" : "+") + formatKr(Math.abs(now.fromKids));
+	}
+	return text;
+}
+
+// The total under the two boxes, and what it is counted from. Before the two numbers are typed, a
+// number saved by an older version (the single "Penge i alt") is still used, and this says so.
+function moneyTotalHtml(month, now) {
+	if (now.any) {
+		return `
+			<div class="facts"><span>I alt: <b>${formatKr(now.total)}</b></span></div>
+			<p class="hint">Regnes fra starten af ${esc(monthLabel(viewMonth).toLowerCase())}.</p>`;
+	}
+	if (month.startBalance > 0) {
+		return `<p class="hint">Dit gamle tal: <b>${formatKr(month.startBalance)}</b> Skriv dine to konti her for at erstatte det.</p>`;
+	}
+	return "";
+}
+
+// The money Fremtid starts from: the two typed numbers, or else the older single number.
+function startTotalFor(month) {
+	const now = moneyNow(data.months);
+	return now.any ? now.total : month.startBalance;
+}
+
+// The results are redrawn on their own after a number is changed (refreshFutureResults and
+// refreshMoneyNow), so the boxes you are typing in are left alone.
 function futureResultsHtml(month) {
 	const s = summarize(month, viewMonth);
 	if (s.income === 0) {
 		return '<section class="card"><p>Skriv din indkomst under <b>Plan</b> først.</p></section>';
 	}
 
-	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months);
+	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months, startTotalFor(month));
 	const tone = f.endTotal < 0 ? "bad" : "good";
 
 	// When you have set up later months differently (a new job, say), "the same every month"
@@ -1043,8 +1108,8 @@ document.addEventListener("change", (event) => {
 		editRow(input);
 	} else if (input.id === "savings-input") {
 		editSavings(input);
-	} else if (input.id === "balance-input") {
-		editBalance(input);
+	} else if (input.dataset.balance) {
+		editMoneyNow(input);
 	} else if (input.id === "import-file") {
 		importBackup(input);
 	}
@@ -1130,16 +1195,21 @@ function saveOthersEntry(button, sign) {
 	const date = today.slice(0, 7) === viewMonth ? today : viewMonth + "-01";
 	const note = form.querySelector('[name="note"]').value.trim().slice(0, MAX_NOTE_LENGTH);
 	changeMonth((month) => {
-		month.pots.push({ id: newId(), date: date, person: person, amount: sign * ore, note: note });
+		// `at` is the moment, so the savings number on Fremtid knows this came after it was typed.
+		month.pots.push({ id: newId(), date: date, person: person, amount: sign * ore, note: note, at: Date.now() });
 	});
 
 	const now = potBalances(data.months).find((other) => other.person.toLowerCase() === person.toLowerCase());
 	const left = formatKr(now.balance);
+	// If you have typed your savings (Fremtid), it moves with the kids: say what it is now.
+	// (formatKr already ends in "kr." so no full stop is added after it.)
+	const money = moneyNow(data.months);
+	const savingsText = money.savings ? " Opsparingen er nu " + formatKr(money.savingsNow) : "";
 	potMessage = {
 		person: now.person,
-		text: sign < 0
+		text: (sign < 0
 			? person + " brugte " + formatKr(ore) + " Nu har " + person + " " + left + " tilbage."
-			: person + " fik " + formatKr(ore) + " Nu har " + person + " " + left,
+			: person + " fik " + formatKr(ore) + " Nu har " + person + " " + left) + savingsText,
 	};
 	render();
 }
@@ -1212,7 +1282,8 @@ function addPerson(form) {
 	const today = dateKeyOf(new Date());
 	const date = today.slice(0, 7) === viewMonth ? today : viewMonth + "-01";
 	changeMonth((month) => {
-		month.pots.push({ id: newId(), date: date, person: person, amount: ore, note: "Start" });
+		// "start": this money was already in the pile, so it never moves the savings number.
+		month.pots.push({ id: newId(), date: date, person: person, amount: ore, note: "Start", start: true });
 	});
 	render();
 	setMessage("person-message", person + " er tilføjet. Se under Overblik.", false);
@@ -1388,18 +1459,52 @@ function editSavings(input) {
 	refreshPlanSummary();
 }
 
-// The "money I have now" box on Fremtid.
-function editBalance(input) {
-	const ore = parseAmount(input.value);
+// The Lønkonto and Opsparing boxes on Fremtid. What you type is the real number from the bank:
+// it replaces the old one and is stamped with this moment, so whatever the kids did before now is
+// already in it (see moneyNow in budget.js). An empty box counts as 0 kr.
+function editMoneyNow(input) {
+	const ore = parseSignedAmount(input.value);
 	if (ore === null) {
 		input.classList.add("bad");
 		return;
 	}
 	input.classList.remove("bad");
 	changeMonth((month) => {
-		month.startBalance = ore;
-	});
-	input.value = amountToInput(ore);
+		month.balances = month.balances || {};
+		month.balances[input.dataset.balance] = { amount: ore, at: Date.now() };
+	}, monthToKeepBalancesIn());
+	input.value = ore === 0 ? "0" : amountToInput(ore);
+	refreshMoneyNow();
+}
+
+// The typed numbers are "now", not part of any one month, and the newest one wins wherever it is
+// saved. So they go into a month that is already saved (this one, else the latest): saving a month
+// that did not exist would give it its own copy of the plan, and then it would stop following the
+// plan of the month before it.
+function monthToKeepBalancesIn() {
+	const thisMonth = monthKeyOf(new Date());
+	if (data.months[thisMonth]) {
+		return thisMonth;
+	}
+	const saved = Object.keys(data.months).sort();
+	return saved.length > 0 ? saved[saved.length - 1] : thisMonth;
+}
+
+// After a number is typed: the small notes, the total and the results change; the boxes stay.
+function refreshMoneyNow() {
+	const now = moneyNow(data.months);
+	const account = document.getElementById("account-note");
+	const savings = document.getElementById("savings-note");
+	const total = document.getElementById("money-total");
+	if (account) {
+		account.textContent = accountNoteText(now);
+	}
+	if (savings) {
+		savings.textContent = savingsNoteText(now);
+	}
+	if (total) {
+		total.innerHTML = moneyTotalHtml(getMonth(viewMonth), now);
+	}
 	refreshFutureResults();
 }
 

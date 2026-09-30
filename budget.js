@@ -67,6 +67,18 @@ function parseAmount(text) {
 	return ore;
 }
 
+// Like parseAmount, but a leading minus is allowed ("-500"): an account can be overdrawn.
+// Returns 0 for an empty box and null when the text can't be understood.
+function parseSignedAmount(text) {
+	const t = String(text).trim();
+	if (t.startsWith("-") || t.startsWith("−")) {
+		const rest = t.slice(1).trim();
+		const ore = rest === "" ? null : parseAmount(rest);
+		return ore === null ? null : (ore === 0 ? 0 : -ore);
+	}
+	return parseAmount(t);
+}
+
 // Two number formats: no decimals for whole kroner, two decimals otherwise.
 const WHOLE_KR = new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 });
 const FULL_KR = new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK" });
@@ -184,16 +196,18 @@ function starterMonth() {
 		categories: starterRows(STARTER_CATEGORIES, "limit"),
 		spending: [],
 		startBalance: 0,
+		balances: {},
 		pots: [],
 	};
 }
 
-// A new month starts with last month's plan but no spending. The "money I have now" number
-// is NOT carried over: it was true on a particular day, and would be stale a month later.
+// A new month starts with last month's plan but no spending. The "money I have now" numbers
+// are NOT carried over: they were true on a particular day, and would be stale a month later.
 function copyPlanOf(month) {
 	const copy = JSON.parse(JSON.stringify(month));
 	copy.spending = [];
 	copy.startBalance = 0;
+	copy.balances = {};
 	copy.pots = [];   // like purchases, these belong to the month they happened in
 	return copy;
 }
@@ -256,10 +270,22 @@ function mergeDeviceMonth(accountMonth, deviceMonth) {
 	const potRoom = Math.max(0, MOST_POT_ENTRIES_PER_MONTH - (accountMonth.pots || []).length);
 	const takenPots = newPots.slice(0, potRoom);
 
+	// "Money now" numbers (Lønkonto, Opsparing): for each one the newer number wins.
+	const balances = { ...(accountMonth.balances || {}) };
+	let takenBalances = 0;
+	for (const key of BALANCE_KEYS) {
+		const own = deviceMonth.balances && deviceMonth.balances[key];
+		if (own && (!balances[key] || own.at > balances[key].at)) {
+			balances[key] = own;
+			takenBalances += 1;
+		}
+	}
+
 	const merged = JSON.parse(JSON.stringify(accountMonth));
 	merged.spending = accountMonth.spending.concat(taken);
 	merged.pots = (accountMonth.pots || []).concat(takenPots);
-	return { month: merged, added: taken.length + takenPots.length };
+	merged.balances = balances;
+	return { month: merged, added: taken.length + takenPots.length + takenBalances };
 }
 
 // Newest date first. Within one day, the one added last comes first.
@@ -489,8 +515,9 @@ function barLevel(spent, limit) {
 // How many months the "Fremtid" screen looks ahead.
 const FORECAST_MONTHS = 12;
 
-// A simple what-if over the next `howMany` months, starting with the money the month says you
-// have at its start (startBalance). It is arithmetic, not a prediction.
+// A simple what-if over the next `howMany` months, starting with `startTotal` (see moneyNow; if it
+// is left out, the old single number the month holds, startBalance). It is arithmetic, not a
+// prediction.
 //
 // Which plan does each month use? Its OWN, if you have set that month up (it is in `months`,
 // which holds every saved month). If not, the plan of the month before it carries on. So a
@@ -502,12 +529,13 @@ const FORECAST_MONTHS = 12;
 //   grows by income - fixed bills - limits (your savings, plus whatever you have not handed out).
 // - carefulAdded: only your planned savings grow and the rest is spent. Never more than
 //   added, which matters when the limits add up to more than you have.
-function forecast(month, key, howMany, months) {
+function forecast(month, key, howMany, months, startTotal) {
 	const savedMonths = months || {};
+	const start = startTotal === undefined ? month.startBalance : startTotal;
 
 	const rows = [];
-	let total = month.startBalance;
-	let carefulTotal = month.startBalance;
+	let total = start;
+	let carefulTotal = start;
 	let plan = month;
 	for (let i = 0; i < howMany; i++) {
 		const rowKey = shiftMonth(key, i);
@@ -532,7 +560,7 @@ function forecast(month, key, howMany, months) {
 
 	const first = rows[0];
 	return {
-		start: month.startBalance,
+		start: start,
 		perMonth: first.added,
 		carefulPerMonth: first.carefulAdded,
 		// True when the plans of the months differ, so "the same every month" would be wrong.
@@ -738,9 +766,13 @@ function yearCsv(report) {
 // --- Kids' money in your pile (børn) ------------------------------------------
 
 // You keep all your savings in one pile, and some of it is your kids'. The page tracks each
-// kid's share on its own: what they have, and each time they used some or were given some. An entry is { id, date, person, amount, note }; the amount is in øre and
-// SIGNED: negative when the person used money, positive when they got some (the first entry is
-// what they have when you add them). A person is simply a name that has entries.
+// kid's share on its own: what they have, and each time they used some or were given some.
+// An entry is { id, date, person, amount, note } and, when it has them, also:
+// - at: the moment it was written down (milliseconds), so moneyNow can tell what came after you
+//   typed the savings number;
+// - start: true on the first entry, "what they have when you add them" (money already in the pile).
+// The amount is in øre and SIGNED: negative when the kid used money, positive when they got some.
+// A kid is simply a name that has entries.
 // Entries live in the month they happened in, like purchases; the balance adds them all up.
 
 // Everyone with entries, each { person, balance, entries (newest first) }. The same name in
@@ -778,6 +810,76 @@ function potBalances(months) {
 // All the kids' balances added together: the part of your pile that is not yours.
 function othersTotal(months) {
 	return potBalances(months).reduce((sum, person) => sum + person.balance, 0);
+}
+
+
+// --- Money now: what is on your accounts (Fremtid) ---------------------------
+//
+// Two numbers you type from the bank: "account" (Lønkonto) and "savings" (Opsparing). Each is
+// { amount (øre, may be negative), at (the moment you typed it, in milliseconds) }. The newest
+// one wins, wherever it was saved, so typing the real number always replaces the old one.
+//
+// The savings number follows the kids: when a kid used or got money AFTER you typed it, the
+// savings go down or up by that. (Whatever happened before is already in the number you typed.)
+// The account number never moves by itself. Fremtid starts from the total of the two.
+
+const BALANCE_KEYS = ["account", "savings"];
+
+// The newest typed number for "account" or "savings" in any month, or null if there is none.
+function latestBalance(months, which) {
+	let newest = null;
+	for (const monthKey of Object.keys(months)) {
+		const balances = months[monthKey].balances;
+		const found = balances && balances[which];
+		if (found && (newest === null || found.at > newest.at)) {
+			newest = found;
+		}
+	}
+	return newest;
+}
+
+// What the kids used or got since the moment `at`, added up (negative = used). Skips the "start"
+// entries: those are money that was already in the pile.
+//
+// An entry counts when it was written down after `at` AND is dated that day or later; an entry
+// for an earlier day is money that had already left or arrived, so the number you typed has it.
+// Old entries have no moment, only a date: those count when the date is after the day you typed.
+function potChangeSince(months, at) {
+	const typedDay = dateKeyOf(new Date(at));
+	let change = 0;
+	for (const monthKey of Object.keys(months)) {
+		for (const entry of months[monthKey].pots || []) {
+			if (entry.start) {
+				continue;
+			}
+			const isAfter = typeof entry.at === "number"
+				? entry.at > at && entry.date >= typedDay
+				: entry.date > typedDay;
+			if (isAfter) {
+				change += entry.amount;
+			}
+		}
+	}
+	return change;
+}
+
+// Everything Fremtid needs: both typed numbers (or null), what the kids changed in the savings
+// since, each account as it is now, and the total. `any` is false until one number is typed.
+function moneyNow(months) {
+	const account = latestBalance(months, "account");
+	const savings = latestBalance(months, "savings");
+	const fromKids = savings ? potChangeSince(months, savings.at) : 0;
+	const accountNow = account ? account.amount : 0;
+	const savingsNow = savings ? savings.amount + fromKids : 0;
+	return {
+		account: account,
+		savings: savings,
+		fromKids: fromKids,
+		accountNow: accountNow,
+		savingsNow: savingsNow,
+		total: accountNow + savingsNow,
+		any: Boolean(account || savings),
+	};
 }
 
 
@@ -907,21 +1009,62 @@ function cleanSpending(list) {
 		}));
 }
 
+// A moment in milliseconds: a whole number from 1 up to year 5000 or so. The limit is the same in
+// firestore.rules. Anything else is not a moment.
+const MOST_MOMENT = 100000000000000;
+
+function cleanMoment(value) {
+	const n = Math.round(Number(value));
+	return Number.isFinite(n) && n > 0 && n <= MOST_MOMENT ? n : null;
+}
+
 function cleanPots(list) {
 	if (!Array.isArray(list)) {
 		return [];
 	}
 	return list
 		.filter((entry) => entry && typeof entry === "object" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
-		.map((entry) => ({
-			id: cleanId(entry.id),
-			date: entry.date,
-			person: cleanText(entry.person, MAX_NAME_LENGTH).trim(),
-			amount: cleanSignedAmount(entry.amount),
-			note: cleanText(entry.note, MAX_NOTE_LENGTH),
-		}))
+		.map((entry) => {
+			const clean = {
+				id: cleanId(entry.id),
+				date: entry.date,
+				person: cleanText(entry.person, MAX_NAME_LENGTH).trim(),
+				amount: cleanSignedAmount(entry.amount),
+				note: cleanText(entry.note, MAX_NOTE_LENGTH),
+			};
+			// Optional, left out when missing: the moment it was written down, and the "start" mark.
+			const at = cleanMoment(entry.at);
+			if (at !== null) {
+				clean.at = at;
+			}
+			if (entry.start === true) {
+				clean.start = true;
+			}
+			return clean;
+		})
 		.filter((entry) => entry.person !== "")
 		.slice(0, MOST_POT_ENTRIES_PER_MONTH);
+}
+
+// The typed "money now" numbers of one month: only "account" and "savings", each { amount, at }.
+// A number without a real moment is dropped, because without it nobody can tell what came after.
+function cleanBalances(raw) {
+	const clean = {};
+	if (!raw || typeof raw !== "object") {
+		return clean;
+	}
+	for (const key of BALANCE_KEYS) {
+		const found = raw[key];
+		if (!found || typeof found !== "object") {
+			continue;
+		}
+		const amount = Math.round(Number(found.amount));
+		const at = cleanMoment(found.at);
+		if (Number.isFinite(amount) && at !== null) {
+			clean[key] = { amount: Math.max(-MAX_AMOUNT, Math.min(amount, MAX_AMOUNT)), at: at };
+		}
+	}
+	return clean;
 }
 
 function cleanMonth(raw) {
@@ -933,6 +1076,7 @@ function cleanMonth(raw) {
 		categories: cleanRows(source.categories, "limit", MOST_CATEGORIES),
 		spending: cleanSpending(source.spending),
 		startBalance: cleanAmount(source.startBalance),
+		balances: cleanBalances(source.balances),
 		pots: cleanPots(source.pots),
 	};
 }
@@ -961,12 +1105,13 @@ function sameData(a, b) {
 // functions above.
 if (typeof module !== "undefined") {
 	module.exports = {
-		parseAmount, formatKr, amountToInput, sumOf,
+		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,
+		latestBalance, potChangeSince, moneyNow, cleanBalances,
 		noteHistory, categoryIdForNote,
 		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
 		FORECAST_MONTHS, forecast,

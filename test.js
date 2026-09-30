@@ -96,6 +96,7 @@ const month = {
 		{ id: "4", date: "2026-09-03", categoryId: "gone", amount: 5000, note: "" },
 	],
 	startBalance: 1000000,
+	balances: {},
 	pots: [],
 };
 const s = budget.summarize(month);
@@ -436,6 +437,101 @@ const mergedPots = budget.mergeDeviceMonth(accountWithPots, deviceWithPots);
 check("merge: a pot entry only on the device is added, one already there is not", mergedPots.month.pots.map((e) => e.id), ["p1", "p9"]);
 check("merge: pot entries count as added", mergedPots.added, 4 + 1);
 check("same data: a pot entry counts", budget.sameData({ months: { "2026-09": accountWithPots } }, { months: { "2026-09": { ...accountWithPots, pots: [] } } }), false);
+
+// --- Money now: Lønkonto and Opsparing ---
+check("signed amount: plain number", budget.parseSignedAmount("1.250,50"), 125050);
+check("signed amount: minus", budget.parseSignedAmount("-500"), -50000);
+check("signed amount: minus with øre and a space", budget.parseSignedAmount(" - 49,95 "), -4995);
+check("signed amount: the real minus sign", budget.parseSignedAmount("−200"), -20000);
+check("signed amount: empty is 0", budget.parseSignedAmount(""), 0);
+check("signed amount: minus zero is plain 0", Object.is(budget.parseSignedAmount("-0"), 0), true);
+check("signed amount: a lone minus is unreadable", budget.parseSignedAmount("-"), null);
+check("signed amount: letters are unreadable", budget.parseSignedAmount("-abc"), null);
+check("signed amount: two minuses are unreadable", budget.parseSignedAmount("--5"), null);
+
+const at = (day, hour) => new Date(2026, 9, day, hour, 0, 0).getTime();   // October 2026, local time
+const nothing = { "2026-10": { balances: {}, pots: [] } };
+check("money now: nothing typed means nothing", budget.moneyNow(nothing).any, false);
+check("money now: nothing typed, total 0", budget.moneyNow(nothing).total, 0);
+check("money now: a month from before it existed is fine", budget.moneyNow({ "2026-09": {} }).total, 0);
+
+const typed = {
+	"2026-10": {
+		balances: { account: { amount: 1200000, at: at(1, 10) }, savings: { amount: 18000000, at: at(1, 10) } },
+		pots: [],
+	},
+};
+const both = budget.moneyNow(typed);
+check("money now: account and savings added up", both.total, 1200000 + 18000000);
+check("money now: each on its own", [both.accountNow, both.savingsNow], [1200000, 18000000]);
+check("money now: only one typed still counts", budget.moneyNow({ "2026-10": { balances: { savings: { amount: 500, at: at(1, 10) } }, pots: [] } }).total, 500);
+check("money now: an account can be overdrawn", budget.moneyNow({ "2026-10": { balances: { account: { amount: -30000, at: at(1, 10) } }, pots: [] } }).total, -30000);
+
+// The newest number wins, whichever month it is saved in.
+const twoTimes = {
+	"2026-09": { balances: { savings: { amount: 100, at: at(1, 9) } }, pots: [] },
+	"2026-10": { balances: { savings: { amount: 200, at: at(1, 10) } }, pots: [] },
+};
+check("money now: the newest typed number wins", budget.latestBalance(twoTimes, "savings").amount, 200);
+check("money now: a number that was never typed is null", budget.latestBalance(twoTimes, "account"), null);
+
+// The kids move the savings, but only what happens AFTER the number was typed.
+const withKids = (pots) => ({ "2026-10": { balances: typed["2026-10"].balances, pots: pots } });
+const used = { id: "u", date: "2026-10-02", person: "Nathan", amount: -30000, note: "", at: at(2, 12) };
+const got = { id: "g", date: "2026-10-03", person: "Nathan", amount: 15000, note: "", at: at(3, 12) };
+check("kids: Nathan used money -> the savings go down", budget.moneyNow(withKids([used])).savingsNow, 18000000 - 30000);
+check("kids: Nathan got money -> the savings go up", budget.moneyNow(withKids([got])).savingsNow, 18000000 + 15000);
+check("kids: both together", budget.moneyNow(withKids([used, got])).savingsNow, 18000000 - 30000 + 15000);
+check("kids: the account does not move", budget.moneyNow(withKids([used, got])).accountNow, 1200000);
+check("kids: what they changed is reported", budget.moneyNow(withKids([used, got])).fromKids, -15000);
+check("kids: the total follows", budget.moneyNow(withKids([used])).total, 1200000 + 18000000 - 30000);
+check("kids: the start entry is money already in the pile, it never counts", budget.moneyNow(withKids([{ id: "s", date: "2026-10-05", person: "Nathan", amount: 500000, note: "Start", at: at(5, 9), start: true }])).savingsNow, 18000000);
+check("kids: the same day, written down after typing, counts", budget.moneyNow(withKids([{ id: "x", date: "2026-10-01", person: "N", amount: -1000, note: "", at: at(1, 11) }])).savingsNow, 18000000 - 1000);
+check("kids: the same day, but written down BEFORE typing, is already in the number", budget.moneyNow(withKids([{ id: "x", date: "2026-10-01", person: "N", amount: -1000, note: "", at: at(1, 9) }])).savingsNow, 18000000);
+check("kids: written down later but dated an earlier day, already in the number", budget.moneyNow(withKids([{ id: "x", date: "2026-09-28", person: "N", amount: -1000, note: "", at: at(2, 9) }])).savingsNow, 18000000);
+check("kids: an old entry (no moment) on a later day counts", budget.moneyNow(withKids([{ id: "x", date: "2026-10-02", person: "N", amount: -1000, note: "" }])).savingsNow, 18000000 - 1000);
+check("kids: an old entry on the same day does not", budget.moneyNow(withKids([{ id: "x", date: "2026-10-01", person: "N", amount: -1000, note: "" }])).savingsNow, 18000000);
+check("kids: entries in another month count too", budget.moneyNow({ ...withKids([]), "2026-11": { pots: [{ id: "x", date: "2026-11-02", person: "N", amount: -2000, note: "", at: at(40, 9) }] } }).savingsNow, 18000000 - 2000);
+check("kids: typing the real number again replaces the calculated one", budget.moneyNow({
+	"2026-10": { balances: { savings: { amount: 17900000, at: at(4, 8) } }, pots: [used, got] },
+}).savingsNow, 17900000);
+check("kids: no savings number typed means nothing to move", budget.moneyNow({ "2026-10": { balances: { account: { amount: 5, at: at(1, 10) } }, pots: [used] } }).total, 5);
+check("kids: deleting the entry puts it back", budget.moneyNow(withKids([used, got])).savingsNow - budget.moneyNow(withKids([got])).savingsNow, -30000);
+
+// Fremtid starts from the total.
+const plainPlan = { income: [{ id: "i", name: "Løn", amount: 2000000 }], fixed: [], savings: 0, categories: [], spending: [], startBalance: 7777 };
+check("forecast: starts from the given total", budget.forecast(plainPlan, "2026-10", 1, {}, 123456).start, 123456);
+check("forecast: the month's own balance is used when no total is given", budget.forecast(plainPlan, "2026-10", 1, {}).start, 7777);
+check("forecast: a given total of 0 is respected", budget.forecast(plainPlan, "2026-10", 1, {}, 0).endTotal, 2000000);
+check("forecast: given total is the starting line of the sum", budget.forecast(plainPlan, "2026-10", 2, {}, 500).endTotal, 500 + 2 * 2000000);
+
+// Cleaning and keeping the numbers.
+check("clean balances: good ones come back the same", budget.cleanBalances(typed["2026-10"].balances), typed["2026-10"].balances);
+check("clean balances: junk gives nothing", budget.cleanBalances("x"), {});
+check("clean balances: a missing moment drops the number", budget.cleanBalances({ account: { amount: 5 } }), {});
+check("clean balances: text as amount drops it", budget.cleanBalances({ account: { amount: "abc", at: 5 } }), {});
+check("clean balances: a moment far in the future drops it", budget.cleanBalances({ account: { amount: 5, at: 1e15 } }), {});
+check("clean balances: negative is kept", budget.cleanBalances({ account: { amount: -5, at: 5 } }), { account: { amount: -5, at: 5 } });
+check("clean balances: a huge number is capped", budget.cleanBalances({ account: { amount: 1e15, at: 5 } }).account.amount, 1000000000);
+check("clean balances: other names are left out", budget.cleanBalances({ hacker: { amount: 5, at: 5 } }), {});
+check("clean month: balances survive", budget.cleanMonth({ balances: typed["2026-10"].balances }).balances, typed["2026-10"].balances);
+check("clean month: no balances gives an empty object", budget.cleanMonth({}).balances, {});
+check("a new month does not copy the numbers", budget.copyPlanOf({ ...month, balances: typed["2026-10"].balances }).balances, {});
+check("the starter month has none", budget.starterMonth().balances, {});
+check("clean pots: the moment and the start mark are kept", budget.cleanMonth({ pots: [{ id: "a", date: "2026-10-01", person: "N", amount: 5, note: "", at: at(1, 9), start: true }] }).pots[0], { id: "a", date: "2026-10-01", person: "N", amount: 5, note: "", at: at(1, 9), start: true });
+check("clean pots: a bad moment is left out", "at" in budget.cleanMonth({ pots: [{ id: "a", date: "2026-10-01", person: "N", amount: 5, note: "", at: "nope" }] }).pots[0], false);
+check("clean pots: start has to be exactly true", "start" in budget.cleanMonth({ pots: [{ id: "a", date: "2026-10-01", person: "N", amount: 5, note: "", start: "yes" }] }).pots[0], false);
+check("same data: a balance counts", budget.sameData({ months: { "2026-10": month } }, { months: { "2026-10": { ...month, balances: typed["2026-10"].balances } } }), false);
+
+// Signing in on a device with its own numbers: the newer balance wins, per number.
+const accountWithMoney = { ...accountSide, balances: { account: { amount: 1, at: at(1, 10) }, savings: { amount: 2, at: at(5, 10) } } };
+const deviceWithMoney = { ...deviceSide, balances: { account: { amount: 3, at: at(2, 10) }, savings: { amount: 4, at: at(4, 10) } } };
+const mergedMoney = budget.mergeDeviceMonth(accountWithMoney, deviceWithMoney);
+check("merge: the newer account number wins", mergedMoney.month.balances.account.amount, 3);
+check("merge: the older device number loses", mergedMoney.month.balances.savings.amount, 2);
+check("merge: a number taken from the device counts as added", mergedMoney.added, 4 + 1);
+check("merge: a device number the account lacks is added", budget.mergeDeviceMonth(accountSide, deviceWithMoney).month.balances.account.amount, 3);
+check("merge: no numbers anywhere is fine", budget.mergeDeviceMonth(accountSide, deviceSide).month.balances, {});
 
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
