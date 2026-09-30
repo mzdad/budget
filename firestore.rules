@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// Who may read and change what in the budget's online storage (Firestore).
+// These rules run on Firebase's side, so they hold whatever a page or app sends.
+//
+// Each account's months live in budgets/<username>/months/<2026-09>, and only that account may
+// touch them. They are filed under the username rather than Firebase's internal account id, so if a
+// forgotten password means deleting and re-creating an account, the numbers are still there.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /budgets/{username}/months/{month} {
+      allow read, delete: if isOwner(username);
+      allow create, update: if isOwner(username)
+        && isMonthName(month)
+        && isValidMonth(request.resource.data);
+    }
+
+    // Everything else is closed: no other path can be read or written by anyone.
+
+    // The username of whoever is signed in: the part of their made-up email before the @.
+    function signedInName() {
+      return request.auth.token.email.split('@')[0];
+    }
+
+    // Signed in with an account made by this page: its made-up email is exactly
+    // <username>@budget.example.com (see USERNAME_EMAIL_DOMAIN in account.js).
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email == signedInName() + '@budget.example.com';
+    }
+
+    function isOwner(username) {
+      return signedIn() && signedInName() == username;
+    }
+
+    // "2026-09": four digits, a dash, and a month from 01 to 12.
+    function isMonthName(month) {
+      return month.matches('[0-9]{4}-(0[1-9]|1[0-2])');
+    }
+
+    // Only the fields the page writes, and sensible amounts of rows. The row limits are the same
+    // numbers as MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES and MOST_SPENDING_PER_MONTH
+    // in budget.js. Savings is in øre (1 kr = 100 øre), at most 10 million kr.
+    function isValidMonth(data) {
+      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
+        && data.keys().hasAll(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
+        && data.income is list && data.income.size() <= 50
+        && data.fixed is list && data.fixed.size() <= 100
+        && data.savings is int && data.savings >= 0 && data.savings <= 1000000000
+        && data.categories is list && data.categories.size() <= 50
+        && data.spending is list && data.spending.size() <= 2000
+        && data.updatedAt == request.time;
+    }
+  }
+}

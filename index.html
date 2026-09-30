@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="da">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<meta name="color-scheme" content="light dark">
+	<meta name="theme-color" content="#1f7a5a">
+	<title>Månedsbudget</title>
+
+	<!-- Lets an iPhone or Android phone put the page on the home screen like an app. -->
+	<link rel="manifest" href="manifest.webmanifest">
+	<link rel="apple-touch-icon" href="icon-180.png">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-title" content="Budget">
+
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+	<!-- The month switcher stays at the top while you scroll. -->
+	<header class="top">
+		<button class="step" data-action="previous-month" aria-label="Forrige måned">‹</button>
+		<div class="month">
+			<span id="month-label"></span>
+			<button id="this-month" class="link" data-action="this-month" hidden>Gå til denne måned</button>
+		</div>
+		<button class="step" data-action="next-month" aria-label="Næste måned">›</button>
+	</header>
+
+	<!-- app.js fills this in when something can't be saved, and hides it again. -->
+	<p id="save-warning" class="warning" hidden></p>
+
+	<!-- "Gemt på kontoen" - only shown when signed in. -->
+	<p id="sync-status" class="sync-status" role="status" hidden></p>
+
+	<!-- app.js draws the chosen screen in here. -->
+	<main id="view"></main>
+
+	<nav class="tabs" aria-label="Skærme">
+		<button data-tab="overview">Overblik</button>
+		<button data-tab="expenses">Udgifter</button>
+		<button data-tab="plan">Plan</button>
+	</nav>
+
+	<script src="budget.js"></script>
+	<script src="firebase-config.js"></script>
+	<script src="password.js"></script>
+	<script src="account.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,501 @@
+/* style.css - how the budget page looks. Made for a phone first. */
+
+/* Colours live here, once. Change a colour here and it changes everywhere. */
+:root {
+	--bg: #f4f6f4;
+	--card: #ffffff;
+	--text: #1c2421;
+	--muted: #5d6b65;
+	--line: #dde3df;
+	--accent: #1f7a5a;
+	--accent-text: #ffffff;
+	--warn: #b7791f;
+	--bad: #c0392b;
+	--bar-track: #e4e9e6;
+	--field: #ffffff;
+}
+
+/* Dark mode follows the phone's own setting. */
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #111614;
+		--card: #1b2320;
+		--text: #e8efeb;
+		--muted: #9bada5;
+		--line: #2c3833;
+		--accent: #3fb98a;
+		--accent-text: #0d1a14;
+		--warn: #e0a94a;
+		--bad: #ef7b6d;
+		--bar-track: #2c3833;
+		--field: #141b18;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+/* Without this, the "hidden" attribute loses against our own display rules. */
+[hidden] {
+	display: none !important;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+	/* Room at the bottom so the tab bar never covers the last card. */
+	padding-bottom: calc(76px + env(safe-area-inset-bottom));
+}
+
+h2 {
+	font-size: 1.05rem;
+	margin: 0 0 4px;
+}
+
+h3 {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--muted);
+	margin: 18px 0 6px;
+}
+
+/* Only the first letter: "onsdag 30. september" becomes "Onsdag 30. september". */
+h3::first-letter {
+	text-transform: uppercase;
+}
+
+.card h3:first-child {
+	margin-top: 0;
+}
+
+.single-row label {
+	margin: 0;
+}
+
+ol {
+	margin: 6px 0 0;
+	padding-left: 22px;
+}
+
+li {
+	margin-top: 4px;
+}
+
+p {
+	margin: 0;
+}
+
+/* ---- Top bar with the month switcher ---- */
+
+.top {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+	background: var(--card);
+	border-bottom: 1px solid var(--line);
+}
+
+.month {
+	flex: 1;
+	text-align: center;
+	font-size: 1.15rem;
+	font-weight: 600;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.step {
+	width: 48px;
+	height: 48px;
+	border: none;
+	border-radius: 12px;
+	background: transparent;
+	color: var(--accent);
+	font-size: 2rem;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.step:active {
+	background: var(--bar-track);
+}
+
+.link {
+	border: none;
+	background: none;
+	color: var(--accent);
+	font: inherit;
+	font-size: 0.85rem;
+	font-weight: 400;
+	padding: 2px 8px;
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+/* ---- Page body ---- */
+
+main {
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 12px 16px;
+}
+
+.card {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 16px;
+	margin-bottom: 12px;
+}
+
+.warning {
+	max-width: 520px;
+	margin: 12px auto 0;
+	padding: 10px 14px;
+	border-radius: 10px;
+	background: var(--warn);
+	color: #fff;
+}
+
+.hint {
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+.sync-status {
+	margin: 0;
+	padding: 4px 16px;
+	text-align: center;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+.label {
+	color: var(--muted);
+	font-size: 0.9rem;
+}
+
+/* ---- The big "left to spend" number ---- */
+
+.big-number {
+	font-size: 2.4rem;
+	font-weight: 700;
+	line-height: 1.15;
+	margin: 2px 0 6px;
+	font-variant-numeric: tabular-nums;
+}
+
+.big-number.good {
+	color: var(--accent);
+}
+
+.big-number.bad {
+	color: var(--bad);
+}
+
+.facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 20px;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+	font-size: 0.95rem;
+}
+
+.facts b {
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---- Forms and buttons ---- */
+
+label {
+	display: block;
+	margin-top: 10px;
+	font-size: 0.9rem;
+	color: var(--muted);
+}
+
+/* 16px text in fields stops iPhones from zooming in when you tap one. */
+input,
+select {
+	width: 100%;
+	min-height: 44px;
+	margin-top: 4px;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--field);
+	color: var(--text);
+	font: inherit;
+}
+
+input:focus,
+select:focus,
+button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+input.bad {
+	border-color: var(--bad);
+}
+
+button.primary,
+label.button {
+	display: block;
+	width: 100%;
+	min-height: 48px;
+	margin-top: 14px;
+	border: none;
+	border-radius: 12px;
+	background: var(--accent);
+	color: var(--accent-text);
+	font: inherit;
+	font-weight: 600;
+	text-align: center;
+	line-height: 48px;
+	cursor: pointer;
+}
+
+button.secondary,
+label.button.secondary {
+	display: block;
+	width: 100%;
+	min-height: 44px;
+	margin-top: 10px;
+	border: 1px solid var(--accent);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--accent);
+	font: inherit;
+	font-weight: 600;
+	text-align: center;
+	line-height: 42px;
+	cursor: pointer;
+}
+
+label.button {
+	color: var(--accent-text);
+}
+
+label.button.secondary {
+	color: var(--accent);
+	margin-top: 10px;
+}
+
+.message {
+	min-height: 1.4em;
+	margin-top: 8px;
+	font-size: 0.9rem;
+	color: var(--accent);
+}
+
+.message.bad {
+	color: var(--bad);
+}
+
+/* ---- Category bars ---- */
+
+.category {
+	margin-top: 14px;
+}
+
+.category-top {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.category-top .amounts {
+	color: var(--muted);
+	font-size: 0.9rem;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.bar {
+	height: 10px;
+	margin-top: 6px;
+	border-radius: 5px;
+	background: var(--bar-track);
+	overflow: hidden;
+}
+
+.bar .fill {
+	height: 100%;
+	border-radius: 5px;
+	background: var(--accent);
+}
+
+.bar .fill.close {
+	background: var(--warn);
+}
+
+.bar .fill.over {
+	background: var(--bad);
+}
+
+.bar .fill.nolimit {
+	background: var(--muted);
+}
+
+.category .note {
+	margin-top: 3px;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+.category .note.over {
+	color: var(--bad);
+	font-weight: 600;
+}
+
+/* ---- Spending list ---- */
+
+.list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.list li {
+	margin-top: 0;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--line);
+}
+
+.list li:last-child {
+	border-bottom: none;
+}
+
+.list .what {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.list .what small {
+	display: block;
+	color: var(--muted);
+}
+
+.list .money {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* ---- Plan rows ---- */
+
+.row {
+	display: grid;
+	grid-template-columns: 1fr 112px 44px;
+	gap: 8px;
+	align-items: center;
+	margin-top: 8px;
+}
+
+.row input {
+	margin-top: 0;
+}
+
+.row input[data-field="amount"] {
+	text-align: right;
+}
+
+.single-row {
+	display: grid;
+	grid-template-columns: 1fr 112px;
+	gap: 8px;
+	align-items: center;
+	margin-top: 8px;
+}
+
+.single-row input {
+	margin-top: 0;
+	text-align: right;
+}
+
+.icon {
+	width: 44px;
+	height: 44px;
+	border: none;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 1.2rem;
+	cursor: pointer;
+}
+
+.icon:active {
+	background: var(--bar-track);
+}
+
+.sum-lines {
+	margin-top: 8px;
+}
+
+.sum-line {
+	display: flex;
+	justify-content: space-between;
+	padding: 3px 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.sum-line.total {
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+	font-weight: 700;
+}
+
+.sum-line.bad {
+	color: var(--bad);
+}
+
+.sum-line.good {
+	color: var(--accent);
+}
+
+/* ---- Tab bar at the bottom ---- */
+
+.tabs {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	background: var(--card);
+	border-top: 1px solid var(--line);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabs button {
+	flex: 1;
+	min-height: 60px;
+	border: none;
+	background: transparent;
+	color: var(--muted);
+	font: inherit;
+	font-size: 0.95rem;
+	cursor: pointer;
+}
+
+.tabs button.active {
+	color: var(--accent);
+	font-weight: 700;
+	box-shadow: inset 0 3px 0 var(--accent);
+}
