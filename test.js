@@ -244,6 +244,57 @@ check("forecast from October ignores September", budget.forecast(newJob, "2026-1
 check("the month on screen wins over its saved copy", budget.forecast(newJob, "2026-09", 1, { "2026-09": benefits }).rows[0].added, 2100000);
 check("forecast without saved months still repeats the plan", budget.forecast(benefits, "2026-09", 3).rows.map((row) => row.added), [600000, 600000, 600000]);
 
+// --- Rows with a from / to date ---
+const days = (row, key) => budget.activeDaysIn(row, key);
+check("dates: no dates = every day of the month", days({}, "2026-10"), 31);
+check("dates: from the 12th counts 20 of October's 31 days", days({ from: "2026-10-12" }, "2026-10"), 20);
+check("dates: from the 12th of October counts nothing in September", days({ from: "2026-10-12" }, "2026-09"), 0);
+check("dates: from the 12th of October counts all of November", days({ from: "2026-10-12" }, "2026-11"), 30);
+check("dates: to the 11th counts 11 days of October", days({ to: "2026-10-11" }, "2026-10"), 11);
+check("dates: to the 11th counts all of September", days({ to: "2026-10-11" }, "2026-09"), 30);
+check("dates: to the 11th of October counts nothing in November", days({ to: "2026-10-11" }, "2026-11"), 0);
+check("dates: from and to inside one month", days({ from: "2026-10-05", to: "2026-10-10" }, "2026-10"), 6);
+check("dates: from and to on the same day", days({ from: "2026-10-05", to: "2026-10-05" }, "2026-10"), 1);
+check("dates: from after to counts nothing", days({ from: "2026-10-20", to: "2026-10-10" }, "2026-10"), 0);
+check("dates: the first and last day both count", days({ from: "2026-10-01", to: "2026-10-31" }, "2026-10"), 31);
+check("dates: a leap February", days({ from: "2028-02-10" }, "2028-02"), 20);
+check("dates: a range over several months, the middle one", days({ from: "2026-09-15", to: "2026-11-15" }, "2026-10"), 31);
+check("dates: a range over several months, the first one", days({ from: "2026-09-15", to: "2026-11-15" }, "2026-09"), 16);
+
+const dagpenge = { id: "d", name: "Dagpenge", amount: 1500000, to: "2026-10-11" };
+const lon = { id: "l", name: "Løn", amount: 3000000, from: "2026-10-12" };
+check("pro rata: dagpenge in October is 11/31", budget.amountIn(dagpenge, "2026-10"), 532258);
+check("pro rata: løn in October is 20/31", budget.amountIn(lon, "2026-10"), 1935484);
+check("pro rata: dagpenge in September is the whole amount", budget.amountIn(dagpenge, "2026-09"), 1500000);
+check("pro rata: løn in November is the whole amount", budget.amountIn(lon, "2026-11"), 3000000);
+check("pro rata: dagpenge in November is nothing", budget.amountIn(dagpenge, "2026-11"), 0);
+check("pro rata: without a month the whole amount counts", budget.amountIn(dagpenge), 1500000);
+check("pro rata: a row without dates always counts in full", budget.amountIn({ amount: 1234 }, "2026-10"), 1234);
+
+// One plan for the whole change of job: dagpenge + løn, fixed bills 5.000, limits 4.000.
+const oneJobPlan = { income: [dagpenge, lon], fixed: [{ id: "f", name: "Husleje", amount: 500000 }], savings: 0, categories: [{ id: "c", name: "Mad", limit: 400000 }], spending: [], startBalance: 0 };
+check("one plan: September income is dagpenge only", budget.summarize(oneJobPlan, "2026-09").income, 1500000);
+check("one plan: October income is the mix", budget.summarize(oneJobPlan, "2026-10").income, 532258 + 1935484);
+check("one plan: November income is løn only", budget.summarize(oneJobPlan, "2026-11").income, 3000000);
+check("one plan: no month given = everything counts", budget.summarize(oneJobPlan).income, 4500000);
+const oneJobForecast = budget.forecast(oneJobPlan, "2026-09", 4, { "2026-09": oneJobPlan });
+check("one plan: the forecast follows the change by itself", oneJobForecast.rows.map((row) => row.added), [600000, 2467742 - 900000, 2100000, 2100000]);
+check("one plan: and the running total adds up", oneJobForecast.endTotal, 600000 + 1567742 + 2100000 + 2100000);
+check("window text: from", budget.windowText(lon), "fra 12.10.2026");
+check("window text: to", budget.windowText(dagpenge), "til 11.10.2026");
+check("window text: both", budget.windowText({ from: "2026-10-05", to: "2026-11-01" }), "fra 05.10.2026 til 01.11.2026");
+check("window text: none", budget.windowText({}), "");
+const dated = budget.monthReport(oneJobPlan, "2026-10");
+check("report: income rows say when they apply", dated.income.map((row) => row.name), ["Dagpenge (til 11.10.2026)", "Løn (fra 12.10.2026)"]);
+check("report: income rows show what counts that month", dated.income.map((row) => row.amount), [532258, 1935484]);
+check("report: the rows add up to the total", dated.income.reduce((sum, row) => sum + row.amount, 0), dated.summary.income);
+const cleanedDates = budget.cleanMonth({ income: [{ id: "a", name: "x", amount: 1, from: "2026-10-12", to: "garbage" }], fixed: [{ id: "b", name: "y", amount: 1, to: "2026-10-11" }], categories: [{ id: "c", name: "z", limit: 1, from: "2026-10-12" }] });
+check("clean: a good date is kept", cleanedDates.income[0].from, "2026-10-12");
+check("clean: a bad date is dropped", "to" in cleanedDates.income[0], false);
+check("clean: fixed bills keep dates too", cleanedDates.fixed[0].to, "2026-10-11");
+check("clean: categories never have dates", "from" in cleanedDates.categories[0], false);
+check("same data: a changed date counts", budget.sameData({ months: { "2026-10": oneJobPlan } }, { months: { "2026-10": { ...oneJobPlan, income: [{ ...dagpenge, to: "2026-10-12" }, lon] } } }), false);
+
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
 check("csv amount: zero", budget.csvAmount(0), "0,00");

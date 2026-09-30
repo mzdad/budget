@@ -26,6 +26,7 @@ const INCOME_SECTION = {
 	amountField: "amount",
 	addLabel: "+ Tilføj indkomst",
 	mostRows: MOST_INCOME_ROWS,
+	hasDates: true,
 };
 const FIXED_SECTION = {
 	key: "fixed",
@@ -34,6 +35,7 @@ const FIXED_SECTION = {
 	amountField: "amount",
 	addLabel: "+ Tilføj fast udgift",
 	mostRows: MOST_FIXED_ROWS,
+	hasDates: true,
 };
 const CATEGORY_SECTION = {
 	key: "categories",
@@ -309,7 +311,7 @@ function showSyncStatus() {
 // ---- Screen 1: Overblik ------------------------------------------------------
 
 function overviewHtml(month) {
-	const s = summarize(month);
+	const s = summarize(month, viewMonth);
 	let html = "";
 	if (s.income === 0 && month.spending.length === 0) {
 		html += welcomeHtml();
@@ -470,7 +472,7 @@ function categoryBarHtml(category) {
 // ---- Screen 2: Udgifter --------------------------------------------------------
 
 function expensesHtml(month) {
-	const s = summarize(month);
+	const s = summarize(month, viewMonth);
 	let html = `
 		<section class="card">
 			<div class="label">Brugt i alt i ${esc(monthLabel(viewMonth).toLowerCase())}</div>
@@ -527,7 +529,7 @@ function futureHtml(month) {
 // The results are redrawn on their own after the balance is changed (refreshFutureResults),
 // so the box you just typed in is left alone.
 function futureResultsHtml(month) {
-	const s = summarize(month);
+	const s = summarize(month, viewMonth);
 	if (s.income === 0) {
 		return '<section class="card"><p>Skriv din indkomst og dine udgifter under <b>Plan</b> først, så kan jeg regne fremad.</p></section>';
 	}
@@ -660,7 +662,7 @@ function summaryLineHtml(label, text, extraClass) {
 // The box at the top of Plan. It is redrawn on its own after each edit
 // (refreshPlanSummary), so the boxes you are typing in are left alone.
 function planSummaryHtml(month) {
-	const s = summarize(month);
+	const s = summarize(month, viewMonth);
 
 	let html = "<h2>Sådan ser måneden ud</h2><div class=\"sum-lines\">";
 	html += summaryLineHtml("Indkomst", formatKr(s.income));
@@ -705,7 +707,59 @@ function rowHtml(section, row) {
 			<input data-field="name" value="${esc(row.name)}" placeholder="Navn" maxlength="${MAX_NAME_LENGTH}" aria-label="Navn" autocomplete="off">
 			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="Beløb i kroner" autocomplete="off">
 			<button class="icon" data-action="delete-row" aria-label="Slet rækken">✕</button>
+			${section.hasDates ? datesHtml(row) : ""}
 		</div>`;
+}
+
+// The small "from / to date" box under an income or fixed-bill row. It is a <details>: folded
+// to one line of small text until you need it, and open from the start for a row that has dates.
+// (The maths is in budget.js: activeDaysIn, amountIn.)
+function datesHtml(row) {
+	return `
+		<details class="dates" ${row.from || row.to ? "open" : ""}>
+			<summary>${esc(datesSummaryText(row))}</summary>
+			<div class="dates-line">
+				<label>Fra <input type="date" data-field="from" value="${esc(row.from || "")}"></label>
+				<label>Til <input type="date" data-field="to" value="${esc(row.to || "")}"></label>
+			</div>
+			<p class="hint date-note">${esc(dateNoteText(row))}</p>
+			<button type="button" class="link" data-action="clear-dates">Ryd datoer</button>
+		</details>`;
+}
+
+function datesSummaryText(row) {
+	const when = windowText(row);
+	return when === "" ? "Fra/til dato (valgfrit)" : "Gælder " + when;
+}
+
+// What the dates mean for the month on screen, so nobody has to work it out.
+function dateNoteText(row) {
+	if (!row.from && !row.to) {
+		return "Uden datoer gælder rækken hele tiden.";
+	}
+	if (row.from && row.to && row.from > row.to) {
+		return "Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.";
+	}
+	const month = monthLabel(viewMonth).toLowerCase();
+	const days = lastDayOfMonth(viewMonth);
+	const active = activeDaysIn(row, viewMonth);
+	if (active === 0) {
+		return "Gælder ikke i " + month + ".";
+	}
+	if (active === days) {
+		return "Gælder hele " + month + ": " + formatKr(row.amount);
+	}
+	return "I " + month + " tæller " + active + " af " + days + " dage: " + formatKr(amountIn(row, viewMonth));
+}
+
+// Redraws the two small texts of a row's date box after something in the row changed.
+function refreshDatesOf(rowElement, row) {
+	const summary = rowElement.querySelector(".dates summary");
+	const note = rowElement.querySelector(".date-note");
+	if (summary && note && row) {
+		summary.textContent = datesSummaryText(row);
+		note.textContent = dateNoteText(row);
+	}
 }
 
 function savingsHtml(month) {
@@ -921,6 +975,9 @@ document.addEventListener("click", (event) => {
 		case "delete-row":
 			deleteRow(button);
 			break;
+		case "clear-dates":
+			clearDates(button);
+			break;
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
@@ -1042,13 +1099,26 @@ function editRow(input) {
 	const rowElement = input.closest(".row");
 	const section = SECTIONS[rowElement.dataset.section];
 	const id = rowElement.dataset.id;
+	const field = input.dataset.field;
 
-	if (input.dataset.field === "name") {
+	if (field === "name") {
 		const name = input.value.trim().slice(0, MAX_NAME_LENGTH);
 		changeMonth((month) => {
 			const row = findRow(month[section.key], id);
 			if (row) {
 				row.name = name;
+			}
+		});
+	} else if (field === "from" || field === "to") {
+		// A date box gives "2026-10-12", or "" when it is cleared. A row without a date simply
+		// has no such field.
+		const day = input.value;
+		changeMonth((month) => {
+			const row = findRow(month[section.key], id);
+			if (row && day !== "") {
+				row[field] = day;
+			} else if (row) {
+				delete row[field];
 			}
 		});
 	} else {
@@ -1067,6 +1137,29 @@ function editRow(input) {
 		});
 		input.value = amountToInput(ore);   // tidy what was typed: "1.250" becomes "1250"
 	}
+
+	if (section.hasDates) {
+		refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id));
+	}
+	refreshPlanSummary();
+}
+
+// "Ryd datoer": takes both dates off a row.
+function clearDates(button) {
+	const rowElement = button.closest(".row");
+	const section = SECTIONS[rowElement.dataset.section];
+	const id = rowElement.dataset.id;
+	changeMonth((month) => {
+		const row = findRow(month[section.key], id);
+		if (row) {
+			delete row.from;
+			delete row.to;
+		}
+	});
+	for (const box of rowElement.querySelectorAll('input[type="date"]')) {
+		box.value = "";
+	}
+	refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id));
 	refreshPlanSummary();
 }
 

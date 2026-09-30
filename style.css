@@ -416,6 +416,33 @@ label.button.secondary {
 	text-align: right;
 }
 
+/* The optional from / to date box under an income or fixed-bill row. It spans the whole row. */
+.dates {
+	grid-column: 1 / -1;
+	margin: -2px 0 4px;
+}
+
+.dates summary {
+	color: var(--muted);
+	font-size: 0.85rem;
+	cursor: pointer;
+	padding: 4px 0;
+}
+
+.dates-line {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.dates-line label {
+	margin-top: 0;
+}
+
+.dates .date-note {
+	margin-top: 6px;
+}
+
 .single-row {
 	display: grid;
 	grid-template-columns: 1fr 112px;

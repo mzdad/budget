@@ -265,11 +265,82 @@ function spendingNewestFirst(list) {
 }
 
 
+// --- Rows that start or stop on a date -------------------------------------
+
+// An income or fixed-bill row can have a first day (from) and a last day (to), both optional and
+// both counted: "2026-10-12" as from means the 12th is the first day it counts.
+// "Dagpenge to 2026-10-11" and "Løn from 2026-10-12" then hand over to each other on their own,
+// in every month, from ONE plan.
+//
+// In a month where a row counts for only some of the days, its amount counts pro rata by days:
+// 20 of October's 31 days = 20/31 of the amount. (Real pay arrives in its own way; if that is
+// different, type the real amounts instead.)
+
+// How many days of the month `key` the row counts.
+function activeDaysIn(row, key) {
+	const firstDay = key + "-01";
+	const lastDay = key + "-" + String(lastDayOfMonth(key)).padStart(2, "0");
+	const start = row.from && row.from > firstDay ? row.from : firstDay;
+	const end = row.to && row.to < lastDay ? row.to : lastDay;
+	if (start > end) {
+		return 0;   // it starts after this month, ended before it, or from is after to
+	}
+	// Both days are inside the month here, so the day numbers can simply be subtracted.
+	return Number(end.slice(8)) - Number(start.slice(8)) + 1;
+}
+
+// A row's amount as it counts in the month `key` (the whole amount when the row has no dates or
+// no month is given). Whole-number maths: the result is rounded to whole øre.
+function amountIn(row, key) {
+	if (!key || (!row.from && !row.to)) {
+		return row.amount;
+	}
+	const days = lastDayOfMonth(key);
+	const active = activeDaysIn(row, key);
+	if (active === days) {
+		return row.amount;
+	}
+	return Math.round(row.amount * active / days);
+}
+
+function sumIn(rows, key) {
+	let total = 0;
+	for (const row of rows) {
+		total += amountIn(row, key);
+	}
+	return total;
+}
+
+// "fra 12.10.2026", "til 11.10.2026", "fra 12.10.2026 til 30.11.2026", or "" without dates.
+function windowText(row) {
+	const parts = [];
+	if (row.from) {
+		parts.push("fra " + dateText(row.from));
+	}
+	if (row.to) {
+		parts.push("til " + dateText(row.to));
+	}
+	return parts.join(" ");
+}
+
+// Income or fixed-bill rows as one month sees them, for the reports: each amount is what counts
+// in that month, and the name says when the row applies, so the rows add up to the totals.
+function rowsForReport(rows, key) {
+	return rows.map((row) => {
+		const when = windowText(row);
+		return { id: row.id, name: when === "" ? row.name : row.name + " (" + when + ")", amount: amountIn(row, key) };
+	});
+}
+
+
 // --- The numbers shown on screen --------------------------------------------
 
-function summarize(month) {
-	const income = sumOf(month.income, "amount");
-	const fixed = sumOf(month.fixed, "amount");
+// Dates on income and fixed-bill rows (see the next section) only mean something for a particular
+// month, so pass the month's key ("2026-10") as the second argument. Without it, every row counts
+// in full, as if it had no dates.
+function summarize(month, key) {
+	const income = sumIn(month.income, key);
+	const fixed = sumIn(month.fixed, key);
 	const savings = month.savings;
 	const limits = sumOf(month.categories, "limit");
 	const spent = sumOf(month.spending, "amount");
@@ -364,7 +435,7 @@ function forecast(month, key, howMany, months) {
 		if (ownPlan) {
 			plan = ownPlan;
 		}
-		const s = summarize(plan);
+		const s = summarize(plan, rowKey);
 		const added = s.income - s.fixed - s.limits;
 		const carefulAdded = Math.min(s.savings, added);
 		total += added;
@@ -416,13 +487,13 @@ function categoryNameIn(month, categoryId) {
 // Everything the report for one month shows. The screen, the printout and the spreadsheet
 // are all made from this, so they always agree.
 function monthReport(month, key) {
-	const s = summarize(month);
+	const s = summarize(month, key);
 	return {
 		key: key,
 		label: monthLabel(key),
 		summary: s,
-		income: month.income,
-		fixed: month.fixed,
+		income: rowsForReport(month.income, key),
+		fixed: rowsForReport(month.fixed, key),
 		categories: s.categories,
 		otherSpent: s.otherSpent,
 		spending: byDateOldestFirst(month.spending).map((item) => ({
@@ -447,7 +518,7 @@ function yearReport(months, year) {
 
 	for (const key of keys) {
 		const month = months[key];
-		const s = summarize(month);
+		const s = summarize(month, key);
 		rows.push({
 			key: key, label: monthLabel(key),
 			income: s.income, fixed: s.fixed, savings: s.savings,
@@ -609,13 +680,22 @@ function cleanId(value) {
 	return text === "" ? newId() : text;
 }
 
-function cleanRows(list, amountField, mostRows) {
+// dated: income and fixed-bill rows may carry a "from" and a "to" day; other rows never do.
+function cleanRows(list, amountField, mostRows, dated) {
 	if (!Array.isArray(list)) {
 		return [];
 	}
 	return list.filter((row) => row && typeof row === "object").slice(0, mostRows).map((row) => {
 		const clean = { id: cleanId(row.id), name: cleanText(row.name, MAX_NAME_LENGTH) };
 		clean[amountField] = cleanAmount(row[amountField]);
+		if (dated) {
+			// Only a real-looking date is kept, and the field is left out when empty.
+			for (const field of ["from", "to"]) {
+				if (typeof row[field] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row[field])) {
+					clean[field] = row[field];
+				}
+			}
+		}
 		return clean;
 	});
 }
@@ -639,8 +719,8 @@ function cleanSpending(list) {
 function cleanMonth(raw) {
 	const source = raw && typeof raw === "object" ? raw : {};
 	return {
-		income: cleanRows(source.income, "amount", MOST_INCOME_ROWS),
-		fixed: cleanRows(source.fixed, "amount", MOST_FIXED_ROWS),
+		income: cleanRows(source.income, "amount", MOST_INCOME_ROWS, true),
+		fixed: cleanRows(source.fixed, "amount", MOST_FIXED_ROWS, true),
 		savings: cleanAmount(source.savings),
 		categories: cleanRows(source.categories, "limit", MOST_CATEGORIES),
 		spending: cleanSpending(source.spending),
@@ -676,6 +756,7 @@ if (typeof module !== "undefined") {
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
 		summarize, barShare, barLevel,
+		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		FORECAST_MONTHS, forecast,
 		dateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
 		cleanAmount, cleanMonth, cleanData, sameData,

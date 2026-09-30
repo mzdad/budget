@@ -3,6 +3,15 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.4.0 - 2026-09-30
+
+- **From / to dates on income and fixed bills** (Plan: "Fra/til dato" under each such row). A row
+  counts from its first day to its last day, both included. Use it for a change of income: "Dagpenge"
+  to 11.10.2026 and "Løn" from 12.10.2026 hand over to each other by themselves, from one plan.
+  In a month where a row counts for only some of the days, its amount counts pro rata by days
+  (20 of October's 31 days = 20/31), and the row says what it counts that month. Overblik, Fremtid
+  and the reports all follow the dates. No Firebase rules change is needed.
+
 ## 1.3.0 - 2026-09-30
 
 - **Fremtid follows months you have set up differently.** Before, it repeated the plan of the

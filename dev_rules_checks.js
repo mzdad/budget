@@ -36,6 +36,8 @@ const int = (n) => ({ integerValue: String(n) });
 const str = (s) => ({ stringValue: s });
 const list = (values) => ({ arrayValue: { values } });
 const row = (id, name, amount, field) => ({ mapValue: { fields: { id: str(id), name: str(name), [field || "amount"]: int(amount) } } });
+// An income or fixed-bill row that starts or stops on a date ("from" / "to").
+const datedRow = (id, name, amount, extra) => ({ mapValue: { fields: { id: str(id), name: str(name), amount: int(amount), ...extra } } });
 const purchase = (i) => ({ mapValue: { fields: { id: str("s" + i), date: str("2026-09-01"), categoryId: str("c"), amount: int(100), note: str("") } } });
 
 // A good month, which tests then spoil in one way each.
@@ -129,6 +131,8 @@ async function main() {
 	check("money-I-have-now negative", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: int(-1) }), "DENY");
 	check("money-I-have-now as text", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: str("5") }), "DENY");
 	check("money-I-have-now over 10 million kr", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), startBalance: int(1000000001) }), "DENY");
+	const datedFields = { ...goodFields(), income: list([datedRow("i1", "Dagpenge", 1500000, { to: str("2026-10-11") }), datedRow("i2", "Løn", 3000000, { from: str("2026-10-12") })]), fixed: list([datedRow("f1", "Abonnement", 9900, { from: str("2026-11-01"), to: str("2027-01-31") })]) };
+	check("income and fixed rows with from / to dates", await write(alice, "budgets/alice/months/2026-10", datedFields), "ALLOW");
 	check("income is not a list",await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), income: str("x") }), "DENY");
 	check("bad month name 2026-13", await write(alice, "budgets/alice/months/2026-13", goodFields()), "DENY");
 	check("bad month name abcd", await write(alice, "budgets/alice/months/abcd", goodFields()), "DENY");
