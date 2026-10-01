@@ -1,6 +1,6 @@
 "use strict";
 
-// texts.js - the page's language: Danish (the default) or English.
+// texts.js - the page's language: English (what a device starts in) or Danish.
 //
 // Every text on the screens is written in the code in Danish, inside t("..."). That Danish text is
 // also the KEY: with Danish chosen, t() gives it back as it is; with English chosen, t() looks it up
@@ -21,9 +21,12 @@ const LANGUAGES = [
 	{ id: "da", name: "Dansk", locale: "da-DK" },
 	{ id: "en", name: "English", locale: "en-GB" },
 ];
-const DEFAULT_LANGUAGE = "da";
+const SOURCE_LANGUAGE = "da";    // the language the texts are written in, in the code
+const DEFAULT_LANGUAGE = "en";   // what a device starts in, until someone chooses
 
-let currentLanguage = DEFAULT_LANGUAGE;
+// Until the page says otherwise (app.js sets the start language first thing) the texts come out
+// as written, in Danish: that is what the maths tests in Node expect.
+let currentLanguage = SOURCE_LANGUAGE;
 
 function setLanguage(id) {
 	currentLanguage = LANGUAGES.some((language) => language.id === id) ? id : DEFAULT_LANGUAGE;
@@ -38,24 +41,9 @@ function uiLocale() {
 	return LANGUAGES.find((language) => language.id === currentLanguage).locale;
 }
 
-// The language a device starts in when nothing was chosen: the phone's own, if it is one we have.
-function languageOfPhone(languages) {
-	const codes = (languages || []).filter(Boolean);
-	if (codes.length === 0) {
-		return DEFAULT_LANGUAGE;   // the phone says nothing: the page's own language
-	}
-	for (const code of codes) {
-		const wanted = String(code).toLowerCase().slice(0, 2);
-		if (LANGUAGES.some((language) => language.id === wanted)) {
-			return wanted;
-		}
-	}
-	return "en";   // a language we do not have: English
-}
-
 function t(text, values) {
 	let result = text;
-	if (currentLanguage !== DEFAULT_LANGUAGE && Object.prototype.hasOwnProperty.call(ENGLISH, text)) {
+	if (currentLanguage !== SOURCE_LANGUAGE && Object.prototype.hasOwnProperty.call(ENGLISH, text)) {
 		result = ENGLISH[text];
 	}
 	if (values) {
@@ -77,7 +65,7 @@ function tn(n, one, many, values) {
 }
 
 if (typeof module !== "undefined") {
-	module.exports = { LANGUAGES, DEFAULT_LANGUAGE, setLanguage, getLanguage, uiLocale, languageOfPhone, t, tn, T, ENGLISH_TEXTS: () => ENGLISH };
+	module.exports = { LANGUAGES, SOURCE_LANGUAGE, DEFAULT_LANGUAGE, setLanguage, getLanguage, uiLocale, t, tn, T, ENGLISH_TEXTS: () => ENGLISH };
 }
 
 // The English texts. The key is the Danish text, exactly as it is in the code.
@@ -415,6 +403,7 @@ const ENGLISH = {
 	"Valuta": "Currency",
 	"Vis kun de vigtigste tal": "Show only the most important numbers",
 	"Vis alle poster": "Show every item",
+	"Skift sprog": "Change language",
 	"Log ind eller opret en konto først for at bruge dette.": "Log in or create an account first to use this.",
 	"Log ind eller opret konto": "Log in or create an account",
 	"Tal, der er gemt på denne enhed fra før, er ikke væk: du kan lægge dem ind på kontoen, når du logger ind.": "Numbers saved on this device from before are not gone: you can add them to the account when you log in.",

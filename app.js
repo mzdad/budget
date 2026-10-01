@@ -260,22 +260,18 @@ function rememberDatesOpen(rowId, isOpen) {
 const LANGUAGE_KEY = "budget.language";
 const CURRENCY_KEY = "budget.currency";
 
-// The saved choice. With none: a device that has used this page before stays Danish (a Danish person's
-// computer with an English browser must not turn the page English on its own). A brand new device
-// starts in the language of the phone or browser: Danish for a Danish one, English for any other.
+// The saved choice (the button at the top, or the box on Indstillinger). With none, the page is in
+// English (DEFAULT_LANGUAGE in texts.js), whatever the phone or browser says.
 function loadLanguage() {
 	try {
 		const saved = localStorage.getItem(LANGUAGE_KEY);
 		if (LANGUAGES.some((language) => language.id === saved)) {
 			return saved;
 		}
-		if ([STORAGE_KEY, SIGNED_IN_HINT_KEY, CATEGORIES_OPEN_KEY, THEME_KEY].some((key) => localStorage.getItem(key) !== null)) {
-			return DEFAULT_LANGUAGE;
-		}
 	} catch (error) {
-		// Nothing readable: the phone's own.
+		// Nothing readable: the default.
 	}
-	return languageOfPhone(navigator.languages && navigator.languages.length > 0 ? navigator.languages : [navigator.language]);
+	return DEFAULT_LANGUAGE;
 }
 
 // The language to start in. A link can name one (?lang=en; a kid's link does, so the kid's page is
@@ -348,6 +344,9 @@ function applyStaticTexts() {
 	}
 	document.title = t("Månedsbudget");
 	document.documentElement.lang = getLanguage();
+	// The button at the top names the language it would switch TO, in that language's own name.
+	const otherLanguage = LANGUAGES.find((language) => language.id !== getLanguage());
+	document.getElementById("language-button").textContent = otherLanguage.name;
 	document.getElementById("app-version").textContent = t("Version {version}", { version: APP_VERSION });
 }
 
@@ -1624,6 +1623,9 @@ document.addEventListener("click", (event) => {
 		case "toggle-report-short":
 			reportShort = !reportShort;
 			render();
+			break;
+		case "toggle-language":
+			changeLanguage(LANGUAGES.find((language) => language.id !== getLanguage()).id);
 			break;
 		case "go-login":
 			activeTab = "settings";   // the login box is the first card there

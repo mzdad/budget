@@ -3,6 +3,23 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.18.0 - 2026-10-01
+
+- **English is the standard language, with a language button at the top.** A device that has not chosen a language now
+  starts in **English**, whatever its browser says (before, it followed the browser, and a device that had used the page
+  stayed Danish). The new button at the right end of the top bar names the OTHER language ("Dansk" while the page is
+  English, "English" while it is Danish); one tap switches every text on the page, and the choice is remembered on
+  the device. The "Sprog · Language" box on Indstillinger still works the same way.
+  - **Existing devices change too:** a device that never chose a language now opens in English; tap the button once
+    to get Danish back (it is remembered).
+  - **A kid's link** still carries the language of whoever made it (`&lang=`). A link made before version 1.14.0 has
+    none, so it now opens in English.
+  - The currency is unchanged: a new device still takes the currency of its browser's country (a UK browser shows pounds).
+    Change it in "Valuta · Currency".
+  - The texts in `index.html` (tabs, month buttons) are now written in English, so nothing flashes in Danish first;
+    a test checks that they match the English texts.
+  - Removed: the guess from the phone's language (`languageOfPhone`), and the "a device that has used the page stays Danish" rule.
+
 ## 1.17.0 - 2026-10-01
 
 - **Not logged in: only a taste ("try mode").** When nobody is logged in, every screen has a note at the top:

@@ -878,11 +878,17 @@ const vm = require("vm");
 const fs = require("fs");
 const indexText = fs.readFileSync(__dirname + "/index.html", "utf8");
 
-function pretendPage() {
+function pretendPage(options) {
 	let shown = "";             // what app.js last drew into <main id="view">
 	const saved = [];           // the files the page offered for download
 	const handlers = {};
 	const store = {};
+	// The page starts in English; most checks read Danish screens, so they start with Danish chosen
+	// (as if it had been picked with the button). pretendPage({ language: null }) is a brand new device.
+	if (!options || options.language !== null) {
+		store["budget.language"] = (options && options.language) || "da";
+	}
+	const languageButton = { textContent: "" };
 	// Anything that is not special is another pretend element, so any call or property works.
 	const pretend = new Proxy(function () {}, {
 		get(target, key) {
@@ -902,6 +908,7 @@ function pretendPage() {
 		getElementById(id) {
 			if (id === "view") return { get innerHTML() { return shown; }, set innerHTML(html) { shown = html; } };
 			if (id === "export-scope") return { value: "month:2026-09" };
+			if (id === "language-button") return languageButton;
 			return pretend;
 		},
 		querySelector: () => pretend,
@@ -927,7 +934,7 @@ function pretendPage() {
 	for (const file of ["texts.js", "budget.js", "password.js", "account.js", "kid.js", "scan.js", "app.js"]) {
 		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
 	}
-	return { context, handlers, saved, root, store, view: () => shown, run: (code) => vm.runInContext(code, context) };
+	return { context, handlers, saved, root, store, languageButton, view: () => shown, run: (code) => vm.runInContext(code, context) };
 }
 
 function attempt(name, action) {
@@ -1222,8 +1229,8 @@ check("language: Danish is the start", texts.getLanguage(), "da");
 check("t: Danish gives the text as it is", texts.t("Slet"), "Slet");
 check("t: values are put in", texts.t("{name} har", { name: "Nathan" }), "Nathan har");
 check("tn: Danish, one and many", [texts.tn(1, "{n} måned", "{n} måneder"), texts.tn(3, "{n} måned", "{n} måneder")], ["1 måned", "3 måneder"]);
-check("language: the phone's language: Danish, English, another one, and none", [texts.languageOfPhone(["da-DK"]), texts.languageOfPhone(["en-GB"]), texts.languageOfPhone(["de-DE", "en-US"]), texts.languageOfPhone(["de-DE"]), texts.languageOfPhone([]), texts.languageOfPhone([undefined])], ["da", "en", "en", "en", "da", "da"]);
-check("language: a language that does not exist becomes Danish", (texts.setLanguage("xx"), texts.getLanguage()), "da");
+check("language: English is what a device starts in; the texts are written in Danish", [texts.DEFAULT_LANGUAGE, texts.SOURCE_LANGUAGE], ["en", "da"]);
+check("language: a language that does not exist becomes English, the default", (texts.setLanguage("xx"), texts.getLanguage()), "en");
 
 texts.setLanguage("en");
 check("t: English gives the English text", texts.t("Slet"), "Delete");
@@ -1285,28 +1292,31 @@ if (page !== null) {
 		check("language: and back to Danish", [page.run("getLanguage()"), page.store["budget.language"], staticTexts[0].textContent, page.view().includes("Udseende")], ["da", "da", "Overblik", true]);
 		const clearStore = () => { for (const key of Object.keys(page.store)) { delete page.store[key]; } };
 		clearStore();
-		check("language: a brand new device starts in the language of the phone", [
+		check("language: a brand new device starts in English, whatever the browser says", [
 			page.run("navigator.languages = ['en-US']; loadLanguage()"),
 			page.run("navigator.languages = ['da-DK']; loadLanguage()"),
 			page.run("navigator.languages = ['de-DE']; loadLanguage()"),
-		], ["en", "da", "en"]);
+			page.run("navigator.languages = []; loadLanguage()"),
+		], ["en", "en", "en", "en"]);
 		page.store["budget.v1"] = "{}";
-		check("language: a device that has used the page before stays Danish, whatever the browser says", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		check("language: a device that has used the page before also starts in English until it chooses", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
 		clearStore();
 		page.store["budget.signedInAs"] = "mama";
-		check("language: ...also when it was signed in", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		check("language: ...also when it was signed in", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
+		page.store["budget.language"] = "da";
+		check("language: a saved choice of Danish wins over everything", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
 		page.store["budget.language"] = "en";
-		check("language: a saved choice wins over everything", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
+		check("language: a saved choice of English wins too", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
 		page.store["budget.language"] = "<script>";
-		check("language: a saved choice that is not a language is ignored", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		check("language: a saved choice that is not a language is ignored", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
 		clearStore();
 		check("language: a link can name the language, and it is kept on the device", [
-			page.run("location.search = '?kid=mama.abc&lang=en'; navigator.languages = ['da-DK']; languageForStart()"),
+			page.run("location.search = '?kid=mama.abc&lang=da'; navigator.languages = ['en-US']; languageForStart()"),
 			page.store["budget.language"],
 			page.run("location.search = ''; languageForStart()"),
-		], ["en", "en", "en"]);
+		], ["da", "da", "da"]);
 		clearStore();
-		check("language: a link with a language that does not exist is ignored", page.run("location.search = '?lang=xx'; navigator.languages = ['da-DK']; languageForStart()"), "da");
+		check("language: a link with a language that does not exist is ignored", page.run("location.search = '?lang=xx'; navigator.languages = ['da-DK']; languageForStart()"), "en");
 		page.run("location.search = '';");
 		page.run("accountName = 'mama'; setLanguage('en');");
 		check("language: a kid's link carries the language, so the kid's page is in it", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=en&cur=DKK"), true);
@@ -1387,6 +1397,36 @@ if (page !== null) {
 			plain(page.run("kidScreenHtml({ status: 'ready', person: 'Nathan', message: '', messageIsError: false }, 450000)")).includes("4.500 €"),
 		], [true, true]);
 		page.run("setCurrency('DKK'); accountName = 'mama'; activeTab = 'overview'; render();");
+	});
+}
+
+// --- English as the start language, and the language button at the top ---
+if (page !== null) {
+	const english = texts.ENGLISH_TEXTS();
+	const appText = fs.readFileSync(__dirname + "/app.js", "utf8");
+
+	attempt("language: a brand new device starts in English and has the button", () => {
+		const fresh = pretendPage({ language: null });
+		const click = (action) => fresh.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+		check("language: a brand new page is drawn in English, and marked so", [fresh.run("getLanguage()"), fresh.view().includes("Add expense"), fresh.view().includes("Tilføj udgift"), fresh.root.lang], ["en", true, false, "en"]);
+		check("language: the button names the other language", fresh.languageButton.textContent, "Dansk");
+		click("toggle-language");
+		check("language: tapping the button gives Danish, which is remembered on this device", [fresh.run("getLanguage()"), fresh.store["budget.language"], fresh.languageButton.textContent, fresh.view().includes("Tilføj udgift"), fresh.root.lang], ["da", "da", "English", true, "da"]);
+		check("language: ...and a later start finds it", fresh.run("loadLanguage()"), "da");
+		click("toggle-language");
+		check("language: tapping again gives English again", [fresh.run("getLanguage()"), fresh.store["budget.language"], fresh.languageButton.textContent, fresh.view().includes("Add expense")], ["en", "en", "Dansk", true]);
+	});
+
+	attempt("language: index.html is written in English, so nothing flashes in the wrong language", () => {
+		const pairs = (pattern) => [...indexText.matchAll(pattern)];
+		const wrongText = pairs(/<\w+[^>]*\sdata-i18n="([^"]*)"[^>]*>([^<]*)</g).filter((match) => match[2].trim() !== english[match[1]]).map((match) => match[1]);
+		const wrongAria = pairs(/aria-label="([^"]*)"[^>]*data-i18n-aria="([^"]*)"/g).filter((match) => match[1] !== english[match[2]]).map((match) => match[2]);
+		const wrongTitle = pairs(/\stitle="([^"]*)"[^>]*data-i18n-title="([^"]*)"/g).filter((match) => match[1] !== english[match[2]]).map((match) => match[2]);
+		check("language: the texts, aria-labels and titles in index.html start as the English ones", [wrongText, wrongAria, wrongTitle], [[], [], []]);
+		check("language: ...and there are enough of them to mean something", [pairs(/\sdata-i18n="/g).length >= 5, pairs(/data-i18n-aria="/g).length >= 4], [true, true]);
+		check("language: the page's title and language start as English", [(indexText.match(/<title>([^<]*)<\/title>/) || [])[1], indexText.includes('<html lang="en">')], [english["Månedsbudget"], true]);
+		const staticActions = [...indexText.matchAll(/data-action="([\w-]+)"/g)].map((match) => match[1]);
+		check("language: every button written in index.html has code behind it, and the language button is one", [staticActions.filter((name) => !appText.includes('case "' + name + '":')), staticActions.includes("toggle-language")], [[], true]);
 	});
 }
 

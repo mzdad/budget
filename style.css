@@ -152,6 +152,25 @@ p {
 	background: var(--bar-track);
 }
 
+/* The language button at the right end of the top bar: a small pill with the other language's name. */
+.lang-button {
+	min-width: 56px;
+	height: 36px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	background: transparent;
+	color: var(--accent);
+	font: inherit;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.lang-button:active {
+	background: var(--bar-track);
+}
+
 .link {
 	border: none;
 	background: none;

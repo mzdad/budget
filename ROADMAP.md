@@ -5,6 +5,21 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.18.0
+
+- **2.6 English as the standard language, and a language button at the top** (you said: "make sure standard language is
+  English for default, and can be changed to Danish, maybe make the language toggle a button in the top?"). The
+  decisions I made:
+  - **English for every device that has not chosen**, also a Danish phone and a device that used the page before; the
+    guess from the phone's language is gone. One tap on the button gives Danish, and it is remembered.
+  - The button sits at the right end of the top bar and names the other language ("Dansk" / "English"); it fits a 375 px
+    phone. The box on Indstillinger stays.
+  - The kids' page has no top bar, so a kid's link carries the language of whoever made it (links from before 1.14.0 now open
+    in English).
+  - The currency was not touched: a new device still takes its browser's country's currency.
+- **5.4 (done by you) New people can create an account.** You switched on "Enable create (sign-up)" in Firebase on
+  1 October 2026. The first real sign-up is the proof; I never create accounts on your real project.
+
 ## Done in 1.17.0
 
 - **5.3 Log in for the full version** (you said: "if you are not logged in, it should say to create an account or log in
@@ -165,7 +180,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 |---|---|---|---|
 | 5.1 | **Open the page without internet** (a "service worker"). | Today the page needs internet to start, even though the numbers are saved on the phone. The Kortpris app has one. | M |
 | 5.2 | **Try a kid's link on a real phone.** | I could only test it against the local test copy of Firebase, never your real project (I never sign in to it). Make a link, open it on a phone, write something, and see it on the kid's card. | S (you) |
-| 5.4 | **Let new people create an account** (you, in the Firebase console). | Firebase's "Enable create (sign-up)" is switched off on your project (you did that on purpose, 30 September). The page now says "create an account or log in", but "Opret ny konto" will be refused until you tick it on again: Authentication -> Settings -> User actions -> tick Enable create -> Save. Your own login keeps working either way. Decide whether to leave it on for everyone, or switch it on only while someone new signs up. | S (you) |
 
 ## Not planned
 

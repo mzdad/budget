@@ -52,10 +52,11 @@ A small monthly budget page for phone and PC. Danish, kroner.
 - **Currency.** Indstillinger -> "Valuta · Currency": kroner, euro, US dollar, pound and more. Only the way amounts are
   shown (and what the amount boxes ask for) changes: nothing is converted. Kept per device; a kid's link carries it
   (`&cur=EUR`). The bank-picture reader knows €, $ and £.
-- **Danish / English.** Indstillinger -> "Sprog · Language". Every text is written in the code as `t("Dansk tekst")`;
-  the Danish text is the key and the English one is in `texts.js`. Numbers, dates and the spreadsheet follow the
-  language. Kept per device (a device that has used the page before stays Danish until you choose). A kid's link
-  carries the language. A test checks that every text has an English one.
+- **English / Danish.** The page starts in **English**; the button at the top right ("Dansk" / "English") switches
+  language, and so does the "Sprog · Language" box on Indstillinger. Every text is written in the code as
+  `t("Dansk tekst")`; the Danish text is the key and the English one is in `texts.js`. Numbers, dates and the
+  spreadsheet follow the language. Kept per device. A kid's link carries the language of whoever made it. A test
+  checks that every text has an English one.
 - **Colours.** Indstillinger -> Udseende: the normal green (follows the phone's light or dark setting) or
   red and black (always dark). Kept on the device. A theme is one block of colours at the top of
   `style.css` plus one line in `THEMES` in `app.js`.

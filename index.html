@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="da">
+<html lang="en">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -18,7 +18,7 @@
 			// No saved choice: the normal colours.
 		}
 	</script>
-	<title>Månedsbudget</title>
+	<title>Monthly budget</title>
 
 	<!-- Lets an iPhone or Android phone put the page on the home screen like an app. -->
 	<link rel="manifest" href="manifest.webmanifest">
@@ -27,18 +27,20 @@
 	<meta name="mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-title" content="Budget">
 
-	<link rel="stylesheet" href="style.css?v=1.17.0">
+	<link rel="stylesheet" href="style.css?v=1.18.0">
 </head>
 <body>
 
 	<!-- The month switcher stays at the top while you scroll. -->
 	<header class="top">
-		<button class="step" data-action="previous-month" aria-label="Forrige måned" data-i18n-aria="Forrige måned">‹</button>
+		<button class="step" data-action="previous-month" aria-label="Previous month" data-i18n-aria="Forrige måned">‹</button>
 		<div class="month">
 			<span id="month-label"></span>
-			<button id="this-month" class="link" data-action="this-month" data-i18n="Gå til denne måned" hidden>Gå til denne måned</button>
+			<button id="this-month" class="link" data-action="this-month" data-i18n="Gå til denne måned" hidden>Go to this month</button>
 		</div>
-		<button class="step" data-action="next-month" aria-label="Næste måned" data-i18n-aria="Næste måned">›</button>
+		<button class="step" data-action="next-month" aria-label="Next month" data-i18n-aria="Næste måned">›</button>
+		<!-- Switches between English and Danish. app.js writes the name of the OTHER language on it. -->
+		<button id="language-button" class="lang-button" data-action="toggle-language" aria-label="Change language" title="Change language" data-i18n-aria="Skift sprog" data-i18n-title="Skift sprog">Dansk</button>
 	</header>
 
 	<!-- app.js fills this in when something can't be saved, and hides it again. -->
@@ -54,25 +56,25 @@
 		<p id="app-version"></p>
 	</footer>
 
-	<nav class="tabs" aria-label="Skærme" data-i18n-aria="Skærme">
-		<button data-tab="overview" data-i18n="Overblik">Overblik</button>
-		<button data-tab="expenses" data-i18n="Udgifter">Udgifter</button>
-		<button data-tab="future" data-i18n="Fremtid">Fremtid</button>
+	<nav class="tabs" aria-label="Screens" data-i18n-aria="Skærme">
+		<button data-tab="overview" data-i18n="Overblik">Overview</button>
+		<button data-tab="expenses" data-i18n="Udgifter">Expenses</button>
+		<button data-tab="future" data-i18n="Fremtid">Future</button>
 		<button data-tab="plan" data-i18n="Plan">Plan</button>
-		<button data-tab="settings" class="gear" aria-label="Indstillinger" title="Indstillinger" data-i18n-aria="Indstillinger" data-i18n-title="Indstillinger">&#9881;&#xFE0E;</button>
+		<button data-tab="settings" class="gear" aria-label="Settings" title="Settings" data-i18n-aria="Indstillinger" data-i18n-title="Indstillinger">&#9881;&#xFE0E;</button>
 	</nav>
 
-	<!-- Our own files (these, and style.css at the top) end in ?v=1.17.0. That number is the
+	<!-- Our own files (these, and style.css at the top) end in ?v=1.18.0. That number is the
 	     version shown at the bottom of the page, and it is what makes phones fetch new files after
 	     a release instead of mixing new and old ones from their cache. Change it on every release:
 	     python dev_set_version.py 1.3.0  (see README). -->
-	<script src="texts.js?v=1.17.0"></script>
-	<script src="budget.js?v=1.17.0"></script>
-	<script src="firebase-config.js?v=1.17.0"></script>
-	<script src="password.js?v=1.17.0"></script>
-	<script src="account.js?v=1.17.0"></script>
-	<script src="kid.js?v=1.17.0"></script>
-	<script src="scan.js?v=1.17.0"></script>
-	<script src="app.js?v=1.17.0"></script>
+	<script src="texts.js?v=1.18.0"></script>
+	<script src="budget.js?v=1.18.0"></script>
+	<script src="firebase-config.js?v=1.18.0"></script>
+	<script src="password.js?v=1.18.0"></script>
+	<script src="account.js?v=1.18.0"></script>
+	<script src="kid.js?v=1.18.0"></script>
+	<script src="scan.js?v=1.18.0"></script>
+	<script src="app.js?v=1.18.0"></script>
 </body>
 </html>
