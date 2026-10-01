@@ -671,6 +671,24 @@ label.button.secondary {
 	box-shadow: inset 0 3px 0 var(--accent);
 }
 
+/* ---- The kid's own page: only the kid's money, no tabs and no month switcher ---- */
+
+.kid-mode .top,
+.kid-mode .tabs,
+.kid-mode .sync-status {
+	display: none !important;
+}
+
+.kid-mode body,
+body.kid-mode {
+	padding-bottom: 24px;
+}
+
+.kid-leave {
+	text-align: center;
+	margin-top: 24px;
+}
+
 /* ---- Other people's money (Nathan's savings) ---- */
 
 .pot-buttons {

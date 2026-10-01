@@ -813,7 +813,8 @@ function potBalances(months) {
 			}
 			const person = byKey[key];
 			person.balance += entry.amount;
-			person.entries.push({ id: entry.id, date: entry.date, amount: entry.amount, note: entry.note, monthKey: monthKey });
+			// kidToken is only there on an entry the kid wrote on their own page (see withKidEntries).
+			person.entries.push({ id: entry.id, date: entry.date, amount: entry.amount, note: entry.note, monthKey: monthKey, kidToken: entry.kidToken });
 			if (entry.date < person.firstDate) {
 				person.firstDate = entry.date;
 			}
@@ -831,6 +832,104 @@ function potBalances(months) {
 // All the kids' balances added together: the part of your pile that is not yours.
 function othersTotal(months) {
 	return potBalances(months).reduce((sum, person) => sum + person.balance, 0);
+}
+
+
+// --- The kids' own page (a private link) --------------------------------------
+//
+// Each kid can get a link (Indstillinger -> Børn). Opened on the kid's phone it shows only what the
+// kid has, and lets the kid write what they used. Nothing else.
+//
+// How the numbers travel, so that two people writing never overwrite each other:
+// - The parent's page works out how much of the kid's money the PARENT has written down (the start
+//   amount, "brugte", "fik") and saves that number on the kid's page: parentSide.
+// - The kid writes entries of their own, one document each, which only ever get added. The kid's
+//   page shows parentSide + those entries.
+// - The parent's page reads the kid's entries too and counts them with its own (withKidEntries),
+//   so Nathan's card, "Heraf Nathan" and Opsparing on Fremtid all include what Nathan wrote.
+
+// 24 letters and digits = about 124 bits: far too many to guess. It is the key in the link.
+const KID_TOKEN_LENGTH = 24;
+const KID_TOKEN_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+const KID_TOKEN_PATTERN = /^[a-z0-9]{20,40}$/;
+const USERNAME_FOR_LINK_PATTERN = /^[a-z0-9_-]{3,20}$/;
+
+// Turns random numbers (0-255, KID_TOKEN_LENGTH of them, from the browser's crypto) into a token.
+function makeKidToken(randomBytes) {
+	let token = "";
+	for (let i = 0; i < KID_TOKEN_LENGTH; i++) {
+		token += KID_TOKEN_CHARS[randomBytes[i] % KID_TOKEN_CHARS.length];
+	}
+	return token;
+}
+
+// The link to give a kid: the page's own address plus ?kid=<account>.<token>.
+function kidLink(pageUrl, parent, token) {
+	return pageUrl + "?kid=" + parent + "." + token;
+}
+
+// Reads "<account>.<token>" (what follows ?kid= in the link). Returns { parent, token } or null.
+function parseKidKey(text) {
+	const parts = String(text || "").split(".");
+	if (parts.length !== 2 || !USERNAME_FOR_LINK_PATTERN.test(parts[0]) || !KID_TOKEN_PATTERN.test(parts[1])) {
+		return null;
+	}
+	return { parent: parts[0], token: parts[1] };
+}
+
+// What the parent's page has written down for one kid (by name, capitals don't matter), not
+// counting what the kid wrote. This is the number saved on the kid's page as parentSide.
+function parentSideOf(months, person) {
+	const wanted = person.trim().toLowerCase();
+	let sum = 0;
+	for (const monthKey of Object.keys(months)) {
+		for (const entry of months[monthKey].pots || []) {
+			if (entry.person.trim().toLowerCase() === wanted) {
+				sum += entry.amount;
+			}
+		}
+	}
+	return sum;
+}
+
+// A kid's entry as it comes from the online storage, or null if it is not a real one. A kid only
+// ever USES money, so the amount is negative (firestore.rules says the same).
+function cleanKidEntry(id, raw) {
+	if (!raw || typeof raw !== "object" || typeof raw.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) {
+		return null;
+	}
+	const amount = Math.round(Number(raw.amount));
+	if (!Number.isFinite(amount) || amount >= 0) {
+		return null;
+	}
+	return {
+		id: cleanText(id, 40),
+		date: raw.date,
+		amount: Math.max(-MAX_AMOUNT, amount),
+		note: cleanText(raw.note, MAX_NOTE_LENGTH),
+		at: cleanMoment(raw.at) || 0,
+	};
+}
+
+// The months with the kids' own entries added, for working out balances (potBalances, moneyNow).
+// kidEntries: [{ token, person, id, date, amount, note, at }]. Each goes into the month its date is
+// in, as an ordinary entry that also carries kidToken. The real months are not changed.
+function withKidEntries(months, kidEntries) {
+	if (kidEntries.length === 0) {
+		return months;
+	}
+	const merged = { ...months };
+	for (const entry of kidEntries) {
+		const monthKey = entry.date.slice(0, 7);
+		const month = merged[monthKey];
+		const asEntry = { id: entry.id, date: entry.date, person: entry.person, amount: entry.amount, note: entry.note, at: entry.at, kidToken: entry.token };
+		if (merged[monthKey] === months[monthKey]) {
+			// First time this month is touched: copy it, so the original keeps its own list.
+			merged[monthKey] = { ...(month || { balances: {} }), pots: [...((month && month.pots) || [])] };
+		}
+		merged[monthKey].pots.push(asEntry);
+	}
+	return merged;
 }
 
 
@@ -1133,6 +1232,7 @@ if (typeof module !== "undefined") {
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,
 		latestBalance, potChangeSince, moneyNow, cleanBalances,
+		makeKidToken, kidLink, parseKidKey, parentSideOf, cleanKidEntry, withKidEntries, KID_TOKEN_LENGTH,
 		noteHistory, categoryIdForNote,
 		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
 		FORECAST_MONTHS, forecast,

@@ -16,6 +16,28 @@ service cloud.firestore {
         && isValidMonth(request.resource.data);
     }
 
+    // A kid's own page. The parent makes it (budgets/<username>/kidpages/<token>) and gives the kid a
+    // link that holds the token. Whoever knows the token can read that one page and ADD entries to it
+    // (what the kid used) - nothing else. Nobody can list the pages without being the account owner,
+    // so the tokens cannot be found by looking; they are 24 random letters and digits.
+    match /budgets/{username}/kidpages/{token} {
+      allow get: if true;
+      allow list, delete: if isOwner(username);
+      allow create, update: if isOwner(username)
+        && token.matches('[a-z0-9]{20,40}')
+        && isValidKidPage(request.resource.data);
+
+      match /entries/{entry} {
+        allow get, list: if true;
+        // Added once and never changed. Only while the page exists, so taking the link away stops it.
+        allow create: if entry.matches('[a-z0-9]{6,40}')
+          && exists(/databases/$(database)/documents/budgets/$(username)/kidpages/$(token))
+          && isValidKidEntry(request.resource.data);
+        allow update: if false;
+        allow delete: if isOwner(username);
+      }
+    }
+
     // Everything else is closed: no other path can be read or written by anyone.
 
     // The username of whoever is signed in: the part of their made-up email before the @.
@@ -59,6 +81,27 @@ service cloud.firestore {
         && (!('balances' in data) || isValidBalances(data.balances))
         && (!('pots' in data) || (data.pots is list && data.pots.size() <= 500))
         && data.updatedAt == request.time;
+    }
+
+    // A kid page: the kid's name, and what the parent has written down for the kid (in øre, the
+    // kid's own entries are added to it on the kid's page).
+    function isValidKidPage(data) {
+      return data.keys().hasOnly(['person', 'parentSide', 'updatedAt'])
+        && data.keys().hasAll(['person', 'parentSide', 'updatedAt'])
+        && data.person is string && data.person.size() >= 1 && data.person.size() <= 60
+        && data.parentSide is int && data.parentSide >= -1000000000000 && data.parentSide <= 1000000000000
+        && data.updatedAt == request.time;
+    }
+
+    // What a kid writes: a day, an amount that is NEGATIVE (money used, never money added), a short
+    // note and the moment (milliseconds, see MOST_MOMENT in budget.js).
+    function isValidKidEntry(data) {
+      return data.keys().hasOnly(['date', 'amount', 'note', 'at'])
+        && data.keys().hasAll(['date', 'amount', 'note', 'at'])
+        && data.date is string && data.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && data.amount is int && data.amount < 0 && data.amount >= -1000000000
+        && data.note is string && data.note.size() <= 100
+        && data.at is int && data.at > 0 && data.at <= 100000000000000;
     }
 
     // Only "account" and "savings", each one optional.

@@ -3,6 +3,23 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.11.0 - 2026-10-01
+
+- **The kids' own page.** Under Indstillinger -> Børn each kid can get a **private link**
+  ("Giv Nathan sit eget link"). Opened on the kid's phone it shows only "Nathan har 4.700 kr." and a
+  box to write what he used ("Skriv ind"). No budget, no tabs, and no way to add money.
+  - What the kid writes shows on his card on Overblik (marked "· selv"), counts in "Heraf Nathan",
+    and lowers Opsparing on Fremtid, like what you write yourself.
+  - What you write for the kid (he got money, you changed something) shows on his page by itself.
+  - You can delete one of his posts (the x in the card's Historik) or **take the link away**; what he
+    wrote stays in your numbers. Removing the kid removes the link too.
+  - There is no password: the link is the key (24 random letters and digits). Send it only to the kid.
+    The page remembers the link on the kid's phone, so the home-screen icon opens it too.
+  - Needs an account. Why a link and not a username and password: Firebase's sign-up is switched off
+    for your project (on purpose), and a link needs no setup in Firebase's console.
+- **Firebase rules changed again** (a `kidpages` area): publish the new rules for the links to work.
+- ROADMAP.md is new: ideas for later (add purchases from a bank screenshot, colour themes).
+
 ## 1.10.1 - 2026-10-01
 
 - **Udgifter: the category headings are easier to see.** Each category is now a clear band with a

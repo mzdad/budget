@@ -554,6 +554,67 @@ check("merge: a number taken from the device counts as added", mergedMoney.added
 check("merge: a device number the account lacks is added", budget.mergeDeviceMonth(accountSide, deviceWithMoney).month.balances.account.amount, 3);
 check("merge: no numbers anywhere is fine", budget.mergeDeviceMonth(accountSide, deviceSide).month.balances, {});
 
+// --- The kids' own page (a private link) ---
+const randomA = Array.from({ length: 24 }, (_, i) => i * 10);
+const randomB = Array.from({ length: 24 }, (_, i) => 255 - i);
+const tokenA = budget.makeKidToken(randomA);
+check("kid token: 24 letters and digits", /^[a-z0-9]{24}$/.test(tokenA), true);
+check("kid token: the same random numbers give the same token", budget.makeKidToken(randomA), tokenA);
+check("kid token: other random numbers give another token", budget.makeKidToken(randomB) !== tokenA, true);
+check("kid token: the highest numbers still give letters and digits", /^[a-z0-9]{24}$/.test(budget.makeKidToken(new Array(24).fill(255))), true);
+check("kid link: the page address, the account and the token", budget.kidLink("https://mzdad.github.io/budget/", "mama", tokenA), "https://mzdad.github.io/budget/?kid=mama." + tokenA);
+check("kid link: it reads back", budget.parseKidKey("mama." + tokenA), { parent: "mama", token: tokenA });
+check("kid link: a username with - and _ and digits", budget.parseKidKey("mo_ma-2." + tokenA).parent, "mo_ma-2");
+check("kid link: no dot is not a link", budget.parseKidKey("mama" + tokenA), null);
+check("kid link: a second dot is not a link", budget.parseKidKey("mama." + tokenA + ".x"), null);
+check("kid link: capitals in the token", budget.parseKidKey("mama." + tokenA.toUpperCase()), null);
+check("kid link: a token that is too short", budget.parseKidKey("mama.abc123"), null);
+check("kid link: a username that is too short", budget.parseKidKey("ma." + tokenA), null);
+check("kid link: nothing", budget.parseKidKey(null), null);
+check("kid link: empty text", budget.parseKidKey(""), null);
+
+const parentMonths = { "2026-09": { pots: [
+	{ id: "a", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start", start: true },
+	{ id: "b", date: "2026-09-05", person: "nathan ", amount: -30000, note: "" },
+	{ id: "c", date: "2026-09-06", person: "Emma", amount: 10000, note: "" },
+] }, "2026-10": {} };
+check("parent side: what the parent has written for one kid (capitals and spaces don't matter)", budget.parentSideOf(parentMonths, "Nathan"), 470000);
+check("parent side: another kid", budget.parentSideOf(parentMonths, "emma"), 10000);
+check("parent side: a kid with nothing", budget.parentSideOf(parentMonths, "Ingen"), 0);
+
+check("kid entry: a good one", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: -4500, note: "Is", at: 1790000000000 }), { id: "e1", date: "2026-10-02", amount: -4500, note: "Is", at: 1790000000000 });
+check("kid entry: money added is not allowed", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: 4500, note: "", at: 1 }), null);
+check("kid entry: 0 is not allowed", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: 0, note: "", at: 1 }), null);
+check("kid entry: text as amount", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: "abc", note: "", at: 1 }), null);
+check("kid entry: a bad date", budget.cleanKidEntry("e1", { date: "i dag", amount: -5, note: "", at: 1 }), null);
+check("kid entry: not an object", budget.cleanKidEntry("e1", "x"), null);
+check("kid entry: a long note is cut", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: -5, note: "x".repeat(300), at: 1 }).note.length, 100);
+check("kid entry: a missing moment becomes 0", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: -5, note: "" }).at, 0);
+check("kid entry: a huge amount is capped", budget.cleanKidEntry("e1", { date: "2026-10-02", amount: -1e15, note: "", at: 1 }).amount, -1000000000);
+
+const kidWrote = [
+	{ token: tokenA, person: "Nathan", id: "k1", date: "2026-10-02", amount: -4500, note: "Is", at: at(2, 12) },
+	{ token: tokenA, person: "Nathan", id: "k2", date: "2026-11-03", amount: -1000, note: "", at: at(40, 12) },
+];
+const parentOnly = { "2026-09": parentMonths["2026-09"] };
+const together = budget.withKidEntries(parentOnly, kidWrote);
+check("with kid entries: nothing written gives the same months back", budget.withKidEntries(parentOnly, []), parentOnly);
+check("with kid entries: the real months are not changed", parentOnly["2026-09"].pots.length, 3);
+check("with kid entries: a month the kid wrote in appears", Object.keys(together).sort(), ["2026-09", "2026-10", "2026-11"]);
+check("with kid entries: the entry carries who wrote it", together["2026-10"].pots[0].kidToken, tokenA);
+check("with kid entries: Nathan has his own and what he wrote", budget.potBalances(together).find((p) => p.person === "Nathan").balance, 470000 - 4500 - 1000);
+check("with kid entries: the history says which entries the kid wrote", budget.potBalances(together).find((p) => p.person === "Nathan").entries.filter((e) => e.kidToken).map((e) => e.id), ["k2", "k1"]);
+check("with kid entries: all kids added together", budget.othersTotal(together), 470000 - 5500 + 10000);
+const withMonthKept = budget.withKidEntries({ "2026-10": { pots: [{ id: "p", date: "2026-10-01", person: "Nathan", amount: 100, note: "" }], balances: typed["2026-10"].balances } }, kidWrote.slice(0, 1));
+check("with kid entries: a month the parent already has keeps its numbers and gets the entry", [withMonthKept["2026-10"].pots.length, withMonthKept["2026-10"].balances === typed["2026-10"].balances], [2, true]);
+// Opsparing follows what the kid writes, just like what the parent writes.
+const savingsAndKid = budget.withKidEntries({ "2026-10": { balances: typed["2026-10"].balances, pots: [] } }, [
+	{ token: tokenA, person: "Nathan", id: "k1", date: "2026-10-02", amount: -4500, note: "", at: at(2, 12) },
+	{ token: tokenA, person: "Nathan", id: "k0", date: "2026-10-01", amount: -777, note: "", at: at(1, 9) },
+]);
+check("kid entries move Opsparing when written after the number was typed, and not before", budget.moneyNow(savingsAndKid).savingsNow, 18000000 - 4500);
+check("kid entries: the kid's page total is the parent side plus what the kid wrote", 470000 + kidWrote.reduce((sum, entry) => sum + entry.amount, 0), 470000 - 5500);
+
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
 check("csv amount: zero", budget.csvAmount(0), "0,00");
@@ -665,7 +726,7 @@ function pretendPage() {
 		URL, URLSearchParams, Blob, setTimeout, confirm: window.confirm, alert: window.alert, location: {},
 		FIREBASE_CONFIG: null, USE_FIREBASE_EMULATOR: false,   // accounts off: nothing here talks to Firebase
 	});
-	for (const file of ["budget.js", "password.js", "account.js", "app.js"]) {
+	for (const file of ["budget.js", "password.js", "account.js", "kid.js", "app.js"]) {
 		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
 	}
 	return { context, handlers, saved, view: () => shown, run: (code) => vm.runInContext(code, context) };
@@ -707,6 +768,52 @@ if (page !== null) {
 			check("screens: " + tab + " draws, with " + words.join(" and "), words.every((word) => html.includes(word)), true);
 		});
 	}
+	// Signed in, with a kid page that has a kid's entry on it, and a second kid without a page.
+	page.run("data.months['2026-09'].pots.push({ id: 'p2', date: '2026-09-02', person: 'Emma', amount: 100000, note: 'Start', start: true });");
+	page.run("accountName = 'mama'; accountReady = true; kidPagesLoaded = true; "
+		+ "kidPages = { " + tokenA + ": { person: 'Nathan', parentSide: 470000 } }; "
+		+ "kidEntries = { " + tokenA + ": [{ id: 'k1', date: '2026-09-04', amount: -4500, note: 'Is', at: 1790000000000 }] };");
+	attempt("screens: settings with a kid link draws", () => {
+		page.run("activeTab = 'settings'; render();");
+		const html = page.view();
+		allHtml += html;
+		check("screens: settings shows Nathan's link and a button for Emma", ["Nathans link", "Kopiér link", "Fjern linket", "Giv Emma sit eget link", "?kid=mama." + tokenA].every((word) => html.includes(word)), true);
+	});
+	attempt("screens: Overblik counts what the kid wrote", () => {
+		page.run("activeTab = 'overview'; render();");
+		const html = page.view();
+		allHtml += html;
+		check("screens: Nathan's card has the kid's entry, marked, with its own delete button", html.includes("· selv") && html.includes('data-action="delete-kid-entry"'), true);
+		check("screens: Nathan has what he was given minus what he wrote himself", html.includes(budget.formatKr(500000 - 4500)), true);
+	});
+	attempt("screens: signed out, the kid links are not offered", () => {
+		page.run("accountName = null; render();");
+		check("screens: signed out, the kid links are not offered", page.view().includes("Kopiér link"), false);
+		page.run("accountName = 'mama';");
+	});
+	const kidHtml = (status, extra) => page.run("kidScreenHtml(Object.assign({ status: '" + status + "', person: 'Nathan', message: '', messageIsError: false }, " + JSON.stringify(extra || {}) + "), " + ((extra && extra.total) || 0) + ")");
+	attempt("kid screen: draws what the kid has and a box to write what they used", () => {
+		const html = kidHtml("ready", { total: 450000 });
+		check("kid screen: draws what the kid has and a box to write what they used", ["Nathan har", budget.formatKr(450000), 'id="kid-form"', "Brugte du penge?", "Skriv ind"].every((word) => html.includes(word)), true);
+		check("kid screen: nothing of the budget is on it", ["Indkomst", "Faste udgifter", "Overblik", "Plan", "Indstillinger", "Lønkonto", "Opsparing"].some((word) => html.includes(word)), false);
+		check("kid screen: there is no way to add money (only one button, and it is the form's)", (html.match(/<button/g) || []).length, 2);
+		check("kid screen: a name is shown safely", kidHtml("ready", { person: "<b>x" }).includes("<b>x"), false);
+		check("kid screen: a negative total is marked", kidHtml("ready", { total: -100 }).includes('class="big-number bad"'), true);
+		check("kid screen: a message is shown", kidHtml("ready", { message: "Skrevet" }).includes("Skrevet"), true);
+		check("kid screen: a link that was taken away says so", kidHtml("gone").includes("Linket virker ikke mere"), true);
+		check("kid screen: a failure says so and can be tried again", kidHtml("failed").includes('data-kid-action="retry"'), true);
+		check("kid screen: loading says so", kidHtml("loading").includes("Henter"), true);
+		check("kid screen: the kid's total is what the parent wrote plus what the kid wrote", page.run("kidState.parentSide = 470000; kidState.entries = [{ amount: -4500 }, { amount: -1000 }]; kidTotal()"), 464500);
+		check("kid screen: its buttons have code behind them", ["leave", "retry"].every((name) => fs.readFileSync(__dirname + "/kid.js", "utf8").includes('"' + name + '"')), true);
+	});
+	attempt("kid page: an old link and a remembered link are read", () => {
+		check("kid page: a link is read from the address", page.run("location.search = '?kid=mama." + tokenA + "'; findKidKey()"), { parent: "mama", token: tokenA });
+		check("kid page: a broken link gives the normal page", page.run("location.search = '?kid=nope'; findKidKey()"), null);
+		check("kid page: no link and nothing remembered gives the normal page", page.run("location.search = ''; localStorage.removeItem('budget.kid'); findKidKey()"), null);
+		check("kid page: a link is remembered for the home-screen icon", page.run("location.search = '?kid=mama." + tokenA + "'; findKidKey(); location.search = ''; findKidKey()"), { parent: "mama", token: tokenA });
+		page.run("localStorage.removeItem('budget.kid'); location.search = '';");
+	});
+
 	attempt("screens: the month report draws", () => {
 		page.run("reportScope = { type: 'month', key: '2026-09' }; activeTab = 'report'; render();");
 		allHtml += page.view();

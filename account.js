@@ -51,6 +51,20 @@ function firebaseSettings() {
 	return USE_FIREBASE_EMULATOR ? EMULATOR_CONFIG : FIREBASE_CONFIG;
 }
 
+// A kid's own page needs no sign-in (the link is the key), so this starts only the database.
+async function startKidFirebase() {
+	const [appModule, firestoreModule] = await Promise.all([
+		import(FIREBASE_SDK_BASE + "firebase-app.js"),
+		import(FIREBASE_SDK_BASE + "firebase-firestore.js"),
+	]);
+	const app = appModule.initializeApp(firebaseSettings());
+	const db = firestoreModule.initializeFirestore(app, { localCache: deviceCopy(firestoreModule) });
+	if (USE_FIREBASE_EMULATOR) {
+		firestoreModule.connectFirestoreEmulator(db, "localhost", 8080);
+	}
+	firebase = { auth: null, db, authModule: null, firestoreModule };
+}
+
 // Firestore keeps a copy of the account's months in the device's own database (IndexedDB),
 // so they show up fast, and changes made while offline are sent when the device is online
 // again. Where the device won't keep one (some private browsing), the copy lives in memory only.
@@ -143,6 +157,129 @@ async function saveAccountMonth(username, key, month) {
 	}
 	await setDoc(doc(firebase.db, BUDGET_FOLDER, username, MONTHS_FOLDER, key), fields);
 }
+
+// ---- The kids' own pages ----------------------------------------------------------
+//
+// budgets/<username>/kidpages/<token>           { person, parentSide, updatedAt }  (the parent writes it)
+// budgets/<username>/kidpages/<token>/entries/<id>  { date, amount, note, at }     (the kid adds these)
+// The token is the secret in the kid's link. See "The kids' own page" in budget.js for how the
+// numbers fit together, and firestore.rules for who may do what.
+
+const KIDPAGES_FOLDER = "kidpages";
+const KIDENTRIES_FOLDER = "entries";
+
+// The parent: calls onPages({ <token>: { person, parentSide } }, confirmed) now and whenever a kid
+// page is added, changed or removed. Returns a function that stops listening.
+function watchKidPages(username, onPages, onProblem) {
+	const { collection, onSnapshot } = firebase.firestoreModule;
+	return onSnapshot(
+		collection(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER),
+		(snapshot) => {
+			const pages = {};
+			snapshot.forEach((document) => {
+				const data = document.data();
+				pages[document.id] = { person: String(data.person || ""), parentSide: Number(data.parentSide) || 0 };
+			});
+			onPages(pages, !snapshot.metadata.fromCache);
+		},
+		(error) => onProblem(error),
+	);
+}
+
+// The parent: calls onEntries([{ id, date, amount, note, at }]) for one kid page's entries.
+function watchKidEntries(username, token, onEntries, onProblem) {
+	const { collection, onSnapshot } = firebase.firestoreModule;
+	return onSnapshot(
+		collection(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER, token, KIDENTRIES_FOLDER),
+		(snapshot) => {
+			const entries = [];
+			snapshot.forEach((document) => {
+				const entry = cleanKidEntry(document.id, document.data());
+				if (entry !== null) {
+					entries.push(entry);
+				}
+			});
+			onEntries(entries);
+		},
+		(error) => onProblem(error),
+	);
+}
+
+// The parent: makes a kid page, or updates what the parent has written down for the kid.
+// The whole page is written every time, because firestore.rules wants every field.
+async function saveKidPage(username, token, person, parentSide) {
+	const { doc, setDoc, serverTimestamp } = firebase.firestoreModule;
+	await setDoc(doc(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER, token), {
+		person: person,
+		parentSide: parentSide,
+		updatedAt: serverTimestamp(),
+	});
+}
+
+// The parent: takes the link away. The entries go first, because they cannot be added any more
+// once the page itself is gone, and a page without entries is all that is left to delete.
+async function deleteKidPage(username, token) {
+	const { collection, doc, getDocs, deleteDoc } = firebase.firestoreModule;
+	const entries = await getDocs(collection(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER, token, KIDENTRIES_FOLDER));
+	for (const entry of entries.docs) {
+		await deleteDoc(entry.ref);
+	}
+	await deleteDoc(doc(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER, token));
+}
+
+// The parent: removes one entry the kid wrote (a mistake).
+async function deleteKidEntry(username, token, entryId) {
+	const { doc, deleteDoc } = firebase.firestoreModule;
+	await deleteDoc(doc(firebase.db, BUDGET_FOLDER, username, KIDPAGES_FOLDER, token, KIDENTRIES_FOLDER, entryId));
+}
+
+// The kid: calls onPage({ person, parentSide }) (or onPage(null) when the link no longer works) and
+// onEntries([...]) now and whenever they change. Returns a function that stops listening.
+function watchKidOwnPage(parent, token, onPage, onEntries, onProblem) {
+	const { collection, doc, onSnapshot } = firebase.firestoreModule;
+	const stopPage = onSnapshot(
+		doc(firebase.db, BUDGET_FOLDER, parent, KIDPAGES_FOLDER, token),
+		(snapshot) => {
+			const data = snapshot.exists() ? snapshot.data() : null;
+			// From the device's own copy, "no page" only means "nothing kept here yet": wait for the answer.
+			if (data === null && snapshot.metadata.fromCache) {
+				return;
+			}
+			onPage(data === null ? null : { person: String(data.person || ""), parentSide: Number(data.parentSide) || 0 });
+		},
+		(error) => onProblem(error),
+	);
+	const stopEntries = onSnapshot(
+		collection(firebase.db, BUDGET_FOLDER, parent, KIDPAGES_FOLDER, token, KIDENTRIES_FOLDER),
+		(snapshot) => {
+			const entries = [];
+			snapshot.forEach((document) => {
+				const entry = cleanKidEntry(document.id, document.data());
+				if (entry !== null) {
+					entries.push(entry);
+				}
+			});
+			onEntries(entries);
+		},
+		(error) => onProblem(error),
+	);
+	return () => {
+		stopPage();
+		stopEntries();
+	};
+}
+
+// The kid: writes down what they used (amount is negative). One new document, never changed after.
+async function addKidEntry(parent, token, entryId, entry) {
+	const { doc, setDoc } = firebase.firestoreModule;
+	await setDoc(doc(firebase.db, BUDGET_FOLDER, parent, KIDPAGES_FOLDER, token, KIDENTRIES_FOLDER, entryId), {
+		date: entry.date,
+		amount: entry.amount,
+		note: entry.note,
+		at: entry.at,
+	});
+}
+
 
 // Turns a Firebase error into a message for the user, in Danish.
 function accountProblemText(error) {

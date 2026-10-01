@@ -73,6 +73,14 @@ let justSignedIn = false;                     // true between pressing "Log ind"
 let pendingSaves = 0;                         // changes made here that Firebase hasn't confirmed yet
 let arrived = null;                           // the newest news from the account: { fresh, hasPendingWrites }
 let syncState = "saved";                      // "saved" or "saving"
+// The kids' own pages (a private link for each kid, Indstillinger -> Børn). Only while signed in.
+let kidPages = {};                            // { <token>: { person, parentSide } }: the pages that exist
+let kidEntries = {};                          // { <token>: [...] }: what each kid has written on their page
+let kidEntryWatchers = {};                    // { <token>: a function that stops listening }
+let stopKidPages = null;                      // call it to stop listening for pages
+let kidPagesLoaded = false;                   // true once the account has said which pages exist
+let kidPublished = {};                        // { <token>: the parentSide we sent and have not seen come back }
+let kidLinkNote = "";                         // what the last link button said, shown under the link buttons
 
 let data = accountName === null ? loadData() : { months: {} };   // { months: { "2026-09": {...} } }
 let viewMonth = monthKeyOf(new Date());       // the month on screen
@@ -317,6 +325,7 @@ function render() {
 	}
 	document.getElementById("view").innerHTML = html;
 	showSyncStatus();
+	syncKidPages();
 
 	// The report is opened from Indstillinger (Eksport) and has no tab of its own, so that tab stays lit.
 	const litTab = activeTab === "report" ? "settings" : activeTab;
@@ -619,8 +628,8 @@ function shortDayText(dateKey) {
 // going for FORECAST_MONTHS months (the maths is forecast() in budget.js).
 
 function futureHtml(month) {
-	const now = moneyNow(data.months);
-	const hasKids = potBalances(data.months).length > 0;
+	const now = moneyNow(monthsForMoney());
+	const hasKids = potBalances(monthsForMoney()).length > 0;
 	return `
 		<section class="card">
 			<h2>Penge nu</h2>
@@ -692,7 +701,7 @@ function moneyTotalHtml(month, now) {
 
 // The money Fremtid starts from: the two typed numbers, or else the older single number.
 function startTotalFor(month) {
-	const now = moneyNow(data.months);
+	const now = moneyNow(monthsForMoney());
 	return now.any ? now.total : month.startBalance;
 }
 
@@ -760,11 +769,11 @@ function futureResultsHtml(month) {
 // "Of the pile, Nathan's is 4.200 and yours is 178.000": only when a kid has money in it.
 // Their share is what they have today; it is taken out of the total to show what is yours.
 function othersLineHtml(endTotal) {
-	const people = potBalances(data.months);
+	const people = potBalances(monthsForMoney());
 	if (people.length === 0) {
 		return "";
 	}
-	const others = othersTotal(data.months);
+	const others = othersTotal(monthsForMoney());
 	const who = people.length === 1 ? people[0].person : "børnene";
 	return `<div class="facts"><span>Heraf ${esc(who)} (i dag): <b>${formatKr(others)}</b> · Dine egne: <b>${formatKr(endTotal - others)}</b></span></div>`;
 }
@@ -1254,6 +1263,18 @@ document.addEventListener("click", (event) => {
 		case "delete-person":
 			deletePerson(button.dataset.person);
 			break;
+		case "make-kid-link":
+			makeKidLink(button.dataset.person);
+			break;
+		case "copy-kid-link":
+			copyKidLink(button.dataset.token);
+			break;
+		case "remove-kid-link":
+			removeKidLink(button.dataset.token);
+			break;
+		case "delete-kid-entry":
+			deleteKidsEntry(button.dataset.token, button.dataset.id);
+			break;
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
@@ -1361,9 +1382,254 @@ document.addEventListener("change", (event) => {
 
 let potMessage = null;   // { person, text }: what to say in that person's card, once
 
+// The months with what the kids wrote on their own pages counted in (see withKidEntries in
+// budget.js). Every balance (the cards, "Heraf", Opsparing on Fremtid) is worked out from this;
+// data.months itself only holds what YOU wrote.
+function monthsForMoney() {
+	const all = [];
+	for (const token of Object.keys(kidEntries)) {
+		const page = kidPages[token];
+		if (!page) {
+			continue;
+		}
+		for (const entry of kidEntries[token]) {
+			all.push({ ...entry, token: token, person: page.person });
+		}
+	}
+	return withKidEntries(data.months, all);
+}
+
+
+// ---- Børn: the kids' own pages (a private link for each kid) ------------------------
+//
+// Under Indstillinger -> Børn each kid can get a link. On the kid's phone it shows what the kid has
+// and a box to write what they used - nothing else (kid.js). We listen to the kid's pages here, so
+// what the kid writes shows up on their card, and we keep telling each page how much of the kid's
+// money WE have written down (parentSide), because the kid's page cannot see our budget.
+
+function startKidAccess(username) {
+	kidPagesLoaded = false;
+	stopKidPages = watchKidPages(username, gotKidPages, (error) => {
+		// Not fatal: the budget itself works without the kids' pages (the new rules may not be published yet).
+		console.error(error);
+	});
+}
+
+// Stops listening, and forgets the pages (signing out, or another account).
+function stopKidAccess() {
+	if (stopKidPages) {
+		stopKidPages();
+		stopKidPages = null;
+	}
+	for (const stop of Object.values(kidEntryWatchers)) {
+		stop();
+	}
+	kidEntryWatchers = {};
+	kidPages = {};
+	kidEntries = {};
+	kidPublished = {};
+	kidPagesLoaded = false;
+}
+
+// The list of kid pages arrived or changed: listen to the entries of each new page, stop for one
+// that is gone.
+function gotKidPages(pages) {
+	const before = kidPageShape(kidPages);
+	kidPages = pages;
+	kidPagesLoaded = true;
+	for (const token of Object.keys(pages)) {
+		if (!kidEntryWatchers[token]) {
+			kidEntryWatchers[token] = watchKidEntries(accountName, token, (entries) => gotKidEntries(token, entries), (error) => console.error(error));
+		}
+	}
+	for (const token of Object.keys(kidEntryWatchers)) {
+		if (!pages[token]) {
+			kidEntryWatchers[token]();
+			delete kidEntryWatchers[token];
+			delete kidEntries[token];
+			delete kidPublished[token];
+		}
+	}
+	if (kidPageShape(pages) === before || isTyping()) {
+		// Only a number on a page changed (our own parentSide coming back): nothing on screen shows it.
+		syncKidPages();
+	} else {
+		render();
+	}
+}
+
+// Which pages there are, and whose: the part of the kid pages that the screen shows.
+function kidPageShape(pages) {
+	return Object.keys(pages).sort().map((token) => token + ":" + pages[token].person).join("|");
+}
+
+function gotKidEntries(token, entries) {
+	kidEntries[token] = entries;
+	if (!isTyping()) {
+		render();
+	}
+}
+
+// Keeps each kid page's parentSide right: what you have written down for the kid, without what
+// the kid wrote. Only sends when it is different from what the page says (and not again while we
+// wait to hear it back), so it never loops. Called after every drawing of the screen.
+function syncKidPages() {
+	if (accountName === null || !accountReady || !kidPagesLoaded || firebase === null) {
+		return;
+	}
+	for (const token of Object.keys(kidPages)) {
+		const page = kidPages[token];
+		const wanted = parentSideOf(data.months, page.person);
+		if (page.parentSide === wanted || kidPublished[token] === wanted) {
+			continue;
+		}
+		kidPublished[token] = wanted;
+		saveKidPage(accountName, token, page.person, wanted).catch((error) => {
+			console.error(error);
+			delete kidPublished[token];   // so a later drawing tries again
+			setWarning("Kunne ikke opdatere barnets side: " + accountProblemText(error));
+		});
+	}
+}
+
+function kidTokenOf(person) {
+	const wanted = person.trim().toLowerCase();
+	return Object.keys(kidPages).find((token) => kidPages[token].person.trim().toLowerCase() === wanted) || null;
+}
+
+// The link to give the kid. (On this computer's test copy it carries ?emulator, so the kid's page
+// uses the test copy too.)
+function kidLinkUrl(token) {
+	const link = kidLink(location.origin + location.pathname, accountName, token);
+	return USE_FIREBASE_EMULATOR ? link + "&emulator" : link;
+}
+
+// What goes in the Børn box under the kids: a button to make a kid's link, or the link itself.
+function kidAccessHtml(people) {
+	if (people.length === 0) {
+		return "";
+	}
+	if (accountName === null) {
+		return accountsAvailable() ? '<p class="hint">Vil dine børn selv skrive, hvad de bruger? Log ind på en konto øverst først.</p>' : "";
+	}
+	let html = "";
+	for (const person of people) {
+		const name = esc(person.person);
+		const token = kidTokenOf(person.person);
+		if (token === null) {
+			html += `<div class="kid-access"><button type="button" class="secondary" data-action="make-kid-link" data-person="${name}">Giv ${name} sit eget link</button></div>`;
+			continue;
+		}
+		html += `
+			<div class="kid-access">
+				<label>${name}s link
+					<input readonly value="${esc(kidLinkUrl(token))}" data-kid-token="${esc(token)}" aria-label="${name}s link">
+				</label>
+				<div class="pot-buttons">
+					<button type="button" class="primary" data-action="copy-kid-link" data-token="${esc(token)}">Kopiér link</button>
+					<button type="button" class="secondary" data-action="remove-kid-link" data-token="${esc(token)}">Fjern linket</button>
+				</div>
+			</div>`;
+	}
+	return html + `
+		<p id="kid-link-message" class="message" role="status">${esc(kidLinkNote)}</p>
+		<details class="explain">
+			<summary>Hvad kan barnet med linket?</summary>
+			<p class="hint">Barnet åbner linket og kan se, hvad det har, og skrive, hvad det bruger. Intet andet. Send linket kun til barnet: den, der har linket, kan skrive. Du kan altid slette en post eller fjerne linket. Åbner du selv linket på din egen telefon, så tryk bagefter "Ikke dig? Åbn budgettet".</p>
+		</details>`;
+}
+
+async function makeKidLink(person) {
+	const bytes = new Uint8Array(KID_TOKEN_LENGTH);
+	crypto.getRandomValues(bytes);
+	const token = makeKidToken(bytes);
+	const side = parentSideOf(data.months, person);
+	kidPublished[token] = side;
+	try {
+		kidLinkNote = "Linket er lavet. Tryk Kopiér, og send det til " + person + ".";
+		await saveKidPage(accountName, token, person, side);
+		setMessage("kid-link-message", kidLinkNote, false);
+	} catch (error) {
+		console.error(error);
+		kidLinkNote = "";
+		delete kidPublished[token];
+		setWarning("Kunne ikke lave linket: " + accountProblemText(error));
+	}
+}
+
+function copyKidLink(token) {
+	const url = kidLinkUrl(token);
+	const box = document.querySelector('input[data-kid-token="' + token + '"]');
+	const showByHand = () => {
+		if (box) {
+			box.focus();
+			box.select();
+		}
+		setMessage("kid-link-message", "Hold fingeren på linket og vælg Kopiér.", false);
+	};
+	if (navigator.clipboard && navigator.clipboard.writeText) {
+		navigator.clipboard.writeText(url).then(
+			() => setMessage("kid-link-message", "Linket er kopieret. Send det til barnet.", false),
+			showByHand,
+		);
+	} else {
+		showByHand();
+	}
+}
+
+// Takes the link away. What the kid wrote is first moved into your own numbers, so the kid's
+// balance stays the same; then the page and its entries are deleted online.
+async function removeKidLink(token) {
+	const page = kidPages[token];
+	if (!page) {
+		return;
+	}
+	if (!confirm("Fjern " + page.person + "s link? Så virker det ikke mere. Det, " + page.person + " har skrevet, beholder du.")) {
+		return;
+	}
+	kidLinkNote = "";
+	const written = new Set();
+	for (const monthKey of Object.keys(data.months)) {
+		for (const entry of data.months[monthKey].pots) {
+			written.add(entry.id);
+		}
+	}
+	for (const entry of kidEntries[token] || []) {
+		if (written.has(entry.id)) {
+			continue;
+		}
+		const monthKey = entry.date.slice(0, 7);
+		if (getMonth(monthKey).pots.length >= MOST_POT_ENTRIES_PER_MONTH) {
+			continue;
+		}
+		changeMonth((month) => {
+			month.pots.push({ id: entry.id, date: entry.date, person: page.person, amount: entry.amount, note: entry.note, at: entry.at });
+		}, monthKey);
+	}
+	try {
+		await deleteKidPage(accountName, token);
+	} catch (error) {
+		console.error(error);
+		setWarning("Kunne ikke fjerne linket: " + accountProblemText(error));
+	}
+}
+
+// One entry the kid wrote (a mistake) is taken away.
+async function deleteKidsEntry(token, entryId) {
+	if (!confirm("Slet den post?")) {
+		return;
+	}
+	try {
+		await deleteKidEntry(accountName, token, entryId);
+	} catch (error) {
+		console.error(error);
+		setWarning("Kunne ikke slette: " + accountProblemText(error));
+	}
+}
+
 // One card for each person, on Overblik. Nothing at all until someone has been added (Indstillinger).
 function potCardsHtml() {
-	return potBalances(data.months).map(potCardHtml).join("");
+	return potBalances(monthsForMoney()).map(potCardHtml).join("");
 }
 
 function potCardHtml(person) {
@@ -1373,11 +1639,16 @@ function potCardHtml(person) {
 	let history = "";
 	for (const entry of person.entries.slice(0, 10)) {
 		const text = entry.note !== "" ? entry.note : (entry.amount < 0 ? "Brugte" : "Fik");
+		// An entry the kid wrote on their own page says so, and is deleted online, not from a month.
+		const own = entry.kidToken ? " · selv" : "";
+		const remove = entry.kidToken
+			? `data-action="delete-kid-entry" data-id="${esc(entry.id)}" data-token="${esc(entry.kidToken)}"`
+			: `data-action="delete-pot" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}"`;
 		history += `
 			<li>
-				<div class="what">${esc(text)}<small>${esc(dateText(entry.date).slice(0, 6))}</small></div>
+				<div class="what">${esc(text)}<small>${esc(dateText(entry.date).slice(0, 6) + own)}</small></div>
 				<span class="money ${entry.amount < 0 ? "bad-text" : ""}">${formatKr(entry.amount)}</span>
-				<button class="icon" data-action="delete-pot" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}" aria-label="Slet">✕</button>
+				<button class="icon" ${remove} aria-label="Slet">✕</button>
 			</li>`;
 	}
 
@@ -1434,11 +1705,11 @@ function saveOthersEntry(button, sign) {
 		month.pots.push({ id: newId(), date: date, person: person, amount: sign * ore, note: note, at: Date.now() });
 	});
 
-	const now = potBalances(data.months).find((other) => other.person.toLowerCase() === person.toLowerCase());
+	const now = potBalances(monthsForMoney()).find((other) => other.person.toLowerCase() === person.toLowerCase());
 	const left = formatKr(now.balance);
 	// If you have typed your savings (Fremtid), it moves with the kids: say what it is now.
 	// (formatKr already ends in "kr." so no full stop is added after it.)
-	const money = moneyNow(data.months);
+	const money = moneyNow(monthsForMoney());
 	const savingsText = money.savings ? " Opsparingen er nu " + formatKr(money.savingsNow) : "";
 	potMessage = {
 		person: now.person,
@@ -1472,13 +1743,21 @@ function deletePerson(person) {
 			}, monthKey);
 		}
 	}
+	// The kid's link goes too, with what they wrote on it.
+	const token = kidTokenOf(person);
+	if (token !== null) {
+		deleteKidPage(accountName, token).catch((error) => {
+			console.error(error);
+			setWarning("Kunne ikke fjerne linket: " + accountProblemText(error));
+		});
+	}
 	render();
 }
 
 // The "Børn" box on Indstillinger: a kid's name, and what they have now. Once a kid is added, their card
 // shows up on Overblik.
 function addPersonHtml() {
-	const people = potBalances(data.months);
+	const people = potBalances(monthsForMoney());
 	const form = `
 		<form id="person-form" autocomplete="off">
 			<label>Barnets navn
@@ -1494,6 +1773,7 @@ function addPersonHtml() {
 		<section class="card">
 			<h2>Børn</h2>
 			<p class="hint">Børnenes penge i din bunke.</p>
+			${kidAccessHtml(people)}
 			${people.length > 0 ? `<details class="explain"><summary>+ Tilføj et barn mere</summary>${form}</details>` : form}
 		</section>`;
 }
@@ -1509,7 +1789,7 @@ function addPerson(form) {
 		setMessage("person-message", "Skriv et beløb, fx 5000.", true);
 		return;
 	}
-	if (potBalances(data.months).some((other) => other.person.toLowerCase() === person.toLowerCase())) {
+	if (potBalances(monthsForMoney()).some((other) => other.person.toLowerCase() === person.toLowerCase())) {
 		setMessage("person-message", person + " findes allerede.", true);
 		return;
 	}
@@ -1728,7 +2008,7 @@ function monthToKeepBalancesIn() {
 
 // After a number is typed: the small notes, the total and the results change; the boxes stay.
 function refreshMoneyNow() {
-	const now = moneyNow(data.months);
+	const now = moneyNow(monthsForMoney());
 	const account = document.getElementById("account-note");
 	const savings = document.getElementById("savings-note");
 	const total = document.getElementById("money-total");
@@ -1916,6 +2196,7 @@ function onAccountChange(username) {
 		stopWatching();
 		stopWatching = null;
 	}
+	stopKidAccess();
 	watchedAccount = username;
 	accountName = username;
 	accountReady = false;
@@ -1930,6 +2211,7 @@ function onAccountChange(username) {
 	} else {
 		data = { months: {} };   // until the account's months arrive (onAccountMonths)
 		stopWatching = watchAccountMonths(username, onAccountMonths, onAccountProblem);
+		startKidAccess(username);
 	}
 	render();
 }
@@ -2043,14 +2325,22 @@ function offerToMoveDeviceData() {
 // --- Start ---------------------------------------------------------------------------
 
 document.getElementById("app-version").textContent = "Version " + APP_VERSION;
-checkStorage();
-render();
 
-if (accountsAvailable()) {
-	startAccounts(onAccountChange).catch((error) => {
-		console.error(error);
-		accountFailed = true;
-		setWarning("Kunne ikke starte kontoen. Tjek internettet.");
-		render();
-	});
+// Opened with a kid's link (or on a device that remembers one): then it is only the kid's own page,
+// with nothing of the budget on it (kid.js). Otherwise the normal page.
+const kidLinkKey = accountsAvailable() ? findKidKey() : null;
+if (kidLinkKey !== null) {
+	startKidMode(kidLinkKey);
+} else {
+	checkStorage();
+	render();
+
+	if (accountsAvailable()) {
+		startAccounts(onAccountChange).catch((error) => {
+			console.error(error);
+			accountFailed = true;
+			setWarning("Kunne ikke starte kontoen. Tjek internettet.");
+			render();
+		});
+	}
 }

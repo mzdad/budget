@@ -31,6 +31,12 @@ A small monthly budget page for phone and PC. Danish, kroner.
   "brugte" and "fik" buttons, and a history. All the kids' money sits in your one pile; Fremtid
   shows how much of it is theirs. (In the code a kid is a "person" with entries, stored in the
   month's `pots` field.)
+- **The kids' own page.** Under Indstillinger -> Børn each kid can get a private link. Opened on the
+  kid's phone it shows only what the kid has and a box to write what they used - no budget, no tabs,
+  and no way to add money. What the kid writes shows on their card (marked "selv"), in "Heraf", and
+  lowers Opsparing on Fremtid. You can delete a post or take the link away at any time (what the kid
+  wrote stays in your numbers). It needs an account, and the link is the key: there is no password,
+  so send it only to the kid. (Code: `kid.js`; the numbers: "The kids' own page" in `budget.js`.)
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
   - **No account:** saved on the device only (the browser's localStorage). Nothing is sent
@@ -49,13 +55,15 @@ A small monthly budget page for phone and PC. Danish, kroner.
 | `style.css` | How it looks (colours at the top; dark mode follows the phone) |
 | `budget.js` | The maths: amounts, totals, months, the forecast, the reports and spreadsheet text. No screen code |
 | `app.js` | The screens, taps, saving, and the sign-in flow |
-| `account.js` | Talks to Firebase (sign in, save and watch the months). No screen code |
+| `account.js` | Talks to Firebase (sign in, save and watch the months, and the kids' pages). No screen code |
+| `kid.js` | The kid's own page (opened with a kid's link): what the kid has, and a box to write what they used |
+| `ROADMAP.md` | Ideas for later, not built yet |
 | `password.js` | Decides whether a new password is strong enough |
 | `firebase-config.js` | Which Firebase project to use (`null` until set up) |
 | `firestore.rules` | The privacy rules, published by hand in the Firebase console |
 | `firebase.json` | Settings for Firebase's local test copy |
 | `SETUP-ACCOUNTS.md` | The 10-minute Firebase setup, step by step |
-| `test.js` | Checks for `budget.js`, and that every own file in `index.html` has the same version |
+| `test.js` | Checks for `budget.js`, runs the real page code against a pretend page (every screen draws, every button has code behind it), and that every own file in `index.html` has the same version |
 | `CHANGELOG.md` | What changed in each version |
 | `dev_set_version.py` | Sets the version number in `index.html` (not part of the app) |
 | `dev_rules_checks.js` | Checks for `firestore.rules` against the local test copy |

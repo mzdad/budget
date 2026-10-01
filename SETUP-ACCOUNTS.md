@@ -74,7 +74,9 @@ Until they are published, typing a number there says it could not be saved (ever
 working). It changed again for the **Børn** feature (an optional `pots` field): the kids' numbers
 need the newest rules to save into an account. And again for **Penge nu** on Fremtid (an optional
 `balances` field): the **Lønkonto** and **Opsparing** numbers need the newest rules to save into an
-account.
+account. And once more for **the kids' own page** (a `kidpages` area where a kid who holds the link
+may read their page and add what they used): without the newest rules, "Giv ... sit eget link"
+cannot make a link.
 
 ---
 
