@@ -227,6 +227,31 @@ function nearestMonthWithData(months, key) {
 	return before || after;
 }
 
+// Every month keeps its own list of categories (so an old month never changes by itself), but a
+// category you make should exist in the other months too: you want to write in September's
+// purchases under it after making it in October. Given some category names, this says which saved
+// months lack them: { "2026-09": ["Tøj"], ... } (a month that has them all is left out). Capitals
+// don't matter, and a month never gets more than MOST_CATEGORIES categories.
+function missingCategoryNames(months, names) {
+	const wanted = [];
+	for (const name of names) {
+		const clean = name.trim();
+		if (clean !== "" && !wanted.some((other) => other.toLowerCase() === clean.toLowerCase())) {
+			wanted.push(clean);
+		}
+	}
+	const missing = {};
+	for (const monthKey of Object.keys(months).sort()) {
+		const have = new Set(months[monthKey].categories.map((category) => category.name.trim().toLowerCase()));
+		const room = Math.max(0, MOST_CATEGORIES - months[monthKey].categories.length);
+		const lacking = wanted.filter((name) => !have.has(name.toLowerCase())).slice(0, room);
+		if (lacking.length > 0) {
+			missing[monthKey] = lacking;
+		}
+	}
+	return missing;
+}
+
 // Signing in on a device that already has numbers of its own, for a month the account has too:
 // the account's plan stays as it is, and the purchases that exist only on the device are added.
 // Every purchase has its own id, so one that is already in the account is never added twice.
@@ -1227,7 +1252,7 @@ if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
+		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,

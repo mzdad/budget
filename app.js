@@ -48,7 +48,7 @@ const FIXED_SECTION = {
 const CATEGORY_SECTION = {
 	key: "categories",
 	title: "Kategorier",
-	hint: "Det du bruger penge på, og hvor meget du højst vil bruge på hver.",
+	hint: "Det du bruger penge på, og hvor meget du højst vil bruge på hver. En ny kategori kommer i alle måneder; grænsen gælder kun denne måned.",
 	amountField: "limit",
 	addLabel: "+ Tilføj kategori",
 	mostRows: MOST_CATEGORIES,
@@ -90,6 +90,7 @@ let lastCategoryId = "";                      // so the next purchase starts on 
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
+let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
 
 
 // --- Saving and loading ------------------------------------------------------
@@ -927,6 +928,10 @@ function planSectionHtml(section, month) {
 		html += rowHtml(section, row);
 	}
 	html += `<button class="secondary" data-action="add-row" data-section="${section.key}">${section.addLabel}</button>`;
+	if (section.key === "categories") {
+		html += shareCategoriesHtml(month);
+		shareNote = "";   // said once
+	}
 	return html + "</section>";
 }
 
@@ -1248,6 +1253,12 @@ document.addEventListener("click", (event) => {
 		case "delete-row":
 			deleteRow(button);
 			break;
+		case "share-categories": {
+			const done = shareCategories(getMonth(viewMonth).categories.map((category) => category.name));
+			shareNote = done === 0 ? "Alle måneder har allerede kategorierne." : "Gjort: kategorierne er nu også i " + monthsText(done) + ".";
+			render();
+			break;
+		}
 		case "clear-dates":
 			clearDates(button);
 			break;
@@ -1883,12 +1894,19 @@ function editRow(input) {
 
 	if (field === "name") {
 		const name = input.value.trim().slice(0, MAX_NAME_LENGTH);
+		// A category that was just made (it had no name yet) goes into the other months too.
+		// Renaming an old one only changes this month, as before.
+		const before = findRow(getMonth(viewMonth)[section.key], id);
+		const isNewCategory = section.key === "categories" && before !== undefined && before.name.trim() === "" && name !== "";
 		changeMonth((month) => {
 			const row = findRow(month[section.key], id);
 			if (row) {
 				row.name = name;
 			}
 		});
+		if (isNewCategory) {
+			shareCategories([name]);
+		}
 	} else if (field === "every") {
 		// "Hver måned" (1) is the normal case and stores nothing. Anything else needs a first
 		// payment date to count from: if there is none, this month's first day is filled in, so the
@@ -2041,6 +2059,38 @@ function addRow(section) {
 	if (nameBox) {
 		nameBox.focus();
 	}
+}
+
+// Puts these categories into every saved month that lacks them (with no limit there: the limit is
+// each month's own business). Returns how many months got something.
+function shareCategories(names) {
+	const missing = missingCategoryNames(data.months, names);
+	const monthKeys = Object.keys(missing);
+	for (const monthKey of monthKeys) {
+		changeMonth((month) => {
+			for (const name of missing[monthKey]) {
+				month.categories.push({ id: newId(), name: name, limit: 0 });
+			}
+		}, monthKey);
+	}
+	return monthKeys.length;
+}
+
+// The button under the categories: for categories made before new ones followed you into the other
+// months. Only shown while some month lacks one of this month's categories.
+function shareCategoriesHtml(month) {
+	const names = month.categories.map((category) => category.name);
+	const count = Object.keys(missingCategoryNames(data.months, names)).length;
+	let html = "";
+	if (shareNote !== "") {
+		html += `<p class="message" role="status">${esc(shareNote)}</p>`;
+	}
+	if (count > 0) {
+		html += `
+			<p class="hint">${count === 1 ? "En anden måned mangler" : count + " andre måneder mangler"} nogle af kategorierne her.</p>
+			<button type="button" class="secondary" data-action="share-categories">Brug disse kategorier i alle måneder</button>`;
+	}
+	return html;
 }
 
 function deleteRow(button) {

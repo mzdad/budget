@@ -393,6 +393,23 @@ check("note -> category: a note that had no category gives nothing", budget.cate
 check("note -> category: a category this month lacks gives nothing", budget.categoryIdForNote(history, "Netto", { categories: [{ id: "z", name: "Sundhed", limit: 0 }] }), "");
 check("notes: no months, no suggestions", budget.noteHistory({}), []);
 
+// --- A new category goes into the other months too ---
+const catMonths = {
+	"2026-09": { categories: [{ name: "Mad" }] },
+	"2026-10": { categories: [{ name: "Mad" }, { name: "Tøj" }] },
+	"2026-11": { categories: [{ name: "mad" }, { name: "tøj" }] },
+};
+check("share categories: the month that lacks one is found", budget.missingCategoryNames(catMonths, ["Mad", "Tøj"]), { "2026-09": ["Tøj"] });
+check("share categories: nothing missing gives nothing", budget.missingCategoryNames(catMonths, ["Mad"]), {});
+check("share categories: capitals and spaces don't matter", budget.missingCategoryNames(catMonths, ["  TØJ "]), { "2026-09": ["TØJ"] });
+check("share categories: empty names are ignored", budget.missingCategoryNames(catMonths, ["", "   "]), {});
+check("share categories: the same name twice counts once", budget.missingCategoryNames(catMonths, ["Tøj", "tøj"]), { "2026-09": ["Tøj"] });
+check("share categories: a brand new name goes to every month", Object.keys(budget.missingCategoryNames(catMonths, ["Gaver"])), ["2026-09", "2026-10", "2026-11"]);
+const fullMonths = { "2026-09": { categories: Array.from({ length: 50 }, (_, i) => ({ name: "k" + i })) } };
+check("share categories: a month that already has the most categories gets none", budget.missingCategoryNames(fullMonths, ["Ny"]), {});
+const almostFull = { "2026-09": { categories: Array.from({ length: 49 }, (_, i) => ({ name: "k" + i })) } };
+check("share categories: a month with room for one gets only one", budget.missingCategoryNames(almostFull, ["A", "B"]), { "2026-09": ["A"] });
+
 // --- Other people's money (Nathan's savings) ---
 const potMonthA = { pots: [
 	{ id: "p1", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start" },
@@ -778,6 +795,27 @@ if (page !== null) {
 		const html = page.view();
 		allHtml += html;
 		check("screens: settings shows Nathan's link and a button for Emma", ["Nathans link", "Kopiér link", "Fjern linket", "Giv Emma sit eget link", "?kid=mama." + tokenA].every((word) => html.includes(word)), true);
+	});
+	attempt("screens: a category made in one month is offered to the others", () => {
+		const twoMonths = { months: {
+			"2026-09": { categories: [{ id: "a", name: "Mad", limit: 100000 }] },
+			"2026-10": { categories: [{ id: "a", name: "Mad", limit: 100000 }, { id: "b", name: "Tøj", limit: 0 }] },
+		} };
+		const keep = page.run("JSON.stringify(data)");
+		page.run("accountName = null;");   // on this device only: nothing to send anywhere
+		page.run("data = cleanData(" + JSON.stringify(twoMonths) + "); viewMonth = '2026-10'; activeTab = 'settings'; render();");
+		check("screens: the share button shows while a month lacks a category", page.view().includes("Brug disse kategorier i alle måneder"), true);
+		const click = (action) => page.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+		click("share-categories");
+		check("screens: the button puts the categories in the other month", page.run("data.months['2026-09'].categories.map((category) => category.name)"), ["Mad", "Tøj"]);
+		check("screens: the new category has no limit there", page.run("data.months['2026-09'].categories[1].limit"), 0);
+		check("screens: it says what it did, and the button is gone", page.view().includes("Gjort: kategorierne er nu også i 1 måned") && !page.view().includes("Brug disse kategorier i alle måneder"), true);
+		page.run("render();");
+		check("screens: the note is shown only once", page.view().includes("Gjort:"), false);
+		// Making a category: it is in this month first, then shareCategories puts it in the others.
+		page.run("viewMonth = '2026-10'; data.months['2026-10'].categories.push({ id: 'c', name: 'Gaver', limit: 5000 }); shareCategories(['Gaver']); render();");
+		check("screens: a new category reaches the other month, and the month it was made in keeps its own limit", page.run("[data.months['2026-09'].categories.length, data.months['2026-10'].categories.length, data.months['2026-10'].categories[2].limit]"), [3, 3, 5000]);
+		page.run("data = cleanData(" + keep + "); viewMonth = '2026-09'; activeTab = 'settings'; accountName = 'mama'; render();");
 	});
 	attempt("screens: Overblik counts what the kid wrote", () => {
 		page.run("activeTab = 'overview'; render();");

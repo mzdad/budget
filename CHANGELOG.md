@@ -3,6 +3,17 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.11.1 - 2026-10-01
+
+- **Bug fix: a category you make now goes into the other months too.** Before, each month kept its
+  own list, so a category made in October was missing in September (and the purchases you wanted to
+  write in September had nowhere to go). Now a new category is added to every saved month, with no
+  limit there; the limit you give it counts only in the month you set it in. Renaming or deleting a
+  category still only changes the month you are in.
+- **For categories made before this fix:** under Indstillinger -> Kategorier a button
+  "Brug disse kategorier i alle måneder" shows while some month lacks one of this month's categories.
+  One tap, and they are in every month.
+
 ## 1.11.0 - 2026-10-01
 
 - **The kids' own page.** Under Indstillinger -> Børn each kid can get a **private link**
