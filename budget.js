@@ -10,7 +10,7 @@
 // The texts of the page (t) and the language's locale: in the browser texts.js is loaded before this
 // file; in Node (the tests) this file loads it itself.
 if (typeof module !== "undefined" && typeof require === "function") {
-	var { t, tn, T, getLanguage, uiLocale } = require("./texts.js");
+	var { t, tn, T, getLanguage, uiLocale, textIn } = require("./texts.js");
 }
 
 // The first time the app opens, these rows are there so you are not staring at
@@ -302,6 +302,58 @@ function starterMonth() {
 		balances: {},
 		pots: [],
 	};
+}
+
+// ---- The standard names ----------------------------------------------------------------
+//
+// A new budget starts with standard names (Løn, Husleje, Mad og dagligvarer ...) in the language the page
+// has at that moment. After that they are ordinary names, saved as text, so a budget started in Danish
+// still shows them in Danish when the page is switched to English. These put the standard names into the
+// chosen language, and ONLY those: a name has to be written exactly as a standard name (in either
+// language) and in its own section. A name you wrote or changed yourself is never touched.
+
+const STANDARD_NAMES = [["income", STARTER_INCOME], ["fixed", STARTER_FIXED], ["categories", STARTER_CATEGORIES]];
+
+// What would be renamed in a month, to `language`: a list of { section, index, from, to }.
+function standardNameChanges(month, language) {
+	const changes = [];
+	for (const [section, starters] of STANDARD_NAMES) {
+		(month[section] || []).forEach((row, index) => {
+			for (const danish of starters) {
+				if (row.name === danish || row.name === textIn("en", danish)) {
+					const wanted = textIn(language, danish);
+					if (wanted !== row.name) {
+						changes.push({ section: section, index: index, from: row.name, to: wanted });
+					}
+					break;
+				}
+			}
+		});
+	}
+	return changes;
+}
+
+// A copy of the month with its standard names in `language`, and how many names that changed.
+function renameStandardNames(month, language) {
+	const copy = JSON.parse(JSON.stringify(month));
+	const changes = standardNameChanges(copy, language);
+	for (const change of changes) {
+		copy[change.section][change.index].name = change.to;
+	}
+	return { month: copy, changed: changes.length };
+}
+
+// The names, as they are now (each once), that renaming every saved month to `language` would change.
+function standardNamesToRename(months, language) {
+	const names = [];
+	for (const key of Object.keys(months)) {
+		for (const change of standardNameChanges(months[key], language)) {
+			if (!names.includes(change.from)) {
+				names.push(change.from);
+			}
+		}
+	}
+	return names;
 }
 
 // A new month starts with last month's plan but no spending. The "money I have now" numbers
@@ -1865,7 +1917,7 @@ if (typeof module !== "undefined") {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, decimalMark, csvDelimiter, sumOf,
 		CURRENCIES, DEFAULT_CURRENCY, setCurrency, getCurrency, currencyName, currencyOfPhone, amountLabel, howManyLabel,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
+		newId, starterMonth, renameStandardNames, standardNamesToRename, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,

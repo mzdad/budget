@@ -3,6 +3,20 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.19.0 - 2026-10-01
+
+- **Standard names in the page's language.** A budget that was started in Danish keeps the Danish standard names (Løn, Husleje,
+  Mad og dagligvarer ...) when the page is switched to English, because names are saved as text. New: under the
+  categories on Indstillinger there is a **"Standardnavne / Standard names"** card with one button, **"Rename the standard
+  names to English"** (in Danish: "Omdøb standardnavnene til dansk"). It shows a few of the names it would change, renames
+  them in **every saved month**, and says how many it renamed.
+  - **Only the standard names are touched:** a name must be written exactly as a standard name (income, fixed expenses
+    or categories, each in its own section). Names you wrote or changed yourself (Børn/skole, Andre Faste ...) are
+    never changed, and neither are amounts, spending or notes.
+  - **Only when you tap it**, and only while there is something to rename; it works the other way too (English names back to Danish).
+  - Brand new budgets already start with the standard names in the page's language (English: Food and groceries,
+    Transport, Leisure and fun, Clothes and personal care, Health, Other).
+
 ## 1.18.0 - 2026-10-01
 
 - **English is the standard language, with a language button at the top.** A device that has not chosen a language now

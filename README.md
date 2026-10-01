@@ -57,6 +57,10 @@ A small monthly budget page for phone and PC. Danish, kroner.
   `t("Dansk tekst")`; the Danish text is the key and the English one is in `texts.js`. Numbers, dates and the
   spreadsheet follow the language. Kept per device. A kid's link carries the language of whoever made it. A test
   checks that every text has an English one.
+- **Standard names.** A budget keeps the names it was started with (saved as text). Under the categories on
+  Indstillinger, the "Standardnavne" card has a button that renames the standard names (Løn, Husleje, Mad og
+  dagligvarer ... / Salary, Rent, Food and groceries ...) to the page's language, in every saved month. Names you
+  wrote yourself are never touched.
 - **Colours.** Indstillinger -> Udseende: the normal green (follows the phone's light or dark setting) or
   red and black (always dark). Kept on the device. A theme is one block of colours at the top of
   `style.css` plus one line in `THEMES` in `app.js`.

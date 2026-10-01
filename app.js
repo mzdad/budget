@@ -102,6 +102,7 @@ let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overb
 let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
 let currentTheme = loadTheme();               // which colours the page has (see THEMES)
 let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
+let standardNamesNote = "";                   // what the standard-names button said, shown once
 let bankImport = null;                        // a picture of the bank being read or checked (see "Add purchases from a picture")
 
 
@@ -1069,6 +1070,7 @@ function planHtml(month) {
 function settingsHtml(month) {
 	return accountHtml()
 		+ planSectionHtml(CATEGORY_SECTION, month)
+		+ standardNamesHtml()
 		+ addPersonHtml()
 		+ appearanceHtml()
 		+ languageHtml()
@@ -1570,6 +1572,9 @@ document.addEventListener("click", (event) => {
 			render();
 			break;
 		}
+		case "rename-standard-names":
+			renameAllStandardNames();
+			break;
 		case "clear-dates":
 			clearDates(button);
 			break;
@@ -2718,6 +2723,42 @@ function shareCategoriesHtml(month) {
 			<button type="button" class="secondary" data-action="share-categories">${t("Brug disse kategorier i alle måneder")}</button>`;
 	}
 	return html;
+}
+
+// The "Standardnavne" card under the categories. The standard names (Løn, Husleje, Mad og dagligvarer ...)
+// are saved as text in the language the budget was started in, so after a switch of language some still
+// show in the other one. The button puts them into the page's language. Only shown while there are such
+// names; names you wrote or changed yourself are never touched (renameStandardNames in budget.js).
+function standardNamesHtml() {
+	const language = getLanguage();
+	const names = standardNamesToRename(data.months, language);
+	let html = "";
+	if (standardNamesNote !== "") {
+		html += `<p class="message" role="status">${esc(standardNamesNote)}</p>`;
+		standardNamesNote = "";   // said once
+	}
+	if (names.length > 0) {
+		const examples = names.slice(0, 3).map(esc).join(", ") + (names.length > 3 ? ", …" : "");
+		const button = language === "da" ? t("Omdøb standardnavnene til dansk") : t("Omdøb standardnavnene til engelsk");
+		html += `
+			<p class="hint">${t("Nogle navne er stadig standardnavne på det andet sprog (fx {examples}). Navne, du selv har skrevet eller ændret, bliver ikke rørt.", { examples: examples })}</p>
+			<button type="button" class="secondary" data-action="rename-standard-names">${button}</button>`;
+	}
+	return html === "" ? "" : `<section class="card"><h2>${t("Standardnavne")}</h2>${html}</section>`;
+}
+
+function renameAllStandardNames() {
+	const language = getLanguage();
+	const count = standardNamesToRename(data.months, language).length;
+	for (const key of Object.keys(data.months)) {
+		const result = renameStandardNames(data.months[key], language);
+		if (result.changed > 0) {
+			data.months[key] = result.month;
+			saveMonth(key, result.month);
+		}
+	}
+	standardNamesNote = tn(count, "{n} navn omdøbt.", "{n} navne omdøbt.");
+	render();
 }
 
 function deleteRow(button) {

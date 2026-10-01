@@ -5,6 +5,20 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.19.0
+
+- **2.7 English category names (and the other standard names)** (you sent a screenshot of the English page with Danish
+  categories and said: "make some English categories when English language is on, new of course, you can't change").
+  New budgets already started with English names in English; the ones you saw were saved in Danish earlier, and a saved
+  name is just text. The decisions I made:
+  - **A button, not automatic**: Indstillinger -> "Standard names" -> "Rename the standard names to English" (and back
+    to Danish). Nothing changes until you tap it.
+  - **Only the standard names**, written exactly, in their own section: income (Løn), fixed expenses (Husleje, El og
+    varme ...) and categories (Mad og dagligvarer ...). Anything you wrote or changed is left alone, so "Børn/skole" and
+    "Andre Faste" stay. I included income and fixed expenses because otherwise the Plan screen would still say "Løn" and
+    "Husleje" in English.
+  - Renamed in every saved month, saved to the account like any other change.
+
 ## Done in 1.18.0
 
 - **2.6 English as the standard language, and a language button at the top** (you said: "make sure standard language is

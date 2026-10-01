@@ -59,13 +59,22 @@ function T(text) {
 	return text;
 }
 
+// A text of the code (in Danish) in a chosen language, whatever language the page is in now: the same
+// text when that language is Danish, or when there is no English one.
+function textIn(language, text) {
+	if (language !== SOURCE_LANGUAGE && Object.prototype.hasOwnProperty.call(ENGLISH, text)) {
+		return ENGLISH[text];
+	}
+	return text;
+}
+
 // A text that depends on a number: `one` when it is 1, else `many`. The number is {n} in both.
 function tn(n, one, many, values) {
 	return t(n === 1 ? one : many, { n: n, ...values });
 }
 
 if (typeof module !== "undefined") {
-	module.exports = { LANGUAGES, SOURCE_LANGUAGE, DEFAULT_LANGUAGE, setLanguage, getLanguage, uiLocale, t, tn, T, ENGLISH_TEXTS: () => ENGLISH };
+	module.exports = { LANGUAGES, SOURCE_LANGUAGE, DEFAULT_LANGUAGE, setLanguage, getLanguage, uiLocale, t, tn, T, textIn, ENGLISH_TEXTS: () => ENGLISH };
 }
 
 // The English texts. The key is the Danish text, exactly as it is in the code.
@@ -404,6 +413,12 @@ const ENGLISH = {
 	"Vis kun de vigtigste tal": "Show only the most important numbers",
 	"Vis alle poster": "Show every item",
 	"Skift sprog": "Change language",
+	"Standardnavne": "Standard names",
+	"Nogle navne er stadig standardnavne på det andet sprog (fx {examples}). Navne, du selv har skrevet eller ændret, bliver ikke rørt.": "Some names are still the standard names in the other language (e.g. {examples}). Names you wrote or changed yourself are left alone.",
+	"Omdøb standardnavnene til dansk": "Rename the standard names to Danish",
+	"Omdøb standardnavnene til engelsk": "Rename the standard names to English",
+	"{n} navn omdøbt.": "{n} name renamed.",
+	"{n} navne omdøbt.": "{n} names renamed.",
 	"Log ind eller opret en konto først for at bruge dette.": "Log in or create an account first to use this.",
 	"Log ind eller opret konto": "Log in or create an account",
 	"Tal, der er gemt på denne enhed fra før, er ikke væk: du kan lægge dem ind på kontoen, når du logger ind.": "Numbers saved on this device from before are not gone: you can add them to the account when you log in.",

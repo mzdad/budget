@@ -1400,6 +1400,68 @@ if (page !== null) {
 	});
 }
 
+// --- The standard names: Danish budgets can get English names, and back ---
+texts.setLanguage("da");
+const danishBudget = budget.starterMonth();   // the standard names, in Danish
+danishBudget.income.push({ id: "mine1", name: "Børnepenge", amount: 100000 });
+danishBudget.categories.push({ id: "mine2", name: "Børn/skole", limit: 50000 }, { id: "mine3", name: "Andre Faste (beløb variere)", limit: 50000 });
+danishBudget.categories[0].limit = 400000;
+danishBudget.spending.push({ id: "k1", date: "2026-10-02", categoryId: danishBudget.categories[0].id, amount: 1234, note: "Mad og dagligvarer" });
+const namesOf = (month) => [month.income, month.fixed, month.categories].map((rows) => rows.map((row) => row.name));
+const withoutNames = (month) => JSON.stringify(month).replace(/"name":"[^"]*"/g, "").replace(/"note":"[^"]*"/g, "");
+const toEnglishNames = budget.renameStandardNames(danishBudget, "en");
+check("standard names: Danish ones become English, and what you wrote is left alone", namesOf(toEnglishNames.month), [
+	["Salary", "Børnepenge"],
+	["Rent", "Electricity and heating", "Phone and internet", "Insurance", "Subscriptions"],
+	["Food and groceries", "Transport", "Leisure and fun", "Clothes and personal care", "Health", "Other", "Børn/skole", "Andre Faste (beløb variere)"],
+]);
+check("standard names: it says how many names it changed (Transport is the same in both languages)", toEnglishNames.changed, 11);
+check("standard names: nothing but the names changes (ids, amounts, spending)", withoutNames(toEnglishNames.month) === withoutNames(danishBudget), true);
+check("standard names: a note you wrote is never renamed", toEnglishNames.month.spending[0].note, "Mad og dagligvarer");
+check("standard names: the month you give is not changed", namesOf(danishBudget)[0], ["Løn", "Børnepenge"]);
+check("standard names: and back to Danish gives the first names again", namesOf(budget.renameStandardNames(toEnglishNames.month, "da").month), namesOf(danishBudget));
+check("standard names: doing it twice changes nothing the second time", [budget.renameStandardNames(toEnglishNames.month, "en").changed, budget.renameStandardNames(danishBudget, "da").changed], [0, 0]);
+check("standard names: a name only counts in its own section (Andet as an income stays)", namesOf(budget.renameStandardNames({ income: [{ id: "a", name: "Andet", amount: 1 }, { id: "b", name: "Løn", amount: 1 }], fixed: [{ id: "c", name: "Løn", amount: 1 }], categories: [{ id: "d", name: "Løn", limit: 1 }] }, "en").month), [["Andet", "Salary"], ["Løn"], ["Løn"]]);
+check("standard names: a name has to match exactly (a small letter, an extra word)", namesOf(budget.renameStandardNames({ income: [{ id: "a", name: "løn", amount: 1 }, { id: "b", name: "Løn og bonus", amount: 1 }], fixed: [], categories: [] }, "en").month)[0], ["løn", "Løn og bonus"]);
+check("standard names: the list of what would change has each name once, over all the months", budget.standardNamesToRename({ "2026-09": danishBudget, "2026-10": danishBudget }, "en"), ["Løn", "Husleje", "El og varme", "Telefon og internet", "Forsikring", "Abonnementer", "Mad og dagligvarer", "Fritid og fornøjelser", "Tøj og personlig pleje", "Sundhed", "Andet"]);
+check("standard names: nothing to change when the names are already in the language", [budget.standardNamesToRename({ "2026-09": danishBudget }, "da"), budget.standardNamesToRename({ "2026-09": toEnglishNames.month }, "en"), budget.standardNamesToRename({}, "en")], [[], [], []]);
+check("standard names: the other way, English names offered in Danish", budget.standardNamesToRename({ "2026-09": toEnglishNames.month }, "da").slice(0, 3), ["Salary", "Rent", "Electricity and heating"]);
+
+if (page !== null) {
+	attempt("standard names: the card and the button on Indstillinger", () => {
+		const p = pretendPage({ language: "en" });
+		const click = (action) => p.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+		const months = { "2026-09": danishBudget, "2026-10": JSON.parse(JSON.stringify(danishBudget)) };
+		p.run("accountName = null; data = cleanData(" + JSON.stringify({ months: months }) + "); viewMonth = '2026-10'; activeTab = 'settings'; render();");
+		const card = () => (p.view().match(/<h2>(?:Standard names|Standardnavne)<\/h2>[\s\S]*?<\/section>/) || [""])[0];
+		const categoryNames = (key) => p.run("data.months['" + key + "'].categories.map((row) => row.name).join('|')");
+		const englishCategories = "Food and groceries|Transport|Leisure and fun|Clothes and personal care|Health|Other|Børn/skole|Andre Faste (beløb variere)";
+
+		check("standard names: an English page with Danish standard names offers to rename them, and shows some", [card().includes("Rename the standard names to English"), card().includes("Løn, Husleje, El og varme, …"), p.view().includes("Rename the standard names to Danish")], [true, true, false]);
+		check("standard names: the card says what is left alone", card().includes("Names you wrote or changed yourself are left alone"), true);
+		click("rename-standard-names");
+		check("standard names: the button renames them in every saved month", [categoryNames("2026-09"), categoryNames("2026-10")], [englishCategories, englishCategories]);
+		check("standard names: ...and says so once, with the number of names", [card().includes("11 names renamed."), card().includes("Rename the standard names")], [true, false]);
+		p.run("render();");
+		check("standard names: afterwards the card is gone (nothing left to rename)", card(), "");
+		check("standard names: the new names are saved on the device", [(p.store["budget.v1"] || "").includes("Food and groceries"), (p.store["budget.v1"] || "").includes('"name":"Mad og dagligvarer"')], [true, false]);
+		p.run("activeTab = 'plan'; render();");
+		check("standard names: the plan shows them too", [p.view().includes("Salary"), p.view().includes("Rent")], [true, true]);
+
+		p.run("setLanguage('da'); activeTab = 'settings'; render();");
+		check("standard names: switch the page to Danish and it offers the other way", [card().includes("Omdøb standardnavnene til dansk"), card().includes("Salary, Rent, Electricity and heating, …")], [true, true]);
+		click("rename-standard-names");
+		check("standard names: and they are Danish again, with the Danish note", [p.run("data.months['2026-09'].income.map((row) => row.name).join('|')"), card().includes("11 navne omdøbt.")], ["Løn|Børnepenge", true]);
+		p.run("render();");
+		check("standard names: a page whose names are already in its language shows no card", p.view().includes("Standardnavne"), false);
+		p.run("data = { months: {} }; render();");
+		check("standard names: nor does an empty budget", p.view().includes("Standardnavne"), false);
+		const onlyMine = { ...danishBudget, categories: [{ id: "x", name: "Min egen", limit: 1 }], income: [], fixed: [] };
+		p.run("data = cleanData(" + JSON.stringify({ months: { "2026-09": onlyMine } }) + "); render();");
+		check("standard names: nor does a budget with only names you wrote", p.view().includes("Standardnavne"), false);
+	});
+}
+
 // --- English as the start language, and the language button at the top ---
 if (page !== null) {
 	const english = texts.ENGLISH_TEXTS();
