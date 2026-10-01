@@ -3,6 +3,34 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.13.1 - 2026-10-01
+
+- **Bug fix: "Læs fra skærmbillede" added nothing from a bank list laid out in columns** (you sent a real
+  screenshot: the date in a column at the left, "29" with "SEP" under it, only on the first line of each day;
+  the cost in red at the right with the small black balance under it; a little red tick box at the very end).
+  Read as one block of text the numbers came out wrong (commas lost, the day numbers garbled), so no line had
+  both a date and an amount. Now:
+  - **The page finds the columns and reads each one on its own**, enlarged: the whole picture for the names,
+    the amount column for the numbers (digits only), and the date column for the days. They are put back
+    together by where each word sits on the picture.
+  - **Red is a cost, black is ignored**: the biggest number beside a name is the amount (the balance under it
+    is smaller and left out), and a red number counts as a cost even when its minus sign was not read. A black
+    number without a sign is not a purchase ("ligner penge ind", not chosen).
+  - **The amount column is read twice, at two sizes.** If the two readings of a number disagree, the line
+    says **"tjek beløbet"** (it is still chosen, but look at it). A comma the reader lost ("-14895" in a list
+    where every other amount has two decimals) is put back and says "tjek beløbet" too, so a cost of 148,95
+    can no longer turn into 14.895 kr. unnoticed.
+  - A name line whose amount could not be found at all is listed under "Kunne ikke læses".
+  - "Forretning:" (shop) in front of a name is dropped; the whole picture is read at a bigger size; and the
+    reader is no longer thrown by the tick boxes.
+  - Lines above the first date on the screen (their date was scrolled away) are listed under "Kunne ikke
+    læses" with their amounts, so you can add them by hand.
+- **Tested** on a copy of your screenshot's layout that I drew myself (so, not on your real file): in light and
+  dark, small, enlarged, and as a blurry JPEG, 22 purchases each; the light, dark, small and enlarged ones are
+  exact, and a very blurry JPEG gets flagged lines. Lists with the amount on the same line as the name (like a
+  phone's) read as before. **Please try your screenshot again.** If a line is wrong, save the screenshot in
+  `D:\Claude - Budget\dev-local\` (that folder is never published) and tell me.
+
 ## 1.13.0 - 2026-10-01
 
 - **Colour themes.** Under Indstillinger there is a new box **Udseende** with two looks to choose from:

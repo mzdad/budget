@@ -5,6 +5,17 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.13.1
+
+- **1.2 (first part) Your bank's layout** (you sent a real screenshot and said: "the black numbers need to be
+  ignored, the red numbers are what the stuff cost, it added nothing from this screenshot"). It had the date in a
+  column at the left ("29" over "SEP", on the first line of each day only) and the cost in red at the right with
+  the small black balance under it, and the whole picture read as one block came out wrong. Now the page finds
+  the columns and reads each on its own, enlarged; the biggest number beside a name is the cost (the small one under it, the balance,
+  is left out) and red counts as a cost; the amount column is read at two sizes and a line the two readings
+  disagree on says "tjek beløbet"; a comma the reader lost is put back (and says so). Details in CHANGELOG 1.13.1.
+  Tested on a layout I drew from your screenshot, not on your file: see 1.2 below for what is left.
+
 ## Done in 1.13.0
 
 - **2.1 Colour themes, the first one red and black** (you said: "i would like one thats has kinda red and black in
@@ -64,7 +75,7 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 1.2 | **Teach it your bank's layout**, once it has been tried on a real screenshot. | Every bank lists things differently: a name and its amount on separate lines, a little picture in front of each shop, a total per day, the date on each line or as a heading. It reads pictures I drew myself perfectly, but that proves little. Needs a real example: a screenshot with the account numbers hidden. | M |
+| 1.2 | **Try it on your real screenshot, and on other banks' layouts.** | 1.13.1 reads the layout of the screenshot you sent (as I drew it from the picture: I only had it as a picture in the chat, not as a file). Every bank lists things differently, so more real examples help: save a screenshot in `dev-local\` (never published) and I can test on the file itself. Still open: a list where the date is on every line at the far right, amounts in a colour other than red, and a picture so blurry that numbers are misread the same way twice (the page then shows what it read, but cannot know it is wrong). | M |
 | 1.3 | **Several pictures at once**, and a long list stitched from a scroll. | A month is more than one screen of the bank's list. Today each picture is read on its own, and a very long picture is made smaller until it fits (12 million pixels), which makes the letters smaller. | S-M |
 | 1.4 | **A stronger reader**, or an optional "send to Claude" button. | If the reading proves too weak on real pictures. A Claude model reads much better, but costs a little for every picture, needs a small server to keep the key secret, and the picture of the bank (account numbers!) leaves the phone, so it would be a choice you make for each picture, never the default. | M |
 

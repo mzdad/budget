@@ -42,7 +42,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
   purchases for you to check before anything is saved (untick one, fix a text or an amount, pick a
   category). A shop you have used before gets its usual category. Lines it could not read are listed
   separately, so you can write them in yourself; purchases already written in are not added twice;
-  lines from other months are left out. The picture is never sent anywhere; the reader (Tesseract.js,
+  lines from other months are left out. A list laid out in columns (the date at the left, the amount at the
+  right with the balance in small letters under it) is read column by column, and red numbers are costs. A
+  number the reader may have got wrong says "tjek beløbet". The picture is never sent anywhere; the reader (Tesseract.js,
   about 6 MB) is downloaded from jsdelivr the first time it is used. (Code: `scan.js` reads the
   picture; "Reading the bank's list from a picture" in `budget.js` makes purchases of the text.)
 - **Colours.** Indstillinger -> Udseende: the normal green (follows the phone's light or dark setting) or

@@ -664,13 +664,124 @@ check("bank text: a balance or a total is not a purchase", bankRowsOf("30. sep.\
 check("bank text: a shop's little picture in front is dropped", bankRowsOf("30. sep.\n© Netto -45,00 kr.")[0][1], "Netto");
 check("bank text: no date anywhere -> not read, listed", bankParse("Netto -45,00 kr."), { lines: [], unclear: ["Netto -45,00 kr."] });
 check("bank text: a damaged amount is listed, the rest is read", bankParse("30. sep.\nNetto -45,0O kr.\nBageren -22,00 kr."), {
-	lines: [{ date: "2026-09-30", note: "Bageren", ore: 2200, sign: -1, raw: "Bageren -22,00 kr." }],
+	lines: [{ date: "2026-09-30", note: "Bageren", ore: 2200, sign: -1, raw: "Bageren -22,00 kr.", bare: false, guess: false }],
 	unclear: ["Netto -45,0O kr."],
 });
 check("bank text: an impossible date is listed, and the lines under it get no date", bankParse("31. sep.\nA -10,00 kr."), { lines: [], unclear: ["31. sep.", "A -10,00 kr."] });
 check("bank text: 0 kr is listed", bankParse("30. sep.\nA 0,00 kr.").unclear, ["A 0,00 kr."]);
 check("bank text: empty text", bankParse(""), { lines: [], unclear: [] });
 check("bank text: a time at the front of a line is not part of the note", bankRowsOf("30. sep.\n14:32 Netto -45,00 kr.")[0][1], "Netto");
+
+// A comma the reader lost: amounts of a list that nearly all have two decimals, and one that has none.
+const lostComma = bankParse("30. sep.\nA -64,50\nB -154,99\nC -19,39\nD -14895\nE -2.000,00");
+check("bank text: a comma the reader lost is put back, and the line says so", lostComma.lines.map((line) => [line.note, line.ore, line.guess]), [["A", 6450, false], ["B", 15499, false], ["C", 1939, false], ["D", 14895, true], ["E", 200000, false]]);
+check("bank text: no repair in a short list", bankParse("30. sep.\nA -64,50\nB -14895").lines.map((line) => line.ore), [6450, 1489500]);
+check("bank text: no repair when the amount says kr", bankParse("30. sep.\nA -64,50\nB -154,99\nC -19,39\nD -14895 kr.\nE -88,85").lines.map((line) => line.ore), [6450, 15499, 1939, 1489500, 8885]);
+check("bank text: no repair when few amounts have decimals (a list in whole kroner)", bankParse("30. sep.\nA -64\nB -154\nC -19\nD -148\nE -88,85").lines.map((line) => line.ore), [6400, 15400, 1900, 14800, 8885]);
+check("bank plan: a repaired amount stays chosen but says 'check'", budget.planBankImport("30. sep.\nA -64,50\nB -154,99\nC -19,39\nD -14895\nE -2.000,00", "2026-09", bankToday, { categories: [], spending: [] }, []).rows.map((row) => [row.amount, row.tick, row.why]), [[6450, true, ""], [15499, true, ""], [1939, true, ""], [14895, true, "check"], [200000, true, ""]]);
+
+// --- A bank list laid out in columns (the date at the left, the amount at the right with the balance under it) ---
+// What the three readings of a picture like that look like, made by rule from a table of rows.
+const columnRows = [
+	// [day, name, the amount as the whole page reading saw it (comma lost, no sign), the amount column's reading, red, the balance]
+	[null, "Forretning: PAYPAL", "-6450", "-64,50", true, "8.399,47"],
+	[null, "REMA1000 HASSELAG", "-15499", "-154,99", true, "8.463,97"],
+	["29", "Forretning: PAYPAL *STEAM GAMES", "-1939", "-19,39", true, "8.618,96"],
+	[null, "Forretning: Tesla_DK", "-2000,00", "-2.000,00", true, "8.773,15"],
+	[null, "REMA1000 HASSELAG", "-88,85", "6,90", true, "10.773,15"],   // (the minus not read, but it is red)
+	["28", "BRF SB KOLIND", "-59,00", "-59,00", true, "11.197,43"],
+	[null, "Forretning: PAYPAL *DISCORD", "934", "9,34", false, "11.992,38"],   // (black: money in)
+	["24", "NETTO KOLT 7137", "-18285", "-182,85", true, "12.112,36"],
+];
+function columnReadings() {
+	const word = (text, x0, y0, x1, y1, extra) => Object.assign({ text: text, x0: x0, y0: y0, x1: x1, y1: y1 }, extra || {});
+	const main = [];
+	const amounts = [];
+	const dates = [];
+	columnRows.forEach((row, index) => {
+		const top = 24 + 48 * index;
+		if (row[0] !== null) {
+			main.push(word("æ", 28, top - 9, 50, top + 16));   // the date column, as the whole page reading garbles it
+			dates.push(word(row[0], 28, top - 9, 44, top + 2), word("SEP", 29, top + 8, 50, top + 16));
+		}
+		row[1].split(" ").forEach((piece, at) => main.push(word(piece, 94 + 60 * at, top, 94 + 60 * at + 54, top + 11)));
+		main.push(word(row[2], 765, top - 7, 815, top + 7));
+		main.push(word("0", 831, top - 4, 844, top + 9));   // the little tick box
+		main.push(word(row[5], 768, top + 14, 815, top + 24));
+		amounts.push(word(row[3], 765, top - 7, 815, top + 7, { red: row[4] }));
+		amounts.push(word(row[5], 768, top + 14, 815, top + 24, { red: false }));
+	});
+	return { main: main, amounts: amounts, dates: dates, columns: budget.bankColumns(main, 858) };
+}
+const columnPicture = columnReadings();
+check("columns: the amount column is found where the numbers end, left of the tick boxes", [columnPicture.columns.amounts.x0 < 765, columnPicture.columns.amounts.x1 > 815 && columnPicture.columns.amounts.x1 < 831], [true, true]);
+check("columns: the date column is the space left of the names", [columnPicture.columns.left.x0, columnPicture.columns.left.x1 > 50 && columnPicture.columns.left.x1 < 94], [0, true]);
+const columnText = budget.assembleBankText(columnPicture.main, columnPicture.columns, columnPicture.amounts, columnPicture.dates);
+check("columns: put together, a date on a line of its own, then 'name  amount' for each purchase", columnText.split("\n").map((line) => line.replace(/ {2,}/g, "  |  ")), [
+	"Forretning: PAYPAL  |  -64,50",
+	"REMA1000 HASSELAG  |  -154,99",
+	"29 SEP",
+	"Forretning: PAYPAL *STEAM GAMES  |  -19,39",
+	"Forretning: Tesla_DK  |  -2.000,00",
+	"REMA1000 HASSELAG  |  -6,90",
+	"28 SEP",
+	"BRF SB KOLIND  |  -59,00",
+	"Forretning: PAYPAL *DISCORD  |  9,34",
+	"24 SEP",
+	"NETTO KOLT 7137  |  -182,85",
+]);
+const columnPlan = budget.planBankImport(columnText, "2026-09", bankToday, { categories: [], spending: [] }, []);
+check("columns: the red costs are purchases, the black number is money in, the balances are left out", columnPlan.rows.map((row) => [row.date, row.note, row.amount, row.why]), [
+	["2026-09-29", "PAYPAL *STEAM GAMES", 1939, ""],
+	["2026-09-29", "Tesla DK", 200000, ""],
+	["2026-09-29", "REMA1000 HASSELAG", 690, ""],
+	["2026-09-28", "BRF SB KOLIND", 5900, ""],
+	["2026-09-28", "PAYPAL *DISCORD", 934, "money-in"],
+	["2026-09-24", "NETTO KOLT 7137", 18285, ""],
+]);
+check("columns: the lines above the first date are listed as unclear, with their amounts", columnPlan.unclear, ["Forretning: PAYPAL -64,50", "REMA1000 HASSELAG -154,99"]);
+check("columns: a red number whose minus was lost is still a cost", columnPlan.rows[2].why === "" && columnPlan.rows[2].amount === 690, true);
+
+// the small parts
+const w = (text, x0, y0, x1, y1, extra) => Object.assign({ text: text, x0: x0, y0: y0, x1: x1, y1: y1 }, extra || {});
+check("columns: an ordinary list (amounts after the names, on the same line) has no amount column", budget.bankColumns([w("Netto", 40, 100, 100, 130), w("-45,00", 700, 100, 800, 130), w("Rema", 40, 220, 100, 250), w("-12,50", 650, 220, 780, 250), w("Føtex", 40, 340, 110, 370), w("-99,00", 720, 340, 815, 370)], 1080).amounts, null);
+check("columns: a list with its names at the left edge has no date column", budget.bankColumns([w("Netto", 40, 100, 140, 130), w("Rema1000", 40, 220, 160, 250), w("Føtex", 40, 340, 140, 370)], 1080).left, null);
+check("columns: the biggest number beside a line is the amount, the small one under it is the balance", budget.assembleBankText(
+	[w("Kiosken", 94, 100, 150, 111)], { amounts: { x0: 700, x1: 820 }, left: null },
+	[w("12.345,67", 770, 88, 815, 98), w("45,00", 780, 100, 815, 114)], []), "Kiosken   45,00");
+check("columns: with the same size, a red number wins over a black one", budget.assembleBankText(
+	[w("Kiosken", 94, 100, 150, 111)], { amounts: { x0: 700, x1: 820 }, left: null },
+	[w("20,00", 780, 97, 815, 111, { red: false }), w("45,00", 780, 117, 815, 131, { red: true })], []), "Kiosken   -45,00");
+check("columns: a sign the reader found as a word of its own is joined to its number", budget.assembleBankText(
+	[w("Kiosken", 94, 100, 150, 111)], { amounts: { x0: 700, x1: 820 }, left: null },
+	[w("-", 770, 100, 777, 111), w("45,00", 781, 97, 815, 111)], []), "Kiosken   -45,00");
+check("columns: the stray dot the reader sometimes adds is dropped", budget.assembleBankText(
+	[w("Kiosken", 94, 100, 150, 111)], { amounts: { x0: 700, x1: 820 }, left: null },
+	[w("-249,.45", 770, 97, 815, 111)], []), "Kiosken   -249,45");
+check("columns: a line with no amount, in a list where the others have one, is marked so it is listed", budget.assembleBankText(
+	[w("A", 94, 100, 150, 111), w("B", 94, 148, 150, 159), w("C", 94, 196, 150, 207), w("D", 94, 244, 150, 255)], { amounts: { x0: 700, x1: 820 }, left: null },
+	[w("-1,00", 780, 97, 815, 111), w("-2,00", 780, 145, 815, 159), w("-4,00", 780, 241, 815, 255)], []), "A   -1,00\nB   -2,00\nC [?]\nD   -4,00");
+check("columns: a marked line comes back as unclear, without the mark", bankParse("30. sep.\nA -1,00\nC [?]").unclear, ["C"]);
+check("columns: a month name in the date column ('OKT') and a day with a dot ('3.')", budget.assembleBankText(
+	[w("Kiosken", 94, 100, 150, 111)], { amounts: null, left: { x0: 0, x1: 85 } }, [],
+	[w("3.", 28, 95, 44, 106), w("OKT", 29, 112, 50, 120)]), "3 OKT\nKiosken");
+
+// The amount column is read twice, at two sizes; the two readings are put together.
+const reading = (text, y, extra) => Object.assign({ text: text, x0: 770, y0: y, x1: 815, y1: y + 14 }, extra || {});
+const readTogether = (first, second) => budget.reconcileAmountReadings(first, second).map((word) => [word.text, Boolean(word.unsure), Boolean(word.red)]);
+check("two readings: the same number both times is kept as it is", readTogether([reading("-64,50", 20, { red: true })], [reading("-64,50", 21, { red: true })]), [["-64,50", false, true]]);
+check("two readings: a minus only one of them found is kept", readTogether([reading("64,50", 20, { red: true })], [reading("-64,50", 21, { red: true })]), [["-64,50", false, true]]);
+check("two readings: when only one is a proper amount (a comma and two decimals), that one wins", readTogether([reading("-6450", 20)], [reading("-64,50", 21)]), [["-64,50", false, false]]);
+check("two readings: ...whichever reading it was", readTogether([reading("-64,50", 20)], [reading("-6450", 21)]), [["-64,50", false, false]]);
+check("two readings: two proper amounts that disagree: the first is kept, marked unsure", readTogether([reading("-77,74", 20)], [reading("-17,74", 21)]), [["-77,74", true, false]]);
+check("two readings: two improper readings that disagree: marked unsure", readTogether([reading("-6450", 20)], [reading("-6540", 21)]), [["-6450", true, false]]);
+check("two readings: the lines are matched by where they are, not by order", readTogether(
+	[reading("-1,00", 20), reading("-2,00", 80)], [reading("-2,00", 81), reading("-1,00", 21)]), [["-1,00", false, false], ["-2,00", false, false]]);
+check("two readings: a number only the second reading saw is added; one only the first saw is kept", readTogether(
+	[reading("-1,00", 20)], [reading("-1,00", 21), reading("-3,00", 200)]), [["-1,00", false, false], ["-3,00", false, false]]);
+check("two readings: an unsure amount reaches the text with a ~ and comes out of the plan as 'check', still chosen", budget.planBankImport("30. sep.\n" + budget.assembleBankText(
+	[{ text: "Kiosken", x0: 94, y0: 20, x1: 150, y1: 31 }], { amounts: { x0: 700, x1: 820 }, left: null }, [Object.assign(reading("-77,74", 18), { unsure: true })], []),
+	"2026-09", bankToday, { categories: [], spending: [] }, []).rows.map((row) => [row.amount, row.tick, row.why]), [[7774, true, "check"]]);
 
 // What the page shows for checking: the month's purchases, the other months, and what was unclear.
 const bankMonth = {
@@ -929,6 +1040,9 @@ if (page !== null) {
 		check("screens: the lines found are listed for checking", ["Fundet 3 linjer til september 2026", 'id="bank-form"', "Tilføj 2 udgifter", "findes allerede", "Se billedet"].every((word) => html.includes(word)), true);
 		check("screens: what could not be read is listed, and the other months are mentioned", ["Kunne ikke læses (1)", "Noget -4S,00 kr.", "1 linje er fra andre måneder (august 2026)"].every((word) => html.includes(word)), true);
 		check("screens: a text from the picture is shown safely", html.includes("<b>Gammel</b>"), false);
+		page.run(job({ rows: [{ date: "2026-09-30", note: "Netto", amountText: "148,95", categoryId: "", tick: true, why: "check", touched: false }] }));
+		check("screens: a row whose amount was a guess says 'tjek beløbet' and stays chosen", page.view().includes("tjek beløbet") && page.view().includes("Tilføj 1 udgift"), true);
+		page.run(job({ rows: rows, unclear: ["Noget -4S,00 kr."], elsewhere: [{ date: "2026-08-29", note: "x", amount: 1000 }] }));
 		check("screens: the picture's shop and category show in the row", html.includes('value="Netto"') && html.includes('<option value="m" selected>Mad</option>'), true);
 
 		// Change a category on one line: the other line with the same shop and no category follows.

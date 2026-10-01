@@ -1135,10 +1135,12 @@ function bankDateKey(found, defaultYear) {
 }
 
 // An amount at the END of a line: "-45,00", "−45,00 kr.", "1.250,00", "45.00 DKK", "-45". Returns
-// { ore, sign (-1 for a minus, 1 for a plus, 0 for none), index (where it starts in the text) }, or
-// null. A bare number ("Rema 1000") is not an amount: it needs decimals, "kr", or a sign.
+// { ore, sign (-1 for a minus, 1 for a plus, 0 for none), index (where it starts in the text), bare,
+// unsure } or null. `bare` is true when only a sign vouches for it: no decimals and no "kr".
+// `unsure` is true when the text ends in a "~" (see BANK_UNSURE_AMOUNT). A bare number without a sign
+// ("Rema 1000") is not an amount: it needs decimals, "kr", or a sign.
 function bankAmountAtEnd(text) {
-	const match = /([-−–—+])?\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)\s*(kr\.?|dkk|,-)?[\s›>»]*$/i.exec(text);
+	const match = /([-−–—+])?\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)\s*(kr\.?|dkk|,-)?[\s›>»~]*$/i.exec(text);
 	if (!match) {
 		return null;
 	}
@@ -1162,7 +1164,7 @@ function bankAmountAtEnd(text) {
 	} else if (sign !== "") {
 		signValue = -1;
 	}
-	return { ore: ore, sign: signValue, index: match.index };
+	return { ore: ore, sign: signValue, index: match.index, bare: !withDecimals && !match[3], unsure: text.trimEnd().endsWith(BANK_UNSURE_AMOUNT) };
 }
 
 // The text before the amount, tidied: no time of day, no stray lines and dots from the picture.
@@ -1172,10 +1174,20 @@ function bankNote(text) {
 		.replace(/[|_~•·]/g, " ")
 		.replace(/\s+/g, " ")
 		.replace(/^[^a-zA-ZæøåÆØÅ0-9]+/, "")   // what a shop's little picture in the list looks like to the reader
+		.replace(/^forretning:\s*/i, "")        // some banks write "Forretning:" (shop) in front of every card purchase
 		.replace(/[\s\-–—:,;]+$/g, "")
 		.slice(0, MAX_NOTE_LENGTH)
 		.trim();
 }
+
+// assembleBankText puts this after an amount that the two readings of the amount column did not agree on.
+const BANK_UNSURE_AMOUNT = "~";
+
+// How much of a list must show decimals for a number without them to count as a lost comma.
+const BANK_DECIMALS_SHARE = 0.7;
+
+// assembleBankText puts this at the end of a line whose amount could not be read.
+const BANK_NO_AMOUNT = " [?]";
 
 // Something that looks like an amount was tried but did not read cleanly ("45,0O", "kr").
 const BANK_LOOKS_LIKE_AMOUNT = /\d[.,]\d|\d\s*(kr|dkk)(?![a-zæøå])|[-−–—+]\s*\d/i;
@@ -1195,6 +1207,10 @@ function parseBankText(text, monthKey, today) {
 	for (const rawLine of String(text).split(/\r?\n/)) {
 		const line = rawLine.replace(/\s+/g, " ").trim();
 		if (line === "") {
+			continue;
+		}
+		if (line.endsWith(BANK_NO_AMOUNT.trim())) {
+			unclear.push(line.slice(0, -BANK_NO_AMOUNT.trim().length).trim());
 			continue;
 		}
 		const found = bankDateAtStart(line, today);
@@ -1226,9 +1242,258 @@ function parseBankText(text, monthKey, today) {
 			unclear.push(line);
 			continue;
 		}
-		lines.push({ date: date, note: note, ore: amount.ore, sign: amount.sign, raw: line });
+		lines.push({ date: date, note: note, ore: amount.ore, sign: amount.sign, raw: line, bare: amount.bare, guess: amount.unsure });
+	}
+
+	// A list that shows two decimals on nearly every amount, and one amount of three digits or more
+	// with none ("-14895" among "-148,95", "-64,50"): the reader lost its comma. It is read as if the
+	// comma were in front of the last two digits - and marked `guess`, so the page says "tjek beløbet".
+	const withDecimals = lines.filter((line) => !line.bare).length;
+	if (lines.length >= 4 && withDecimals >= BANK_DECIMALS_SHARE * lines.length) {
+		for (const line of lines) {
+			if (line.bare && line.ore >= 10000 && line.ore % 100 === 0) {
+				line.ore = line.ore / 100;
+				line.guess = true;
+			}
+		}
 	}
 	return { lines: lines, unclear: unclear };
+}
+
+// --- A bank list laid out in columns ---------------------------------------------
+//
+// Some banks (on a computer screen especially) put the date in a column of its own at the left ("29"
+// with "SEP" under it, on the first line of each day only), and the amount in a column at the right
+// with the balance in small letters under it. Read as one block of text, that comes out in a mess:
+// small letters, the commas of the red numbers lost, the day numbers garbled. So scan.js reads the
+// picture in up to three goes - the whole page for the names, the amount column on its own (digits
+// only, enlarged) and the date column on its own - and these functions put them back together by
+// where each word sits on the picture.
+//
+// A word is { text, x0, y0, x1, y1 } in the picture's own pixels; the reader of the amount column
+// also says `red` (the number is written in red). The biggest number of a line is the amount of the
+// purchase, the small one under it is the balance and is left out. A red number is a cost.
+
+const BANK_AMOUNT_WORD = /^[-−–+]?\d[\d.,]*\d$/;
+const BANK_MONTH_WORD = new RegExp("^(" + BANK_MONTH_NAMES + ")\\.?$", "i");
+const BANK_UNSURE_SHARE = 0.75;   // a column list where this share of the lines has an amount: one without is marked
+
+function middleOf(numbers) {
+	const sorted = [...numbers].sort((a, b) => a - b);
+	return sorted.length === 0 ? 0 : sorted[Math.floor(sorted.length / 2)];
+}
+
+// Looks at the words of the whole page and says where the amount column and the date column are:
+// { amounts: { x0, x1 } or null, left: { x0, x1 } or null }, as spans of x across the picture.
+// The amount column is where at least four numbers of three or more digits end at the same place
+// (right-aligned). The date column is the space left of where the names start, when it is wide enough.
+function bankColumns(words, width) {
+	const numbers = words.filter((word) => BANK_AMOUNT_WORD.test(word.text) && word.text.replace(/\D/g, "").length >= 3);
+	let amounts = null;
+	if (numbers.length >= 4) {
+		const edge = middleOf(numbers.map((word) => word.x1));
+		const aligned = numbers.filter((word) => Math.abs(word.x1 - edge) <= 0.04 * width);
+		if (aligned.length >= Math.max(4, numbers.length / 2)) {
+			amounts = {
+				x0: Math.max(0, Math.min(...aligned.map((word) => word.x0)) - 0.02 * width),
+				x1: Math.min(width, Math.max(...aligned.map((word) => word.x1)) + 0.01 * width),
+			};
+		}
+	}
+
+	let left = null;
+	const names = words.filter((word) => /[a-zA-ZæøåÆØÅ]{4,}/.test(word.text));
+	if (names.length >= 3) {
+		const sorted = names.map((word) => word.x0).sort((a, b) => a - b);
+		const nameStart = sorted[Math.floor(sorted.length * 0.2)];
+		if (nameStart >= 0.06 * width) {
+			left = { x0: 0, x1: nameStart - 0.01 * width };
+		}
+	}
+	return { amounts: amounts, left: left };
+}
+
+// Words -> lines of text from top to bottom: [{ text, y, height }] (y is the middle of the line).
+function bankLinesOf(words) {
+	if (words.length === 0) {
+		return [];
+	}
+	const middle = (word) => (word.y0 + word.y1) / 2;
+	const tolerance = 0.6 * middleOf(words.map((word) => word.y1 - word.y0));
+	const groups = [];
+	for (const word of [...words].sort((a, b) => middle(a) - middle(b))) {
+		const group = groups[groups.length - 1];
+		if (group && Math.abs(middle(word) - group.y) <= tolerance) {
+			group.words.push(word);
+			group.y = group.words.reduce((sum, other) => sum + middle(other), 0) / group.words.length;
+		} else {
+			groups.push({ words: [word], y: middle(word) });
+		}
+	}
+	return groups
+		.map((group) => ({
+			text: group.words.sort((a, b) => a.x0 - b.x0).map((word) => word.text).join(" "),
+			y: group.y,
+			height: middleOf(group.words.map((word) => word.y1 - word.y0)),
+		}))
+		.filter((line) => /[a-zA-ZæøåÆØÅ]/.test(line.text));
+}
+
+// A sign the reader found as a word of its own ("-" then "64,50") is joined to its number.
+function bankJoinSigns(words) {
+	const used = new Set();
+	const joined = [];
+	for (const word of words) {
+		if (!/^[-−–+]$/.test(word.text)) {
+			continue;
+		}
+		const height = word.y1 - word.y0;
+		const next = words.find((other) => other !== word && /^\d/.test(other.text) && !used.has(other)
+			&& Math.abs((other.y0 + other.y1) / 2 - (word.y0 + word.y1) / 2) < 0.6 * Math.max(height, other.y1 - other.y0)
+			&& other.x0 - word.x1 >= -2 && other.x0 - word.x1 < 1.5 * Math.max(height, other.y1 - other.y0));
+		if (next) {
+			used.add(word);
+			used.add(next);
+			joined.push({ ...next, text: word.text + next.text, x0: word.x0 });
+		}
+	}
+	return words.filter((word) => !used.has(word)).concat(joined);
+}
+
+// Which of the numbers beside one line is the purchase's amount: the biggest letters; with the same
+// size a red one; then one with a sign; then the upper one. (The balance under it is smaller.)
+function bankPrimaryAmount(candidates) {
+	const height = (word) => word.y1 - word.y0;
+	return [...candidates].sort((a, b) => {
+		if (height(a) > 1.12 * height(b)) {
+			return -1;
+		}
+		if (height(b) > 1.12 * height(a)) {
+			return 1;
+		}
+		if (Boolean(a.red) !== Boolean(b.red)) {
+			return a.red ? -1 : 1;
+		}
+		const signed = (word) => /^[-−–+]/.test(word.text);
+		if (signed(a) !== signed(b)) {
+			return signed(a) ? -1 : 1;
+		}
+		return a.y0 - b.y0;
+	})[0];
+}
+
+// The days in the date column: "29" with "SEP" under it (or beside it) becomes { y, text: "29 SEP" }.
+function bankDateHeadings(words) {
+	const days = words.filter((word) => /^\d{1,2}\.?$/.test(word.text));
+	const months = words.filter((word) => BANK_MONTH_WORD.test(word.text));
+	const taken = new Set();
+	const headings = [];
+	for (const day of days) {
+		const height = day.y1 - day.y0;
+		const middle = (day.y0 + day.y1) / 2;
+		const match = months
+			.filter((month) => !taken.has(month) && month.x0 < day.x1 + 0.5 * height && month.x1 > day.x0 - 0.5 * height
+				&& (month.y0 + month.y1) / 2 - middle > -0.5 * height && (month.y0 + month.y1) / 2 - middle < 3 * height)
+			.sort((a, b) => a.y0 - b.y0)[0]
+			|| months.find((month) => !taken.has(month) && month.x0 >= day.x1 - 2 && month.x0 - day.x1 < 2 * height
+				&& Math.abs((month.y0 + month.y1) / 2 - middle) < 0.6 * height);
+		if (match) {
+			taken.add(match);
+			headings.push({ y: middle, text: day.text.replace(".", "") + " " + match.text.replace(".", "") });
+		}
+	}
+	return headings.sort((a, b) => a.y - b.y);
+}
+
+// The amount column is read twice, at two sizes, because a small comma or a thin minus is sometimes
+// lost at one size and kept at the other. This puts the two readings of every number together: when
+// they say the same, fine (a sign found by only one is kept); when only one of them is a proper
+// amount (digits, a comma, two decimals), that one is taken; when they disagree and both look right
+// (or neither does), the first is kept and marked `unsure`, so the page says "tjek beløbet" instead of
+// quietly picking one. A number only one of the readings saw is kept as it is.
+function reconcileAmountReadings(first, second) {
+	const proper = (text) => /^[-−–+]?\d+(\.\d{3})*,\d{2}$/.test(text);
+	const digitsOf = (text) => text.replace(/[^\d,]/g, "");
+	const taken = new Set();
+	const merged = first.map((word) => {
+		const middle = (word.y0 + word.y1) / 2;
+		const limit = 0.6 * (word.y1 - word.y0);
+		let other = null;
+		for (const candidate of second) {
+			const distance = Math.abs((candidate.y0 + candidate.y1) / 2 - middle);
+			if (!taken.has(candidate) && distance < limit && (other === null || distance < Math.abs((other.y0 + other.y1) / 2 - middle))) {
+				other = candidate;
+			}
+		}
+		if (other === null) {
+			return word;
+		}
+		taken.add(other);
+		const hasSign = (text) => /^[-−–+]/.test(text);
+		if (digitsOf(word.text) === digitsOf(other.text)) {
+			return !hasSign(word.text) && hasSign(other.text) ? { ...word, text: other.text, red: word.red || other.red } : word;
+		}
+		if (proper(other.text) && !proper(word.text)) {
+			return { ...word, text: other.text };
+		}
+		if (proper(word.text) && !proper(other.text)) {
+			return word;
+		}
+		return { ...word, unsure: true };
+	});
+	return merged.concat(second.filter((word) => !taken.has(word) && !first.some((other) => Math.abs((other.y0 + other.y1) / 2 - (word.y0 + word.y1) / 2) < 0.6 * (word.y1 - word.y0))));
+}
+
+// Puts the three readings together as text, one line per purchase: the date as a line of its own
+// before the first purchase of the day, then "name  amount". The words of the whole page that lie in
+// the amount column, or right of it (the little tick boxes), or in the date column, are left out:
+// they were read better on their own.
+function assembleBankText(mainWords, columns, amountWords, dateWords) {
+	const centre = (word) => (word.x0 + word.x1) / 2;
+	const nameWords = mainWords.filter((word) => !(columns.amounts && centre(word) >= columns.amounts.x0)
+		&& !(columns.left && centre(word) <= columns.left.x1));
+	const lines = bankLinesOf(nameWords);
+
+	// The numbers of the amount column go to the line they are nearest to.
+	const gaps = lines.slice(1).map((line, index) => line.y - lines[index].y);
+	const reach = 0.75 * (gaps.length > 0 ? middleOf(gaps) : 100);
+	const beside = lines.map(() => []);
+	for (const word of bankJoinSigns(amountWords)) {
+		const text = word.text.replace(/,\./g, ",").replace(/^[.,]+|[.,]+$/g, "");
+		if (!/\d/.test(text) || lines.length === 0) {
+			continue;
+		}
+		const y = (word.y0 + word.y1) / 2;
+		let nearest = 0;
+		for (let i = 1; i < lines.length; i++) {
+			if (Math.abs(lines[i].y - y) < Math.abs(lines[nearest].y - y)) {
+				nearest = i;
+			}
+		}
+		if (Math.abs(lines[nearest].y - y) <= reach) {
+			beside[nearest].push({ ...word, text: text });
+		}
+	}
+	const withAmount = beside.filter((list) => list.length > 0).length;
+	const markMissing = columns.amounts !== null && lines.length > 0 && withAmount / lines.length >= BANK_UNSURE_SHARE;
+
+	const output = [];
+	const headings = bankDateHeadings(dateWords);
+	let nextHeading = 0;
+	lines.forEach((line, index) => {
+		while (nextHeading < headings.length && headings[nextHeading].y - 0.5 * Math.max(reach / 0.75, 1) <= line.y) {
+			output.push(headings[nextHeading].text);
+			nextHeading += 1;
+		}
+		if (beside[index].length === 0) {
+			output.push(line.text + (markMissing ? BANK_NO_AMOUNT : ""));
+			return;
+		}
+		const amount = bankPrimaryAmount(beside[index]);
+		const sign = amount.red && !/^[-−–+]/.test(amount.text) ? "-" : "";
+		output.push(line.text + "   " + sign + amount.text + (amount.unsure ? BANK_UNSURE_AMOUNT : ""));
+	});
+	return output.join("\n");
 }
 
 // The category of the month `month` for a bank text: the one the same note had before; else the
@@ -1255,7 +1520,8 @@ function bankCategoryId(history, note, month) {
 //   rows:      the purchases for `monthKey`: { date, note, amount, categoryId, tick, why } in the
 //              order of the picture. `tick` is whether it is chosen from the start; `why` says
 //              what a not-chosen one is: "already" (the same purchase is already written in) or
-//              "money-in" (it looks like money coming in, not a purchase).
+//              "money-in" (it looks like money coming in, not a purchase). "check" is a chosen one
+//              whose amount is a guess (a comma the reader lost was put back): look at it.
 //   elsewhere: lines dated in another month: left out (they belong to that month).
 //   unclear:   lines that could not be understood.
 // Which sign means a purchase: if the picture has any minus at all, only minus lines are purchases
@@ -1277,7 +1543,7 @@ function planBankImport(text, monthKey, today, month, history) {
 		const note = earlier ? earlier.note : line.note;   // spelled the way you wrote it before
 
 		const moneyIn = hasMinus ? line.sign !== -1 : line.sign === 1;
-		let why = moneyIn ? "money-in" : "";
+		let why = moneyIn ? "money-in" : (line.guess ? "check" : "");
 		if (!moneyIn) {
 			const same = written.find((item) => !item.used && item.date === line.date && item.amount === line.ore
 				&& (item.note === "" || lower === "" || item.note === lower || item.note.startsWith(lower) || lower.startsWith(item.note)));
@@ -1286,7 +1552,7 @@ function planBankImport(text, monthKey, today, month, history) {
 				why = "already";
 			}
 		}
-		rows.push({ date: line.date, note: note, amount: line.ore, categoryId: bankCategoryId(history, line.note, month), tick: why === "", why: why });
+		rows.push({ date: line.date, note: note, amount: line.ore, categoryId: bankCategoryId(history, line.note, month), tick: why === "" || why === "check", why: why });
 	}
 	return { rows: rows, elsewhere: elsewhere, unclear: parsed.unclear };
 }
@@ -1464,7 +1730,7 @@ if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
+		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,

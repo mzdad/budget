@@ -2010,7 +2010,7 @@ function bankCategoryOptionsHtml(month, chosenId) {
 }
 
 function bankRowHtml(row, index, month) {
-	const notes = { already: "findes allerede", "money-in": "ligner penge ind" };
+	const notes = { already: "findes allerede", "money-in": "ligner penge ind", check: "tjek beløbet" };
 	const why = row.why !== "" ? `<div class="scan-why">${notes[row.why]}</div>` : "";
 	return `
 		<div class="scan-row ${row.tick ? "" : "off"}" data-index="${index}">
