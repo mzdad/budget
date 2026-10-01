@@ -3,6 +3,21 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.13.0 - 2026-10-01
+
+- **Colour themes.** Under Indstillinger there is a new box **Udseende** with two looks to choose from:
+  - **Grøn**: the colours the page has always had. It follows the phone's light or dark setting.
+  - **Rød og sort**: red and black. It is always dark, whatever the phone's setting is. Buttons, links and the
+    lit tab are red. Good news stays green (the big "Tilbage at bruge" number, bars that are fine), a bar
+    that is close to its limit is amber, and one that is over is a lighter red, so red as the page's colour
+    does not look like a warning.
+  - The choice is remembered on this phone or computer only (it is not part of your account). The page
+    puts the colours on before anything is drawn, so it does not flash in the other colours first. The
+    phone's top bar takes the colour too.
+  - The kid's own page uses what the kid's device has chosen (the normal green if nothing).
+  - More themes can be added later: a theme is one block of colours in `style.css` and one line in
+    `THEMES` in `app.js`; a test checks that every theme sets every colour.
+
 ## 1.12.0 - 2026-10-01
 
 - **Add purchases from a screenshot of the bank.** On Overblik, under "Tilføj udgift", there is a new

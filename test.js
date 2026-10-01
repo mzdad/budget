@@ -784,7 +784,9 @@ function pretendPage() {
 		set() { return true; },
 		apply() { return pretend; },
 	});
+	const root = { attributes: {}, setAttribute(name, value) { root.attributes[name] = value; }, removeAttribute(name) { delete root.attributes[name]; } };
 	const document = {
+		documentElement: root,
 		currentScript: { src: "http://localhost/app.js?v=0.0.0" },
 		getElementById(id) {
 			if (id === "view") return { get innerHTML() { return shown; }, set innerHTML(html) { shown = html; } };
@@ -814,7 +816,7 @@ function pretendPage() {
 	for (const file of ["budget.js", "password.js", "account.js", "kid.js", "scan.js", "app.js"]) {
 		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
 	}
-	return { context, handlers, saved, view: () => shown, run: (code) => vm.runInContext(code, context) };
+	return { context, handlers, saved, root, store, view: () => shown, run: (code) => vm.runInContext(code, context) };
 }
 
 function attempt(name, action) {
@@ -884,6 +886,25 @@ if (page !== null) {
 		page.run("viewMonth = '2026-10'; data.months['2026-10'].categories.push({ id: 'c', name: 'Gaver', limit: 5000 }); shareCategories(['Gaver']); render();");
 		check("screens: a new category reaches the other month, and the month it was made in keeps its own limit", page.run("[data.months['2026-09'].categories.length, data.months['2026-10'].categories.length, data.months['2026-10'].categories[2].limit]"), [3, 3, 5000]);
 		page.run("data = cleanData(" + keep + "); viewMonth = '2026-09'; activeTab = 'settings'; accountName = 'mama'; render();");
+	});
+	attempt("screens: choosing the colours", () => {
+		page.run("accountName = null; activeTab = 'settings'; render();");
+		check("screens: Udseende offers both themes, the first one chosen", ["Udseende", "Grøn", "Rød og sort", 'data-theme-id="red"', 'aria-pressed="true"'].every((word) => page.view().includes(word)), true);
+		const click = (action, extra) => page.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: Object.assign({ action: action }, extra) } : null) } }));
+		click("set-theme", { themeId: "red" });
+		check("screens: choosing red puts it on the page", page.root.attributes["data-theme"], "red");
+		check("screens: and remembers it on this device", page.store["budget.theme"], "red");
+		check("screens: the red choice is the lit one", /theme-choice on" data-action="set-theme" data-theme-id="red"/.test(page.view()), true);
+		click("set-theme", { themeId: "green" });
+		check("screens: choosing green takes the attribute off again (the normal colours)", page.root.attributes["data-theme"], undefined);
+		click("set-theme", { themeId: "nonsense" });
+		check("screens: a theme that does not exist gives the normal colours", [page.root.attributes["data-theme"], page.store["budget.theme"]], [undefined, "green"]);
+		page.store["budget.theme"] = "red";
+		check("screens: a saved choice is read back", page.run("loadTheme()"), "red");
+		page.store["budget.theme"] = "<script>";
+		check("screens: a saved choice that is not a theme is ignored", page.run("loadTheme()"), "green");
+		delete page.store["budget.theme"];
+		page.run("accountName = 'mama'; activeTab = 'overview'; render();");
 	});
 	attempt("screens: adding purchases from a picture of the bank", () => {
 		const keep = page.run("JSON.stringify(data)");
@@ -1013,6 +1034,20 @@ if (page !== null) {
 	check("screens: the click handler has cases to check", called.length > 10, true);
 	check("screens: every function the click handler calls exists", called.filter((name) => page.run("typeof " + name) !== "function"), []);
 }
+
+// --- Colour themes: every theme sets every colour ---
+const cssText = fs.readFileSync(__dirname + "/style.css", "utf8");
+const colourNamesIn = (block) => [...block.matchAll(/(--[a-z-]+):/g)].map((match) => match[1]).sort();
+const normalColours = colourNamesIn(cssText.match(/:root \{([^}]*)\}/)[1]);
+const themeBlocks = [...cssText.matchAll(/:root\[data-theme="([a-z]+)"\] \{([^}]*)\}/g)];
+check("themes: style.css has the red theme", themeBlocks.map((match) => match[1]), ["red"]);
+for (const [, name, block] of themeBlocks) {
+	check("themes: " + name + " sets every colour the normal theme has", colourNamesIn(block.replace(/color-scheme:[^;]*;/, "")), normalColours);
+}
+check("themes: the dark-mode colours cover the same names too", colourNamesIn(cssText.match(/@media \(prefers-color-scheme: dark\) \{\s*:root \{([^}]*)\}/)[1]), normalColours);
+const frame = fs.readFileSync(__dirname + "/index.html", "utf8");
+check("themes: index.html puts the saved theme on before the page is drawn", frame.includes('localStorage.getItem("budget.theme")') && frame.indexOf("budget.theme") < frame.indexOf("<body>"), true);
+check("themes: every theme in app.js has colours in style.css", [...fs.readFileSync(__dirname + "/app.js", "utf8").matchAll(/\{ id: "([a-z]+)", name: "[^"]+", note:/g)].map((match) => match[1]).filter((id) => id !== "green"), themeBlocks.map((match) => match[1]));
 
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps

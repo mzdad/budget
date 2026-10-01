@@ -45,6 +45,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
   lines from other months are left out. The picture is never sent anywhere; the reader (Tesseract.js,
   about 6 MB) is downloaded from jsdelivr the first time it is used. (Code: `scan.js` reads the
   picture; "Reading the bank's list from a picture" in `budget.js` makes purchases of the text.)
+- **Colours.** Indstillinger -> Udseende: the normal green (follows the phone's light or dark setting) or
+  red and black (always dark). Kept on the device. A theme is one block of colours at the top of
+  `style.css` plus one line in `THEMES` in `app.js`.
 - **Categories are the same in every month.** A category you make is added to every saved month (with
   no limit there; each month has its own limits). Renaming or deleting one only changes the month you
   are in.

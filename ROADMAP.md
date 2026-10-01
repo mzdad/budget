@@ -5,6 +5,20 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.13.0
+
+- **2.1 Colour themes, the first one red and black** (you said: "i would like one thats has kinda red and black in
+  it", and later "do 2.1-2-3"). Indstillinger -> Udseende: **Grøn** (the page's normal colours, following the phone's
+  light or dark setting) and **Rød og sort**. The decisions I made for the open questions:
+  - Red and black is **always dark**, whatever the phone's setting says: black is the point of it.
+  - Red is the brand colour (buttons, links, the lit tab); good news is still green and a bar close to its limit
+    amber, and "over" a lighter red, so the page's red does not read as a warning. (A separate colour `--good` was
+    added for this; before, the brand colour was also the colour of good news.)
+  - The choice is kept **per device**, not in the account (no change to Firebase's rules); the kid's own page uses the
+    kid's device's choice.
+  - Adding a theme later is one block of colours in `style.css` plus one line in `app.js`; a test checks that every
+    theme sets every colour.
+
 ## Done in 1.12.0
 
 - **1.1 Add purchases from a screenshot of the bank** (you said: "could be cool if I can send a screenshot of my
@@ -58,7 +72,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.1 | **Colour themes**, the first one **red and black** (you asked for it, 1 October 2026). | A way to pick a look for the page, with more than one theme. The colours already live in one place at the top of `style.css` (plus the dark-mode set), so a theme is a new set of those colours and a small "Udseende" choice in Indstillinger that remembers the pick on the device. To decide: should the themes also follow the phone's light/dark setting, and should the kid's own page use the same theme. | M |
 | 2.2 | **Danish / English language switch** in Indstillinger (you asked for it, 1 October 2026). | Today every word on the screens is written straight into the code in Danish, so the work is to gather all the texts in one place, one list per language, and have the screens read from it. To decide: the money stays in kroner either way (only the words and the month and day names change); whether the kid's own page follows the language of the device it is opened on; which language a new device starts in (the phone's own setting is the natural pick). | L |
 | 2.3 | **Choose the currency**: euro, US dollar, British pound and more (you asked for it, 1 October 2026). | Today every amount is shown as kroner by one function (`formatKr` in `budget.js`), and the amounts are stored as whole hundredths ("øre"), which works for any currency that has hundredths, so the stored numbers would not change. To decide: **no conversion, only the label** (1.000 kr. would become 1.000 €, nothing recalculated; real exchange rates are a different, bigger feature); whether the choice is kept per account or per device; Danish number style (1.250,00 kr.) or the currency's own country's; and the things that say "kr" in words or files: the spreadsheet export, the kid's page and the bank-picture reader (it must then understand €, $ and £). Goes well together with 2.2. | M |
 

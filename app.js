@@ -19,6 +19,15 @@ const CATEGORIES_OPEN_KEY = "budget.categoriesOpen";
 // chose for each row ({ rowId: true or false }), kept on this device.
 const DATES_OPEN_KEY = "budget.datesOpen";
 const MOST_REMEMBERED_ROWS = 300;
+// Which colours the page has (Indstillinger -> Udseende), kept on this device.
+const THEME_KEY = "budget.theme";
+// A theme is a set of colours in style.css, switched on by data-theme="..." on <html>. The first one,
+// "green", is the page's normal colours (and has no attribute); it follows the phone's light or dark
+// setting. "red" is red and black, always dark. `bar` is the colour of the phone's top bar.
+const THEMES = [
+	{ id: "green", name: "Grøn", note: "Følger telefonens lyse eller mørke udseende", color: "#1f7a5a", back: "#111614", bar: "#1f7a5a" },
+	{ id: "red", name: "Rød og sort", note: "Altid mørk", color: "#ff4d4f", back: "#0b0b0c", bar: "#0b0b0c" },
+];
 // Remembers which account was signed in, so that at the next start the page waits for that
 // account's numbers instead of showing (and letting you edit) this device's own copy.
 const SIGNED_IN_HINT_KEY = "budget.signedInAs";
@@ -90,6 +99,7 @@ let lastCategoryId = "";                      // so the next purchase starts on 
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
+let currentTheme = loadTheme();               // which colours the page has (see THEMES)
 let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
 let bankImport = null;                        // a picture of the bank being read or checked (see "Add purchases from a picture")
 
@@ -182,6 +192,40 @@ function rememberDatesOpen(rowId, isOpen) {
 	} catch (error) {
 		// Only a convenience; the page works without it.
 	}
+}
+
+// ---- The look: colour themes (the list is THEMES, at the top) ---------------------------
+
+function loadTheme() {
+	try {
+		const saved = localStorage.getItem(THEME_KEY);
+		return THEMES.some((theme) => theme.id === saved) ? saved : THEMES[0].id;
+	} catch (error) {
+		return THEMES[0].id;
+	}
+}
+
+function saveTheme(id) {
+	try {
+		localStorage.setItem(THEME_KEY, id);
+	} catch (error) {
+		// Only a convenience; the page works without it.
+	}
+}
+
+// Puts the theme on the page (and the phone's top bar).
+function applyTheme(id) {
+	const theme = THEMES.find((other) => other.id === id) || THEMES[0];
+	if (theme.id === THEMES[0].id) {
+		document.documentElement.removeAttribute("data-theme");
+	} else {
+		document.documentElement.setAttribute("data-theme", theme.id);
+	}
+	const bar = document.querySelector('meta[name="theme-color"]');
+	if (bar) {
+		bar.setAttribute("content", theme.bar);
+	}
+	currentTheme = theme.id;
 }
 
 function loadSignedInHint() {
@@ -849,8 +893,28 @@ function settingsHtml(month) {
 	return accountHtml()
 		+ planSectionHtml(CATEGORY_SECTION, month)
 		+ addPersonHtml()
+		+ appearanceHtml()
 		+ exportHtml()
 		+ backupHtml();
+}
+
+// The "Udseende" box on Indstillinger: pick the colours.
+function appearanceHtml() {
+	let choices = "";
+	for (const theme of THEMES) {
+		const isOn = theme.id === currentTheme;
+		choices += `
+			<button type="button" class="theme-choice${isOn ? " on" : ""}" data-action="set-theme" data-theme-id="${theme.id}" aria-pressed="${isOn}">
+				<span class="theme-swatch" style="background:${theme.back};border-color:${theme.color}"><i style="background:${theme.color}"></i></span>
+				<span class="theme-name">${esc(theme.name)}<small>${esc(theme.note)}</small></span>
+			</button>`;
+	}
+	return `
+		<section class="card">
+			<h2>Udseende</h2>
+			<p class="hint">Vælg farverne. Valget gælder kun denne telefon eller computer.</p>
+			<div class="theme-choices">${choices}</div>
+		</section>`;
 }
 
 // The "Eksport" box on Indstillinger: pick a month or a year and open its report.
@@ -1297,6 +1361,11 @@ document.addEventListener("click", (event) => {
 			break;
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
+			break;
+		case "set-theme":
+			applyTheme(button.dataset.themeId);
+			saveTheme(currentTheme);
+			render();
 			break;
 		case "close-bank-import":
 			closeBankImport();
@@ -2671,6 +2740,7 @@ function offerToMoveDeviceData() {
 // --- Start ---------------------------------------------------------------------------
 
 document.getElementById("app-version").textContent = "Version " + APP_VERSION;
+applyTheme(currentTheme);   // (index.html has already put the colours on; this also sets the phone's top bar)
 
 // Opened with a kid's link (or on a device that remembers one): then it is only the kid's own page,
 // with nothing of the budget on it (kid.js). Otherwise the normal page.

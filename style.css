@@ -9,6 +9,7 @@
 	--line: #dde3df;
 	--accent: #1f7a5a;
 	--accent-text: #ffffff;
+	--good: #1f7a5a;
 	--warn: #b7791f;
 	--bad: #c0392b;
 	--bar-track: #e4e9e6;
@@ -25,11 +26,33 @@
 		--line: #2c3833;
 		--accent: #3fb98a;
 		--accent-text: #0d1a14;
+		--good: #3fb98a;
 		--warn: #e0a94a;
 		--bad: #ef7b6d;
 		--bar-track: #2c3833;
 		--field: #141b18;
 	}
+}
+
+/* Red and black (Indstillinger -> Udseende). Always dark, whatever the phone's own setting says. The
+   brand colour (--accent: buttons, links, the lit tab) is red; "good" stays green and "bad" a lighter
+   red, so good and bad news still look different. Every colour above must be set here too (a test
+   checks it). The page gets data-theme="red" on <html> from app.js (and from a small script in
+   index.html, so there is no flash of the other colours). */
+:root[data-theme="red"] {
+	color-scheme: dark;
+	--bg: #0b0b0c;
+	--card: #171719;
+	--text: #f3f3f4;
+	--muted: #a5a5ad;
+	--line: #303034;
+	--accent: #ff4d4f;
+	--accent-text: #0b0b0c;
+	--good: #52d19b;
+	--warn: #f2a93b;
+	--bad: #ff8f8f;
+	--bar-track: #2a2a2e;
+	--field: #101011;
 }
 
 * {
@@ -195,7 +218,7 @@ main {
 }
 
 .big-number.good {
-	color: var(--accent);
+	color: var(--good);
 }
 
 .big-number.bad {
@@ -297,7 +320,7 @@ label.button.secondary {
 	min-height: 1.4em;
 	margin-top: 8px;
 	font-size: 0.9rem;
-	color: var(--accent);
+	color: var(--good);
 }
 
 .message.bad {
@@ -334,7 +357,7 @@ label.button.secondary {
 .bar .fill {
 	height: 100%;
 	border-radius: 5px;
-	background: var(--accent);
+	background: var(--good);
 }
 
 .bar .fill.close {
@@ -632,7 +655,7 @@ label.button.secondary {
 }
 
 .sum-line.good {
-	color: var(--accent);
+	color: var(--good);
 }
 
 /* ---- Tab bar at the bottom ---- */
@@ -784,7 +807,7 @@ td.bad,
 
 td.good,
 .good-text {
-	color: var(--accent);
+	color: var(--good);
 }
 
 .report h2 {
@@ -956,4 +979,58 @@ progress {
 button:disabled {
 	opacity: 0.5;
 	cursor: default;
+}
+
+/* ---- Indstillinger -> Udseende: the choice of colours ---- */
+
+.theme-choices {
+	display: grid;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.theme-choice {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 56px;
+	padding: 8px 12px;
+	border: 2px solid var(--line);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.theme-choice.on {
+	border-color: var(--accent);
+}
+
+.theme-swatch {
+	flex: 0 0 36px;
+	height: 36px;
+	border: 3px solid;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+}
+
+.theme-swatch i {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+}
+
+.theme-name {
+	display: flex;
+	flex-direction: column;
+	font-weight: 600;
+}
+
+.theme-name small {
+	font-weight: 400;
+	color: var(--muted);
 }
