@@ -5,6 +5,17 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.16.0
+
+- **3.5 A short report: only the important numbers** (you said: "make it so the report is possible to only print the
+  important numbers, not all the posts"). A button on the report screen, "Vis kun de vigtigste tal" / "Vis alle poster".
+  The decisions I made:
+  - **Kept:** for a month the overview and the categories; for a year month by month and spent per category.
+    **Left out:** each income, each fixed expense and every purchase.
+  - It applies to the screen and the printout (PDF); **the spreadsheet always has everything**, since a spreadsheet is
+    where you want the details.
+  - It is a button you tap each time, not a remembered setting: the report starts with everything.
+
 ## Done in 1.15.0
 
 - **2.3 Choose the currency: euro, dollar, pound and more** (you said: "Later, I want it possible to change currency, for

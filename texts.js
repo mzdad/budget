@@ -413,4 +413,6 @@ const ENGLISH = {
 	"Hvor mange {currency}?": "How many {currency}?",
 	"Vælg valutaen. Kun måden, beløbene vises på, ændres: tallene regnes ikke om. Valget gælder kun denne telefon eller computer.": "Choose the currency. Only the way the amounts are shown changes: the numbers are not converted. The choice only applies to this phone or computer.",
 	"Valuta": "Currency",
+	"Vis kun de vigtigste tal": "Show only the most important numbers",
+	"Vis alle poster": "Show every item",
 };

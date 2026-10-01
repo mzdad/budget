@@ -1129,6 +1129,28 @@ if (page !== null) {
 		page.run("downloadReportCsv();");
 		check("screens: the report's spreadsheet is offered for download", page.saved, ["budget-2026-09.csv"]);
 	});
+	attempt("screens: the report can show only the important numbers", () => {
+		const click = (action) => page.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+		const hasAll = (html, words) => words.every((word) => html.includes(word));
+		const singleItems = ["Løn", "Børnepenge", "Husleje", "Udgifter", 'class="purchases"'];
+		const totals = ["Oversigt", "Til rådighed", "Kategorier", "Mad", "Fritid", "Tilbage"];
+
+		page.run("reportShort = false; reportScope = { type: 'month', key: '2026-09' }; activeTab = 'report'; render();");
+		check("short report: the month report starts with everything", [hasAll(page.view(), singleItems), hasAll(page.view(), totals), page.view().includes("Vis kun de vigtigste tal")], [true, true, true]);
+		click("toggle-report-short");
+		check("short report: the button leaves out the single items of the month, and keeps the totals", [singleItems.some((word) => page.view().includes(word) && !totals.includes(word)), hasAll(page.view(), totals)], [false, true]);
+		check("short report: the button now offers everything again", [page.view().includes("Vis alle poster"), page.view().includes("Vis kun de vigtigste tal")], [true, false]);
+		check("short report: the choice does not touch the spreadsheet", (() => { page.saved.length = 0; page.run("downloadReportCsv();"); return page.saved; })(), ["budget-2026-09.csv"]);
+		page.run("reportScope = { type: 'year', key: '2026' }; render();");
+		check("short report: the year report keeps the months and the categories, and leaves out the purchases", [hasAll(page.view(), ["Måned for måned", "Brugt pr. kategori"]), page.view().includes('class="purchases"'), page.view().includes("Udgifter")], [true, false, false]);
+		click("toggle-report-short");
+		check("short report: tapping again brings everything back", [hasAll(page.view(), ["Måned for måned", "Brugt pr. kategori", "Udgifter"]), page.run("reportShort")], [true, false]);
+		page.run("setLanguage('en'); reportShort = true; render();");
+		check("short report: the buttons speak English too", page.view().includes("Show every item"), true);
+		page.run("reportShort = false; render();");
+		check("short report: and the other one", page.view().includes("Show only the most important numbers"), true);
+		page.run("setLanguage('da'); reportShort = false; reportScope = { type: 'month', key: '2026-09' }; render();");
+	});
 	attempt("screens: the backup file is offered for download", () => {
 		page.saved.length = 0;
 		page.run("exportBackup();");

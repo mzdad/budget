@@ -95,6 +95,7 @@ let data = accountName === null ? loadData() : { months: {} };   // { months: { 
 let viewMonth = monthKeyOf(new Date());       // the month on screen
 let activeTab = "overview";                   // "overview", "expenses", "future", "plan", "settings" or "report"
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
+let reportShort = false;                      // true: the report leaves out the single items and keeps the totals
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
@@ -1327,7 +1328,9 @@ function purchasesHtml(spending) {
 	})), "purchases");
 }
 
-function monthReportHtml(report) {
+// With "short" the report keeps the numbers that add up (the overview and the categories) and
+// leaves out every single income, fixed expense and purchase.
+function monthReportHtml(report, short) {
 	const s = report.summary;
 	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || t("(uden navn)")), formatKr(row.amount)] }));
 
@@ -1340,8 +1343,10 @@ function monthReportHtml(report) {
 		{ cells: [t("Brugt"), formatKr(s.spent)] },
 		{ cells: [t("Tilbage"), amountCell(s.left)], total: true },
 	]);
-	html += "<h3>" + t("Indkomst") + "</h3>" + tableHtml([], nameRows(report.income));
-	html += "<h3>" + t("Faste udgifter") + "</h3>" + tableHtml([], nameRows(report.fixed));
+	if (!short) {
+		html += "<h3>" + t("Indkomst") + "</h3>" + tableHtml([], nameRows(report.income));
+		html += "<h3>" + t("Faste udgifter") + "</h3>" + tableHtml([], nameRows(report.fixed));
+	}
 
 	const categoryRows = report.categories.map((c) => ({
 		cells: [esc(c.name || t("(uden navn)")), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
@@ -1350,11 +1355,13 @@ function monthReportHtml(report) {
 		categoryRows.push({ cells: [t("Uden kategori"), "", formatKr(report.otherSpent), ""] });
 	}
 	html += "<h3>" + t("Kategorier") + "</h3>" + tableHtml([t("Kategori"), t("Grænse"), t("Brugt"), t("Tilbage")], categoryRows);
-	html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
+	if (!short) {
+		html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
+	}
 	return html;
 }
 
-function yearReportHtml(report) {
+function yearReportHtml(report, short) {
 	if (report.rows.length === 0) {
 		return `<h2>${t("Budget: {label}", { label: esc(report.year) })}</h2><p class="hint">${t("Der er ingen gemte måneder i {year}.", { year: esc(report.year) })}</p>`;
 	}
@@ -1374,20 +1381,25 @@ function yearReportHtml(report) {
 	html += "<h3>" + t("Måned for måned") + "</h3>" + tableHtml([t("Måned"), t("Indkomst"), t("Faste"), t("Opsparing"), t("Til rådighed"), t("Brugt"), t("Tilbage")], monthRows);
 	html += '<p class="hint no-print">' + t("Stryg tabellen til siden for at se alle kolonner.") + "</p>";
 	html += "<h3>" + t("Brugt pr. kategori") + "</h3>" + tableHtml([t("Kategori"), t("I alt")], categoryRows);
-	html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
+	if (!short) {
+		html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
+	}
 	return html;
 }
 
 function reportHtml() {
 	let body = "";
 	if (reportScope.type === "month") {
-		body = monthReportHtml(monthReport(getMonth(reportScope.key), reportScope.key));
+		body = monthReportHtml(monthReport(getMonth(reportScope.key), reportScope.key), reportShort);
 	} else {
-		body = yearReportHtml(yearReport(data.months, reportScope.key));
+		body = yearReportHtml(yearReport(data.months, reportScope.key), reportShort);
 	}
+	// The button says what a tap will do, so it is the other way round from what is shown now.
+	const shortButton = reportShort ? t("Vis alle poster") : t("Vis kun de vigtigste tal");
 	return `
 		<section class="card no-print">
 			<div class="buttons">
+				<button class="secondary" data-action="toggle-report-short">${shortButton}</button>
 				<button class="primary" data-action="download-csv">${t("Hent til Excel (.csv)")}</button>
 				<button class="secondary" data-action="print-report">${t("Udskriv eller gem som PDF")}</button>
 				<button class="secondary" data-action="close-report">${t("‹ Tilbage til Indstillinger")}</button>
@@ -1531,6 +1543,10 @@ document.addEventListener("click", (event) => {
 			activeTab = "settings";
 			render();
 			window.scrollTo(0, 0);
+			break;
+		case "toggle-report-short":
+			reportShort = !reportShort;
+			render();
 			break;
 		case "download-csv":
 			downloadReportCsv();

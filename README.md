@@ -26,7 +26,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
   works: your account, the **categories** (food, transport, fun ... and how much you want to
   spend on each), the kids, the export and the backup.
 - **Eksport** (in Indstillinger) - a report for one month or a whole year, on screen. Download it for
-  Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF.
+  Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF. The button
+  "Vis kun de vigtigste tal" makes it a short report (the totals, not every single post); the
+  spreadsheet always has everything.
 - **Børn** - add your kids under Indstillinger, and each gets a card on Overblik with what they have,
   "brugte" and "fik" buttons, and a history. All the kids' money sits in your one pile; Fremtid
   shows how much of it is theirs. (In the code a kid is a "person" with entries, stored in the

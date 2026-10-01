@@ -3,6 +3,17 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.16.0 - 2026-10-01
+
+- **A short report: only the important numbers.** On the report screen (Indstillinger -> Eksport -> Åbn rapport) there is a new
+  button **"Vis kun de vigtigste tal"**. It leaves out every single post and keeps the numbers that add up; tap
+  **"Vis alle poster"** to bring them back.
+  - **Month:** the overview (income, fixed, savings, available, spent, left) and the categories (limit, spent, left). Left out: each
+    income, each fixed expense and every purchase.
+  - **Year:** month by month and spent per category. Left out: every purchase.
+  - It applies to the screen and to what you print or save as PDF. The spreadsheet (.csv) always has everything.
+  - The choice is not remembered: the report starts with everything each time the page is opened.
+
 ## 1.15.0 - 2026-10-01
 
 - **Choose the currency.** Under Indstillinger there is a new box **"Valuta · Currency"**: kroner (DKK), euro, US dollar, British
