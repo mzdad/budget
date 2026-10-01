@@ -25,8 +25,8 @@ const THEME_KEY = "budget.theme";
 // "green", is the page's normal colours (and has no attribute); it follows the phone's light or dark
 // setting. "red" is red and black, always dark. `bar` is the colour of the phone's top bar.
 const THEMES = [
-	{ id: "green", name: "Grøn", note: "Følger telefonens lyse eller mørke udseende", color: "#1f7a5a", back: "#111614", bar: "#1f7a5a" },
-	{ id: "red", name: "Rød og sort", note: "Altid mørk", color: "#ff4d4f", back: "#0b0b0c", bar: "#0b0b0c" },
+	{ id: "green", name: T("Grøn"), note: T("Følger telefonens lyse eller mørke udseende"), color: "#1f7a5a", back: "#111614", bar: "#1f7a5a" },
+	{ id: "red", name: T("Rød og sort"), note: T("Altid mørk"), color: "#ff4d4f", back: "#0b0b0c", bar: "#0b0b0c" },
 ];
 // Remembers which account was signed in, so that at the next start the page waits for that
 // account's numbers instead of showing (and letting you edit) this device's own copy.
@@ -36,30 +36,30 @@ const SIGNED_IN_HINT_KEY = "budget.signedInAs";
 // by the same code. Only the texts and the name of the amount field differ ("limit" for categories).
 const INCOME_SECTION = {
 	key: "income",
-	title: "Indkomst",
-	hint: "Det du får, efter skat.",
+	title: T("Indkomst"),
+	hint: T("Det du får, efter skat."),
 	amountField: "amount",
-	addLabel: "+ Tilføj indkomst",
+	addLabel: T("+ Tilføj indkomst"),
 	mostRows: MOST_INCOME_ROWS,
 	hasDates: true,
 	hasFrequency: true,   // income can come every few months too (børnepenge every 3rd month)
 };
 const FIXED_SECTION = {
 	key: "fixed",
-	title: "Faste udgifter",
-	hint: "Regninger og abonnementer.",
+	title: T("Faste udgifter"),
+	hint: T("Regninger og abonnementer."),
 	amountField: "amount",
-	addLabel: "+ Tilføj fast udgift",
+	addLabel: T("+ Tilføj fast udgift"),
 	mostRows: MOST_FIXED_ROWS,
 	hasDates: true,
 	hasFrequency: true,   // a bill can come every few months, or once a year
 };
 const CATEGORY_SECTION = {
 	key: "categories",
-	title: "Kategorier",
-	hint: "Det du bruger penge på, og hvor meget du højst vil bruge på hver. En ny kategori kommer i alle måneder; grænsen gælder kun denne måned.",
+	title: T("Kategorier"),
+	hint: T("Det du bruger penge på, og hvor meget du højst vil bruge på hver. En ny kategori kommer i alle måneder; grænsen gælder kun denne måned."),
 	amountField: "limit",
-	addLabel: "+ Tilføj kategori",
+	addLabel: T("+ Tilføj kategori"),
 	mostRows: MOST_CATEGORIES,
 };
 const SECTIONS = {
@@ -122,7 +122,9 @@ function loadData() {
 	return { months: {} };
 }
 
-const NO_STORAGE_WARNING = "Din browser vil ikke gemme tal her (måske et privat vindue?). Det du skriver, forsvinder, når du lukker siden.";
+function noStorageWarning() {
+	return t("Din browser vil ikke gemme tal her (måske et privat vindue?). Det du skriver, forsvinder, når du lukker siden.");
+}
 
 // Shows a message in the orange bar under the month switcher; "" hides it.
 function setWarning(text) {
@@ -138,7 +140,7 @@ function saveData() {
 	} catch (error) {
 		worked = false;
 	}
-	setWarning(worked ? "" : NO_STORAGE_WARNING);
+	setWarning(worked ? "" : noStorageWarning());
 }
 
 // Some browsers (private windows) refuse to save. Find out at start, so the
@@ -151,7 +153,7 @@ function checkStorage() {
 	} catch (error) {
 		worked = false;
 	}
-	setWarning(worked ? "" : NO_STORAGE_WARNING);
+	setWarning(worked ? "" : noStorageWarning());
 }
 
 function loadCategoriesOpen() {
@@ -192,6 +194,69 @@ function rememberDatesOpen(rowId, isOpen) {
 	} catch (error) {
 		// Only a convenience; the page works without it.
 	}
+}
+
+// ---- The language ---------------------------------------------------------------------
+//
+// The texts of the page are written in Danish in the code, inside t("...") (texts.js); with English
+// chosen t() gives the English text. The few texts that sit in index.html (the tabs, the month
+// buttons) carry data-i18n="the Danish text" and are put in here.
+
+const LANGUAGE_KEY = "budget.language";
+
+// The saved choice. With none: a device that has used this page before stays Danish (a Danish person's
+// computer with an English browser must not turn the page English on its own). A brand new device
+// starts in the language of the phone or browser: Danish for a Danish one, English for any other.
+function loadLanguage() {
+	try {
+		const saved = localStorage.getItem(LANGUAGE_KEY);
+		if (LANGUAGES.some((language) => language.id === saved)) {
+			return saved;
+		}
+		if ([STORAGE_KEY, SIGNED_IN_HINT_KEY, CATEGORIES_OPEN_KEY, THEME_KEY].some((key) => localStorage.getItem(key) !== null)) {
+			return DEFAULT_LANGUAGE;
+		}
+	} catch (error) {
+		// Nothing readable: the phone's own.
+	}
+	return languageOfPhone(navigator.languages && navigator.languages.length > 0 ? navigator.languages : [navigator.language]);
+}
+
+// The language to start in. A link can name one (?lang=en; a kid's link does, so the kid's page is
+// in the language of the one who gave the link) and that is then kept on this device, so the
+// home-screen icon, which has no link, keeps it. Otherwise loadLanguage().
+function languageForStart() {
+	const fromLink = new URLSearchParams(location.search).get("lang");
+	if (LANGUAGES.some((language) => language.id === fromLink)) {
+		saveLanguage(fromLink);
+		return fromLink;
+	}
+	return loadLanguage();
+}
+
+function saveLanguage(id) {
+	try {
+		localStorage.setItem(LANGUAGE_KEY, id);
+	} catch (error) {
+		// Only a convenience; the page works without it.
+	}
+}
+
+// The texts in index.html: elements marked data-i18n (the text), data-i18n-aria (aria-label) and
+// data-i18n-title (title), plus the page's title and language.
+function applyStaticTexts() {
+	for (const element of document.querySelectorAll("[data-i18n]")) {
+		element.textContent = t(element.dataset.i18n);
+	}
+	for (const element of document.querySelectorAll("[data-i18n-aria]")) {
+		element.setAttribute("aria-label", t(element.dataset.i18nAria));
+	}
+	for (const element of document.querySelectorAll("[data-i18n-title]")) {
+		element.setAttribute("title", t(element.dataset.i18nTitle));
+	}
+	document.title = t("Månedsbudget");
+	document.documentElement.lang = getLanguage();
+	document.getElementById("app-version").textContent = t("Version {version}", { version: APP_VERSION });
 }
 
 // ---- The look: colour themes (the list is THEMES, at the top) ---------------------------
@@ -264,7 +329,7 @@ function saveMonth(key, month) {
 	saveAccountMonth(account, key, month)
 		.catch((error) => {
 			console.error(error);
-			setWarning("Kunne ikke gemme på kontoen: " + accountProblemText(error));
+			setWarning(t("Kunne ikke gemme på kontoen: {problem}", { problem: accountProblemText(error) }));
 		})
 		.finally(() => {
 			if (account === accountName) {
@@ -313,10 +378,10 @@ function esc(text) {
 function categoryName(month, categoryId) {
 	for (const category of month.categories) {
 		if (category.id === categoryId) {
-			return category.name || "(uden navn)";
+			return category.name || t("(uden navn)");
 		}
 	}
-	return "Uden kategori";
+	return t("Uden kategori");
 }
 
 function findRow(list, id) {
@@ -335,7 +400,14 @@ function setMessage(elementId, text, isError) {
 
 // "1 måned", "3 måneder"
 function monthsText(count) {
-	return count === 1 ? "1 måned" : count + " måneder";
+	return tn(count, "{n} måned", "{n} måneder");
+}
+
+// A month's name in the middle of a sentence: "i september 2026" in Danish (months are written with a
+// small letter there), "in September 2026" in English.
+function monthInSentence(key) {
+	const label = monthLabel(key);
+	return getLanguage() === "da" ? label.toLowerCase() : label;
 }
 
 function minus(ore) {
@@ -392,12 +464,12 @@ function loadingHtml() {
 	if (accountFailed) {
 		return `
 			<section class="card">
-				<h2>Kunne ikke hente dine tal</h2>
-				<p>Tjek, at du har internet, og prøv igen. Dine tal er ikke væk.</p>
-				<button class="primary" data-action="retry">Prøv igen</button>
+				<h2>${t("Kunne ikke hente dine tal")}</h2>
+				<p>${t("Tjek, at du har internet, og prøv igen. Dine tal er ikke væk.")}</p>
+				<button class="primary" data-action="retry">${t("Prøv igen")}</button>
 			</section>`;
 	}
-	return '<section class="card"><h2>Henter dine tal …</h2><p class="hint">Et øjeblik.</p></section>';
+	return '<section class="card"><h2>' + t("Henter dine tal …") + '</h2><p class="hint">' + t("Et øjeblik.") + "</p></section>";
 }
 
 // The thin line under the month switcher: is everything saved? Only shown when signed in.
@@ -408,11 +480,11 @@ function showSyncStatus() {
 		return;
 	}
 	if (!navigator.onLine) {
-		line.textContent = "Ingen forbindelse. Dine ændringer gemmes, når du er online igen.";
+		line.textContent = t("Ingen forbindelse. Dine ændringer gemmes, når du er online igen.");
 	} else if (syncState === "saving") {
-		line.textContent = "Gemmer …";
+		line.textContent = t("Gemmer …");
 	} else {
-		line.textContent = "✓ Gemt på kontoen";
+		line.textContent = t("✓ Gemt på kontoen");
 	}
 	line.hidden = false;
 }
@@ -437,12 +509,12 @@ function overviewHtml(month) {
 function welcomeHtml() {
 	return `
 		<section class="card">
-			<h2>Kom i gang</h2>
+			<h2>${t("Kom i gang")}</h2>
 			<ol>
-				<li>Skriv din indkomst og dine faste udgifter under <b>Plan</b>.</li>
-				<li>Skriv hver udgift ind her.</li>
+				<li>${t("Skriv din indkomst og dine faste udgifter under <b>Plan</b>.")}</li>
+				<li>${t("Skriv hver udgift ind her.")}</li>
 			</ol>
-			<button class="primary" data-tab="plan">Start med planen</button>
+			<button class="primary" data-tab="plan">${t("Start med planen")}</button>
 		</section>`;
 }
 
@@ -458,39 +530,39 @@ function leftCardHtml(s) {
 	let note = "";
 	const daysLeft = daysLeftInMonth(viewMonth, new Date());
 	if (s.left < 0) {
-		note = "Du er " + formatKr(-s.left) + " over budget.";
+		note = t("Du er {amount} over budget.", { amount: formatKr(-s.left) });
 	} else if (s.left === 0 && s.available > 0) {
-		note = "Hele beløbet er brugt.";
+		note = t("Hele beløbet er brugt.");
 	} else if (daysLeft !== null && s.left > 0) {
 		// Whole kroner per day, rounded down, so the advice is never too generous.
 		const perDayKr = Math.floor(s.left / daysLeft / 100);
 		if (perDayKr > 0) {
-			note = "Det svarer til ca. " + formatKr(perDayKr * 100) + " om dagen i " + daysLeft + (daysLeft === 1 ? " dag." : " dage.");
+			note = tn(daysLeft, "Det svarer til ca. {amount} om dagen i {n} dag.", "Det svarer til ca. {amount} om dagen i {n} dage.", { amount: formatKr(perDayKr * 100) });
 		} else {
-			note = "Der er næsten ikke noget tilbage.";
+			note = t("Der er næsten ikke noget tilbage.");
 		}
 	}
 
 	return `
 		<section class="card">
-			<div class="label">Tilbage at bruge</div>
+			<div class="label">${t("Tilbage at bruge")}</div>
 			<div class="big-number ${tone}">${formatKr(s.left)}</div>
 			<p>${esc(note)}</p>
 			<div class="facts">
-				<span>Til rådighed <b>${formatKr(s.available)}</b></span>
-				<span>Brugt <b>${formatKr(s.spent)}</b></span>
+				<span>${t("Til rådighed")} <b>${formatKr(s.available)}</b></span>
+				<span>${t("Brugt")} <b>${formatKr(s.spent)}</b></span>
 			</div>
 		</section>`;
 }
 
 function categoryOptionsHtml(month) {
 	if (month.categories.length === 0) {
-		return '<option value="">Uden kategori</option>';
+		return '<option value="">' + t("Uden kategori") + "</option>";
 	}
 	let html = "";
 	for (const category of month.categories) {
 		const selected = category.id === lastCategoryId ? " selected" : "";
-		html += `<option value="${esc(category.id)}"${selected}>${esc(category.name || "(uden navn)")}</option>`;
+		html += `<option value="${esc(category.id)}"${selected}>${esc(category.name || t("(uden navn)"))}</option>`;
 	}
 	return html;
 }
@@ -521,26 +593,26 @@ function addFormHtml(month) {
 
 	return `
 		<form id="add-form" class="card" autocomplete="off">
-			<h2>Tilføj udgift</h2>
-			<label>Beløb i kroner
-				<input name="amount" inputmode="decimal" placeholder="fx 49,95" required>
+			<h2>${t("Tilføj udgift")}</h2>
+			<label>${t("Beløb i kroner")}
+				<input name="amount" inputmode="decimal" placeholder="${t("fx 49,95")}" required>
 			</label>
-			<label>Note (hvis du vil)
-				<input name="note" list="note-suggestions" maxlength="${MAX_NOTE_LENGTH}" placeholder="fx Rema 1000">
+			<label>${t("Note (hvis du vil)")}
+				<input name="note" list="note-suggestions" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("fx Rema 1000")}">
 				<datalist id="note-suggestions">${noteOptionsHtml()}</datalist>
 			</label>
-			<label>Kategori
+			<label>${t("Kategori")}
 				<select name="category">${categoryOptionsHtml(month)}</select>
 			</label>
-			<label>Dato
+			<label>${t("Dato")}
 				<input type="date" name="date" value="${dateValue}" min="${firstDay}" max="${lastDay}" required>
 			</label>
-			<button type="submit" class="primary">Tilføj</button>
+			<button type="submit" class="primary">${t("Tilføj")}</button>
 			<p id="add-message" class="message" role="status"></p>
-			<label class="button secondary">Læs fra skærmbillede
+			<label class="button secondary">${t("Læs fra skærmbillede")}
 				<input type="file" id="bank-picture" accept="image/*" hidden>
 			</label>
-			<p class="hint">Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.</p>
+			<p class="hint">${t("Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.")}</p>
 		</form>`;
 }
 
@@ -549,7 +621,7 @@ function addFormHtml(month) {
 // see how you are doing without the space. The fold is remembered (categoriesOpen).
 function categoryBarsHtml(s) {
 	if (s.categories.length === 0 && s.otherSpent === 0) {
-		return '<section class="card"><h2>Dine kategorier</h2><p class="hint">Lav kategorier under Indstillinger.</p><button class="secondary" data-tab="settings">Åbn indstillinger</button></section>';
+		return '<section class="card"><h2>' + t("Dine kategorier") + '</h2><p class="hint">' + t("Lav kategorier under Indstillinger.") + '</p><button class="secondary" data-tab="settings">' + t("Åbn indstillinger") + "</button></section>";
 	}
 
 	let full = "";
@@ -561,15 +633,15 @@ function categoryBarsHtml(s) {
 	if (s.otherSpent > 0) {
 		full += `
 			<div class="category">
-				<div class="category-top"><span>Uden kategori</span><span class="amounts">${formatKr(s.otherSpent)}</span></div>
+				<div class="category-top"><span>${t("Uden kategori")}</span><span class="amounts">${formatKr(s.otherSpent)}</span></div>
 			</div>`;
-		mini += `<span class="mini-row"><span class="mini-name">Uden kategori</span><span></span><span class="mini-amount">${formatKr(s.otherSpent)}</span></span>`;
+		mini += `<span class="mini-row"><span class="mini-name">${t("Uden kategori")}</span><span></span><span class="mini-amount">${formatKr(s.otherSpent)}</span></span>`;
 	}
 
 	return `
 		<section class="card categories-card">
 			<details id="categories-details" ${categoriesOpen ? "open" : ""}>
-				<summary><h2>Dine kategorier</h2><span class="mini">${mini}</span></summary>
+				<summary><h2>${t("Dine kategorier")}</h2><span class="mini">${mini}</span></summary>
 				${full}
 			</details>
 		</section>`;
@@ -585,15 +657,15 @@ function categoryMiniHtml(category) {
 	if (level === "nolimit") {
 		amount = formatKr(category.spent);
 	} else if (level === "over") {
-		amount = formatKr(-category.left) + " over";
+		amount = t("{amount} over", { amount: formatKr(-category.left) });
 	} else {
 		amount = formatKr(category.left);
 	}
 
 	return `
 		<span class="mini-row">
-			<span class="mini-name">${esc(category.name || "(uden navn)")}</span>
-			<span class="bar mini-bar" role="img" aria-label="${width} procent brugt"><span class="fill ${level}" style="width:${width}%"></span></span>
+			<span class="mini-name">${esc(category.name || t("(uden navn)"))}</span>
+			<span class="bar mini-bar" role="img" aria-label="${t("{width} procent brugt", { width: width })}"><span class="fill ${level}" style="width:${width}%"></span></span>
 			<span class="mini-amount ${level === "over" ? "over" : ""}">${amount}</span>
 		</span>`;
 }
@@ -604,24 +676,24 @@ function categoryBarHtml(category) {
 
 	let note = "";
 	if (level === "nolimit") {
-		note = "Ingen grænse";
+		note = t("Ingen grænse");
 	} else if (level === "over") {
-		note = formatKr(-category.left) + " over grænsen";
+		note = t("{amount} over grænsen", { amount: formatKr(-category.left) });
 	} else {
-		note = formatKr(category.left) + " tilbage";
+		note = t("{amount} tilbage", { amount: formatKr(category.left) });
 	}
 
 	const amounts = category.limit > 0
-		? formatKr(category.spent) + " af " + formatKr(category.limit)
+		? t("{spent} af {limit}", { spent: formatKr(category.spent), limit: formatKr(category.limit) })
 		: formatKr(category.spent);
 
 	return `
 		<div class="category">
 			<div class="category-top">
-				<span>${esc(category.name || "(uden navn)")}</span>
+				<span>${esc(category.name || t("(uden navn)"))}</span>
 				<span class="amounts">${amounts}</span>
 			</div>
-			<div class="bar" role="img" aria-label="${width} procent brugt">
+			<div class="bar" role="img" aria-label="${t("{width} procent brugt", { width: width })}">
 				<div class="fill ${level}" style="width:${width}%"></div>
 			</div>
 			<div class="note ${level === "over" ? "over" : ""}">${note}</div>
@@ -635,12 +707,12 @@ function expensesHtml(month) {
 	const s = summarize(month, viewMonth);
 	let html = `
 		<section class="card">
-			<div class="label">Brugt i alt i ${esc(monthLabel(viewMonth).toLowerCase())}</div>
+			<div class="label">${t("Brugt i alt i {month}", { month: esc(monthInSentence(viewMonth)) })}</div>
 			<div class="big-number">${formatKr(s.spent)}</div>
 		</section>`;
 
 	if (month.spending.length === 0) {
-		return html + '<section class="card"><p class="hint">Ingen udgifter endnu.</p></section>';
+		return html + '<section class="card"><p class="hint">' + t("Ingen udgifter endnu.") + "</p></section>";
 	}
 
 	// One heading per category (with what was spent in it), the newest purchase first under it.
@@ -658,7 +730,7 @@ function expensesHtml(month) {
 				<li>
 					<div class="what">${title}${small}</div>
 					<span class="money">${formatKr(item.amount)}</span>
-					<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="Slet udgiften">✕</button>
+					<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="${t("Slet udgiften")}">✕</button>
 				</li>`;
 		}
 		html += "</ul>";
@@ -669,7 +741,7 @@ function expensesHtml(month) {
 // "2026-09-02" -> "2. sep."
 function shortDayText(dateKey) {
 	const parts = dateKey.split("-").map(Number);
-	return new Intl.DateTimeFormat("da-DK", { day: "numeric", month: "short" }).format(new Date(parts[0], parts[1] - 1, parts[2]));
+	return new Intl.DateTimeFormat(uiLocale(), { day: "numeric", month: "short" }).format(new Date(parts[0], parts[1] - 1, parts[2]));
 }
 
 
@@ -683,22 +755,22 @@ function futureHtml(month) {
 	const hasKids = potBalances(monthsForMoney()).length > 0;
 	return `
 		<section class="card">
-			<h2>Penge nu</h2>
-			<p class="hint">${hasKids ? "Opsparing er hele bunken, også børnenes penge." : "Hvad står der på dine konti lige nu?"}</p>
+			<h2>${t("Penge nu")}</h2>
+			<p class="hint">${hasKids ? t("Opsparing er hele bunken, også børnenes penge.") : t("Hvad står der på dine konti lige nu?")}</p>
 			<div class="single-row">
-				<label for="account-balance">Lønkonto</label>
+				<label for="account-balance">${t("Lønkonto")}</label>
 				<input id="account-balance" data-balance="account" value="${balanceInputText(now.account, now.accountNow)}" placeholder="0" inputmode="decimal" autocomplete="off">
 			</div>
 			<p class="balance-note" id="account-note">${esc(accountNoteText(now))}</p>
 			<div class="single-row">
-				<label for="savings-balance">Opsparing</label>
+				<label for="savings-balance">${t("Opsparing")}</label>
 				<input id="savings-balance" data-balance="savings" value="${balanceInputText(now.savings, now.savingsNow)}" placeholder="0" inputmode="decimal" autocomplete="off">
 			</div>
 			<p class="balance-note" id="savings-note">${esc(savingsNoteText(now))}</p>
 			<div id="money-total">${moneyTotalHtml(month, now)}</div>
 			<details class="explain">
-				<summary>Hvad betyder det?</summary>
-				<p class="hint">Skriv tallene fra banken. Det nyeste, du skriver, gælder altid.${hasKids ? " Opsparing går ned, når et barn bruger penge, og op, når et barn får penge." : ""} Lønkonto ændrer sig ikke af sig selv.</p>
+				<summary>${t("Hvad betyder det?")}</summary>
+				<p class="hint">${t("Skriv tallene fra banken. Det nyeste, du skriver, gælder altid.")}${hasKids ? " " + t("Opsparing går ned, når et barn bruger penge, og op, når et barn får penge.") : ""} ${t("Lønkonto ændrer sig ikke af sig selv.")}</p>
 			</details>
 		</section>
 		<div id="future-results">${futureResultsHtml(month)}</div>`;
@@ -717,11 +789,11 @@ function momentText(moment) {
 	const date = new Date(moment);
 	const sameYear = date.getFullYear() === new Date().getFullYear();
 	const options = sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" };
-	return new Intl.DateTimeFormat("da-DK", options).format(date);
+	return new Intl.DateTimeFormat(uiLocale(), options).format(date);
 }
 
 function accountNoteText(now) {
-	return now.account ? "Opdateret " + momentText(now.account.at) : "";
+	return now.account ? t("Opdateret {date}", { date: momentText(now.account.at) }) : "";
 }
 
 // "Opdateret 1. okt. · siden da: børnene −300 kr." - the last part only when a kid changed it.
@@ -729,9 +801,9 @@ function savingsNoteText(now) {
 	if (!now.savings) {
 		return "";
 	}
-	let text = "Opdateret " + momentText(now.savings.at);
+	let text = t("Opdateret {date}", { date: momentText(now.savings.at) });
 	if (now.fromKids !== 0) {
-		text += " · siden da: børnene " + (now.fromKids < 0 ? "−" : "+") + formatKr(Math.abs(now.fromKids));
+		text += " · " + t("siden da: børnene {change}", { change: (now.fromKids < 0 ? "−" : "+") + formatKr(Math.abs(now.fromKids)) });
 	}
 	return text;
 }
@@ -741,11 +813,11 @@ function savingsNoteText(now) {
 function moneyTotalHtml(month, now) {
 	if (now.any) {
 		return `
-			<div class="facts"><span>I alt: <b>${formatKr(now.total)}</b></span></div>
-			<p class="hint">Regnes fra starten af ${esc(monthLabel(viewMonth).toLowerCase())}.</p>`;
+			<div class="facts"><span>${t("I alt:")} <b>${formatKr(now.total)}</b></span></div>
+			<p class="hint">${t("Regnes fra starten af {month}.", { month: esc(monthInSentence(viewMonth)) })}</p>`;
 	}
 	if (month.startBalance > 0) {
-		return `<p class="hint">Dit gamle tal: <b>${formatKr(month.startBalance)}</b> Skriv dine to konti her for at erstatte det.</p>`;
+		return `<p class="hint">${t("Dit gamle tal:")} <b>${formatKr(month.startBalance)}</b> ${t("Skriv dine to konti her for at erstatte det.")}</p>`;
 	}
 	return "";
 }
@@ -761,7 +833,7 @@ function startTotalFor(month) {
 function futureResultsHtml(month) {
 	const s = summarize(month, viewMonth);
 	if (s.income === 0) {
-		return '<section class="card"><p>Skriv din indkomst under <b>Plan</b> først.</p></section>';
+		return '<section class="card"><p>' + t("Skriv din indkomst under <b>Plan</b> først.") + "</p></section>";
 	}
 
 	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months, startTotalFor(month));
@@ -770,9 +842,9 @@ function futureResultsHtml(month) {
 	// When you have set up later months differently (a new job, say), "the same every month"
 	// would be wrong, so the lines say that the amount changes and the table shows each month.
 	const perMonthText = f.varies
-		? `Lægges til: <b>${formatKr(f.perMonth)}</b> nu, ændrer sig senere`
-		: `Lægges til hver måned <b>${formatKr(f.perMonth)}</b>`;
-	const carefulText = `Kun opsparingen: <b>${formatKr(f.carefulEndTotal)}</b>`;
+		? t("Lægges til: <b>{amount}</b> nu, ændrer sig senere", { amount: formatKr(f.perMonth) })
+		: t("Lægges til hver måned <b>{amount}</b>", { amount: formatKr(f.perMonth) });
+	const carefulText = t("Kun opsparingen: <b>{amount}</b>", { amount: formatKr(f.carefulEndTotal) });
 
 	let rows = "";
 	for (const row of f.rows) {
@@ -786,9 +858,9 @@ function futureResultsHtml(month) {
 
 	return `
 		<section class="card">
-			<div class="label">Om ${FORECAST_MONTHS} måneder har du</div>
+			<div class="label">${t("Om {n} måneder har du", { n: FORECAST_MONTHS })}</div>
 			<div class="big-number ${tone}">${formatKr(f.endTotal)}</div>
-			<p class="hint">Ved udgangen af ${esc(monthLabel(f.lastKey).toLowerCase())}.</p>
+			<p class="hint">${t("Ved udgangen af {month}.", { month: esc(monthInSentence(f.lastKey)) })}</p>
 			<div class="facts">
 				<span>${perMonthText}</span>
 			</div>
@@ -797,22 +869,22 @@ function futureResultsHtml(month) {
 			</div>
 			${othersLineHtml(f.endTotal)}
 			<details class="explain">
-				<summary>Hvad betyder det?</summary>
-				<p class="hint">Det store tal: du bruger præcis dine grænser og beholder resten. "Kun opsparingen": du bruger alt andet end det, du har sat til side. Et regnestykke, ikke en forudsigelse.</p>
+				<summary>${t("Hvad betyder det?")}</summary>
+				<p class="hint">${t('Det store tal: du bruger præcis dine grænser og beholder resten. "Kun opsparingen": du bruger alt andet end det, du har sat til side. Et regnestykke, ikke en forudsigelse.')}</p>
 			</details>
 		</section>
 		<section class="card">
 			<details>
-				<summary class="fold-title">Måned for måned</summary>
+				<summary class="fold-title">${t("Måned for måned")}</summary>
 				<div class="table-scroll">
 					<table>
-						<thead><tr><th>Måned</th><th>Lægges til</th><th>Penge i alt</th></tr></thead>
+						<thead><tr><th>${t("Måned")}</th><th>${t("Lægges til")}</th><th>${t("Penge i alt")}</th></tr></thead>
 						<tbody>
-							<tr><td>Start</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
+							<tr><td>${t("Start")}</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
 						</tbody>
 					</table>
 				</div>
-				<p class="hint" style="margin-top:8px">* = måneden er ikke sat op og bruger planen fra måneden før.</p>
+				<p class="hint" style="margin-top:8px">${t("* = måneden er ikke sat op og bruger planen fra måneden før.")}</p>
 			</details>
 		</section>`;
 }
@@ -825,8 +897,8 @@ function othersLineHtml(endTotal) {
 		return "";
 	}
 	const others = othersTotal(monthsForMoney());
-	const who = people.length === 1 ? people[0].person : "børnene";
-	return `<div class="facts"><span>Heraf ${esc(who)} (i dag): <b>${formatKr(others)}</b> · Dine egne: <b>${formatKr(endTotal - others)}</b></span></div>`;
+	const who = people.length === 1 ? people[0].person : t("børnene");
+	return `<div class="facts"><span>${t("Heraf {who} (i dag): <b>{others}</b> · Dine egne: <b>{yours}</b>", { who: esc(who), others: formatKr(others), yours: formatKr(endTotal - others) })}</span></div>`;
 }
 
 function refreshFutureResults() {
@@ -851,28 +923,28 @@ function accountHtml() {
 	if (accountName !== null) {
 		return `
 			<section class="card">
-				<h2>Konto</h2>
-				<p>Logget ind som <b>${esc(accountName)}</b>. Dine tal er gemt online.</p>
-				<button class="secondary" data-action="sign-out">Log ud</button>
+				<h2>${t("Konto")}</h2>
+				<p>${t("Logget ind som <b>{name}</b>. Dine tal er gemt online.", { name: esc(accountName) })}</p>
+				<button class="secondary" data-action="sign-out">${t("Log ud")}</button>
 			</section>`;
 	}
 
 	return `
 		<section class="card">
-			<h2>Gem dine tal på en konto</h2>
-			<p class="hint">Så følger dine tal dig overalt, og de går ikke tabt.</p>
+			<h2>${t("Gem dine tal på en konto")}</h2>
+			<p class="hint">${t("Så følger dine tal dig overalt, og de går ikke tabt.")}</p>
 			<form id="account-form" autocomplete="on">
-				<label>Brugernavn
+				<label>${t("Brugernavn")}
 					<input name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="20" required>
 				</label>
-				<label>Adgangskode
+				<label>${t("Adgangskode")}
 					<input name="password" type="password" autocomplete="current-password" required>
 				</label>
-				<button type="submit" class="primary">Log ind</button>
-				<button type="button" class="secondary" data-action="create-account">Opret ny konto</button>
+				<button type="submit" class="primary">${t("Log ind")}</button>
+				<button type="button" class="secondary" data-action="create-account">${t("Opret ny konto")}</button>
 				<p id="account-message" class="message" role="status"></p>
 			</form>
-			<p class="hint">Brugernavn uden æ, ø, å. Adgangskode: mindst 10 tegn, fx tre ord og et tal.</p>
+			<p class="hint">${t("Brugernavn uden æ, ø, å. Adgangskode: mindst 10 tegn, fx tre ord og et tal.")}</p>
 		</section>`;
 }
 
@@ -894,6 +966,7 @@ function settingsHtml(month) {
 		+ planSectionHtml(CATEGORY_SECTION, month)
 		+ addPersonHtml()
 		+ appearanceHtml()
+		+ languageHtml()
 		+ exportHtml()
 		+ backupHtml();
 }
@@ -906,31 +979,52 @@ function appearanceHtml() {
 		choices += `
 			<button type="button" class="theme-choice${isOn ? " on" : ""}" data-action="set-theme" data-theme-id="${theme.id}" aria-pressed="${isOn}">
 				<span class="theme-swatch" style="background:${theme.back};border-color:${theme.color}"><i style="background:${theme.color}"></i></span>
-				<span class="theme-name">${esc(theme.name)}<small>${esc(theme.note)}</small></span>
+				<span class="theme-name">${esc(t(theme.name))}<small>${esc(t(theme.note))}</small></span>
 			</button>`;
 	}
 	return `
 		<section class="card">
-			<h2>Udseende</h2>
-			<p class="hint">Vælg farverne. Valget gælder kun denne telefon eller computer.</p>
+			<h2>${t("Udseende")}</h2>
+			<p class="hint">${t("Vælg farverne. Valget gælder kun denne telefon eller computer.")}</p>
 			<div class="theme-choices">${choices}</div>
 		</section>`;
 }
 
+// The "Sprog" box on Indstillinger: Danish or English. The heading has both names, so it can be
+// found from either language.
+function languageHtml() {
+	const options = LANGUAGES.map((language) => `<option value="${language.id}"${language.id === getLanguage() ? " selected" : ""}>${esc(language.name)}</option>`).join("");
+	const heading = getLanguage() === "da" ? "Sprog · Language" : "Language · Sprog";
+	return `
+		<section class="card">
+			<h2>${heading}</h2>
+			<p class="hint">${t("Vælg sproget. Valget gælder kun denne telefon eller computer.")}</p>
+			<select id="language-choice" aria-label="${t("Sprog")}">${options}</select>
+		</section>`;
+}
+
+// A new language: put the texts of index.html in, and draw the screen again.
+function changeLanguage(id) {
+	setLanguage(id);
+	saveLanguage(getLanguage());
+	applyStaticTexts();
+	render();
+}
+
 // The "Eksport" box on Indstillinger: pick a month or a year and open its report.
 function exportHtml() {
-	let options = `<option value="month:${viewMonth}">Denne måned: ${esc(monthLabel(viewMonth))}</option>`;
+	let options = `<option value="month:${viewMonth}">${t("Denne måned: {month}", { month: esc(monthLabel(viewMonth)) })}</option>`;
 	for (const year of yearsWithData(data.months)) {
-		options += `<option value="year:${year}">Hele året ${year}</option>`;
+		options += `<option value="year:${year}">${t("Hele året {year}", { year: year })}</option>`;
 	}
 	return `
 		<section class="card">
-			<h2>Eksport</h2>
-			<p class="hint">Hent en måned eller et helt år til Excel eller PDF.</p>
-			<label>Hvad vil du se?
+			<h2>${t("Eksport")}</h2>
+			<p class="hint">${t("Hent en måned eller et helt år til Excel eller PDF.")}</p>
+			<label>${t("Hvad vil du se?")}
 				<select id="export-scope">${options}</select>
 			</label>
-			<button class="secondary" data-action="open-report">Åbn rapport</button>
+			<button class="secondary" data-action="open-report">${t("Åbn rapport")}</button>
 		</section>`;
 }
 
@@ -944,25 +1038,25 @@ function summaryLineHtml(label, text, extraClass) {
 function planSummaryHtml(month) {
 	const s = summarize(month, viewMonth);
 
-	let html = "<h2>Sådan ser måneden ud</h2><div class=\"sum-lines\">";
-	html += summaryLineHtml("Indkomst", formatKr(s.income));
-	html += summaryLineHtml("Faste udgifter", minus(s.fixed));
-	html += summaryLineHtml("Opsparing", minus(s.savings));
-	html += summaryLineHtml("Til rådighed", formatKr(s.available), s.available < 0 ? "total bad" : "total");
-	html += summaryLineHtml("Fordelt på hverdagen", minus(s.limits));
+	let html = "<h2>" + t("Sådan ser måneden ud") + "</h2><div class=\"sum-lines\">";
+	html += summaryLineHtml(t("Indkomst"), formatKr(s.income));
+	html += summaryLineHtml(t("Faste udgifter"), minus(s.fixed));
+	html += summaryLineHtml(t("Opsparing"), minus(s.savings));
+	html += summaryLineHtml(t("Til rådighed"), formatKr(s.available), s.available < 0 ? "total bad" : "total");
+	html += summaryLineHtml(t("Fordelt på hverdagen"), minus(s.limits));
 
 	if (s.unassigned >= 0) {
-		html += summaryLineHtml("Ikke fordelt endnu", formatKr(s.unassigned), "good");
+		html += summaryLineHtml(t("Ikke fordelt endnu"), formatKr(s.unassigned), "good");
 	} else {
-		html += summaryLineHtml("Fordelt for meget", formatKr(-s.unassigned), "bad");
+		html += summaryLineHtml(t("Fordelt for meget"), formatKr(-s.unassigned), "bad");
 	}
 	html += "</div>";
 
 	if (s.unassigned < 0) {
-		html += '<p class="hint" style="margin-top:8px">Du har fordelt mere, end du har.</p>';
+		html += '<p class="hint" style="margin-top:8px">' + t("Du har fordelt mere, end du har.") + "</p>";
 	}
-	html += '<p class="hint" style="margin-top:8px">Alt gemmes med det samme. Ændringer gælder kun denne måned.</p>';
-	html += '<button type="button" class="link" data-tab="settings">Ret kategorier og grænser →</button>';
+	html += '<p class="hint" style="margin-top:8px">' + t("Alt gemmes med det samme. Ændringer gælder kun denne måned.") + "</p>";
+	html += '<button type="button" class="link" data-tab="settings">' + t("Ret kategorier og grænser →") + "</button>";
 	return html;
 }
 
@@ -984,20 +1078,20 @@ function refreshPlanSummary() {
 function categorySummaryHtml(month) {
 	const s = summarize(month, viewMonth);
 	const rest = s.unassigned >= 0
-		? `Ikke fordelt endnu: <b>${formatKr(s.unassigned)}</b>`
-		: `Fordelt for meget: <b class="bad-text">${formatKr(-s.unassigned)}</b>`;
-	return `Til rådighed: <b>${formatKr(s.available)}</b> · ${rest}`;
+		? `${t("Ikke fordelt endnu:")} <b>${formatKr(s.unassigned)}</b>`
+		: `${t("Fordelt for meget:")} <b class="bad-text">${formatKr(-s.unassigned)}</b>`;
+	return `${t("Til rådighed:")} <b>${formatKr(s.available)}</b> · ${rest}`;
 }
 
 function planSectionHtml(section, month) {
-	let html = `<section class="card"><h2>${section.title}</h2><p class="hint">${section.hint}</p>`;
+	let html = `<section class="card"><h2>${t(section.title)}</h2><p class="hint">${t(section.hint)}</p>`;
 	if (section.key === "categories") {
 		html += `<p class="category-summary" id="category-summary">${categorySummaryHtml(month)}</p>`;
 	}
 	for (const row of month[section.key]) {
 		html += rowHtml(section, row);
 	}
-	html += `<button class="secondary" data-action="add-row" data-section="${section.key}">${section.addLabel}</button>`;
+	html += `<button class="secondary" data-action="add-row" data-section="${section.key}">${t(section.addLabel)}</button>`;
 	if (section.key === "categories") {
 		html += shareCategoriesHtml(month);
 		shareNote = "";   // said once
@@ -1008,9 +1102,9 @@ function planSectionHtml(section, month) {
 function rowHtml(section, row) {
 	return `
 		<div class="row" data-section="${section.key}" data-id="${esc(row.id)}">
-			<input data-field="name" value="${esc(row.name)}" placeholder="Navn" maxlength="${MAX_NAME_LENGTH}" aria-label="Navn" autocomplete="off">
-			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="Beløb i kroner" autocomplete="off">
-			<button class="icon" data-action="delete-row" aria-label="Slet rækken">✕</button>
+			<input data-field="name" value="${esc(row.name)}" placeholder="${t("Navn")}" maxlength="${MAX_NAME_LENGTH}" aria-label="${t("Navn")}" autocomplete="off">
+			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="${t("Beløb i kroner")}" autocomplete="off">
+			<button class="icon" data-action="delete-row" aria-label="${t("Slet rækken")}">✕</button>
 			${section.hasDates ? datesHtml(row, section) : ""}
 		</div>`;
 }
@@ -1021,13 +1115,13 @@ function rowHtml(section, row) {
 // the way you left it, in every month (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
 // A fixed bill can also say how often it comes: every month, every 2nd/3rd/6th month, or once a
 // year. Then the date means "first payment" (only the month counts).
-const EVERY_LABELS = { 1: "Hver måned", 2: "Hver 2. måned", 3: "Hver 3. måned", 6: "Hver 6. måned", 12: "Hvert år" };
+const EVERY_LABELS = { 1: T("Hver måned"), 2: T("Hver 2. måned"), 3: T("Hver 3. måned"), 6: T("Hver 6. måned"), 12: T("Hvert år") };
 
 function datesHtml(row, section) {
 	let frequencyBox = "";
 	if (section.hasFrequency) {
-		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${EVERY_LABELS[every]}</option>`).join("");
-		frequencyBox = `<label>Hvor ofte? <select data-field="every">${options}</select></label>`;
+		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${t(EVERY_LABELS[every])}</option>`).join("");
+		frequencyBox = `<label>${t("Hvor ofte?")} <select data-field="every">${options}</select></label>`;
 	}
 	const hasSomething = Boolean(row.from || row.to || row.every > 1);
 	const isOpen = datesOpen[row.id] !== undefined ? datesOpen[row.id] : hasSomething;
@@ -1036,53 +1130,53 @@ function datesHtml(row, section) {
 			<summary>${esc(datesSummaryText(row, section))}</summary>
 			${frequencyBox}
 			<div class="dates-line">
-				<label><span class="from-label">${row.every > 1 ? "Første betaling" : "Fra"}</span> <input type="date" data-field="from" value="${esc(row.from || "")}"></label>
-				<label>Til <input type="date" data-field="to" value="${esc(row.to || "")}"></label>
+				<label><span class="from-label">${row.every > 1 ? t("Første betaling") : t("Fra")}</span> <input type="date" data-field="from" value="${esc(row.from || "")}"></label>
+				<label>${t("Til")} <input type="date" data-field="to" value="${esc(row.to || "")}"></label>
 			</div>
 			<p class="hint date-note">${esc(dateNoteText(row))}</p>
-			<button type="button" class="link" data-action="clear-dates">Ryd</button>
+			<button type="button" class="link" data-action="clear-dates">${t("Ryd")}</button>
 		</details>`;
 }
 
 function datesSummaryText(row, section) {
 	if (row.every > 1) {
-		const first = row.from ? ", første gang " + dateText(row.from) : "";
-		return EVERY_LABELS[row.every] + first;
+		const first = row.from ? ", " + t("første gang {date}", { date: dateText(row.from) }) : "";
+		return t(EVERY_LABELS[row.every]) + first;
 	}
 	const when = windowText(row);
 	if (when !== "") {
-		return "Gælder " + when;
+		return t("Gælder {when}", { when: when });
 	}
-	return EVERY_LABELS[1];
+	return t(EVERY_LABELS[1]);
 }
 
 // What the row means for the month on screen, so nobody has to work it out.
 function dateNoteText(row) {
-	const month = monthLabel(viewMonth).toLowerCase();
+	const month = monthInSentence(viewMonth);
 
 	if (isPeriodic(row)) {
 		if (isDueIn(row, viewMonth)) {
-			return "Betales i " + month + ": " + formatKr(row.amount);
+			return t("Betales i {month}: {amount}", { month: month, amount: formatKr(row.amount) });
 		}
 		const next = nextDueKey(row, viewMonth);
-		return next ? "Betales ikke i " + month + ". Næste gang: " + monthLabel(next).toLowerCase() : "Betales ikke flere gange.";
+		return next ? t("Betales ikke i {month}. Næste gang: {next}", { month: month, next: monthInSentence(next) }) : t("Betales ikke flere gange.");
 	}
 
 	if (!row.from && !row.to) {
 		return "";   // nothing special to explain
 	}
 	if (row.from && row.to && row.from > row.to) {
-		return "Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.";
+		return t("Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.");
 	}
 	const days = lastDayOfMonth(viewMonth);
 	const active = activeDaysIn(row, viewMonth);
 	if (active === 0) {
-		return "Gælder ikke i " + month + ".";
+		return t("Gælder ikke i {month}.", { month: month });
 	}
 	if (active === days) {
-		return "Gælder hele " + month + ": " + formatKr(row.amount);
+		return t("Gælder hele {month}: {amount}", { month: month, amount: formatKr(row.amount) });
 	}
-	return "I " + month + " tæller " + active + " af " + days + " dage: " + formatKr(amountIn(row, viewMonth));
+	return t("I {month} tæller {active} af {days} dage: {amount}", { month: month, active: active, days: days, amount: formatKr(amountIn(row, viewMonth)) });
 }
 
 // Redraws everything in a row's box from the saved row, after something in the row changed: the
@@ -1097,7 +1191,7 @@ function refreshDatesOf(rowElement, row, section) {
 	}
 	summary.textContent = datesSummaryText(row, section);
 	rowElement.querySelector(".date-note").textContent = dateNoteText(row);
-	rowElement.querySelector(".from-label").textContent = row.every > 1 ? "Første betaling" : "Fra";
+	rowElement.querySelector(".from-label").textContent = row.every > 1 ? t("Første betaling") : t("Fra");
 	rowElement.querySelector('[data-field="from"]').value = row.from || "";
 	rowElement.querySelector('[data-field="to"]').value = row.to || "";
 	const every = rowElement.querySelector('[data-field="every"]');
@@ -1109,10 +1203,10 @@ function refreshDatesOf(rowElement, row, section) {
 function savingsHtml(month) {
 	return `
 		<section class="card">
-			<h2>Opsparing</h2>
-			<p class="hint">Hvor meget lægger du til side hver måned?</p>
+			<h2>${t("Opsparing")}</h2>
+			<p class="hint">${t("Hvor meget lægger du til side hver måned?")}</p>
 			<div class="single-row">
-				<label for="savings-input">Opsparing pr. måned</label>
+				<label for="savings-input">${t("Opsparing pr. måned")}</label>
 				<input id="savings-input" value="${amountToInput(month.savings)}" placeholder="0" inputmode="decimal" autocomplete="off">
 			</div>
 		</section>`;
@@ -1121,14 +1215,14 @@ function savingsHtml(month) {
 function backupHtml() {
 	// Safari can clear a web page's saved numbers after a week. An account makes that harmless.
 	const iPhoneTip = accountName === null
-		? " På iPhone: Del → Føj til hjemmeskærm, så Safari ikke rydder dine tal."
+		? " " + t("På iPhone: Del → Føj til hjemmeskærm, så Safari ikke rydder dine tal.")
 		: "";
 	return `
 		<section class="card">
-			<h2>Sikkerhedskopi</h2>
-			<p class="hint">Gem en kopi som ekstra sikkerhed.${iPhoneTip}</p>
-			<button class="secondary" data-action="export">Gem kopi som fil</button>
-			<label class="button secondary">Hent kopi fra fil
+			<h2>${t("Sikkerhedskopi")}</h2>
+			<p class="hint">${t("Gem en kopi som ekstra sikkerhed.")}${iPhoneTip}</p>
+			<button class="secondary" data-action="export">${t("Gem kopi som fil")}</button>
+			<label class="button secondary">${t("Hent kopi fra fil")}
 				<input type="file" id="import-file" accept="application/json,.json" hidden>
 			</label>
 			<p id="backup-message" class="message" role="status"></p>
@@ -1170,61 +1264,61 @@ function amountCell(ore) {
 
 function purchasesHtml(spending) {
 	if (spending.length === 0) {
-		return '<p class="hint">Ingen udgifter.</p>';
+		return '<p class="hint">' + t("Ingen udgifter.") + "</p>";
 	}
-	return tableHtml(["Dato", "Kategori", "Note", "Beløb"], spending.map((item) => ({
+	return tableHtml([t("Dato"), t("Kategori"), t("Note"), t("Beløb")], spending.map((item) => ({
 		cells: [dateText(item.date).slice(0, 6), { html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
 	})), "purchases");
 }
 
 function monthReportHtml(report) {
 	const s = report.summary;
-	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || "(uden navn)"), formatKr(row.amount)] }));
+	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || t("(uden navn)")), formatKr(row.amount)] }));
 
-	let html = `<h2>Budget: ${esc(report.label)}</h2>`;
-	html += "<h3>Oversigt</h3>" + tableHtml([], [
-		{ cells: ["Indkomst", formatKr(s.income)] },
-		{ cells: ["Faste udgifter", formatKr(s.fixed)] },
-		{ cells: ["Opsparing", formatKr(s.savings)] },
-		{ cells: ["Til rådighed", formatKr(s.available)], total: true },
-		{ cells: ["Brugt", formatKr(s.spent)] },
-		{ cells: ["Tilbage", amountCell(s.left)], total: true },
+	let html = `<h2>${t("Budget: {label}", { label: esc(report.label) })}</h2>`;
+	html += "<h3>" + t("Oversigt") + "</h3>" + tableHtml([], [
+		{ cells: [t("Indkomst"), formatKr(s.income)] },
+		{ cells: [t("Faste udgifter"), formatKr(s.fixed)] },
+		{ cells: [t("Opsparing"), formatKr(s.savings)] },
+		{ cells: [t("Til rådighed"), formatKr(s.available)], total: true },
+		{ cells: [t("Brugt"), formatKr(s.spent)] },
+		{ cells: [t("Tilbage"), amountCell(s.left)], total: true },
 	]);
-	html += "<h3>Indkomst</h3>" + tableHtml([], nameRows(report.income));
-	html += "<h3>Faste udgifter</h3>" + tableHtml([], nameRows(report.fixed));
+	html += "<h3>" + t("Indkomst") + "</h3>" + tableHtml([], nameRows(report.income));
+	html += "<h3>" + t("Faste udgifter") + "</h3>" + tableHtml([], nameRows(report.fixed));
 
 	const categoryRows = report.categories.map((c) => ({
-		cells: [esc(c.name || "(uden navn)"), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
+		cells: [esc(c.name || t("(uden navn)")), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
 	}));
 	if (report.otherSpent > 0) {
-		categoryRows.push({ cells: ["Uden kategori", "", formatKr(report.otherSpent), ""] });
+		categoryRows.push({ cells: [t("Uden kategori"), "", formatKr(report.otherSpent), ""] });
 	}
-	html += "<h3>Kategorier</h3>" + tableHtml(["Kategori", "Grænse", "Brugt", "Tilbage"], categoryRows);
-	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	html += "<h3>" + t("Kategorier") + "</h3>" + tableHtml([t("Kategori"), t("Grænse"), t("Brugt"), t("Tilbage")], categoryRows);
+	html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
 	return html;
 }
 
 function yearReportHtml(report) {
 	if (report.rows.length === 0) {
-		return `<h2>Budget: ${esc(report.year)}</h2><p class="hint">Der er ingen gemte måneder i ${esc(report.year)}.</p>`;
+		return `<h2>${t("Budget: {label}", { label: esc(report.year) })}</h2><p class="hint">${t("Der er ingen gemte måneder i {year}.", { year: esc(report.year) })}</p>`;
 	}
-	const t = report.totals;
+	const sums = report.totals;
 
 	const monthRows = report.rows.map((row) => ({
 		cells: [esc(shortMonthLabel(row.key)), formatKr(row.income), formatKr(row.fixed), formatKr(row.savings), formatKr(row.available), formatKr(row.spent), amountCell(row.left)],
 	}));
 	monthRows.push({
-		cells: ["I alt", formatKr(t.income), formatKr(t.fixed), formatKr(t.savings), formatKr(t.available), formatKr(t.spent), amountCell(t.left)],
+		cells: [t("I alt"), formatKr(sums.income), formatKr(sums.fixed), formatKr(sums.savings), formatKr(sums.available), formatKr(sums.spent), amountCell(sums.left)],
 		total: true,
 	});
 
 	const categoryRows = report.categories.map((c) => ({ cells: [esc(c.name), formatKr(c.total)] }));
 
-	let html = `<h2>Budget: ${esc(report.year)}</h2>`;
-	html += "<h3>Måned for måned</h3>" + tableHtml(["Måned", "Indkomst", "Faste", "Opsparing", "Til rådighed", "Brugt", "Tilbage"], monthRows);
-	html += '<p class="hint no-print">Stryg tabellen til siden for at se alle kolonner.</p>';
-	html += "<h3>Brugt pr. kategori</h3>" + tableHtml(["Kategori", "I alt"], categoryRows);
-	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	let html = `<h2>${t("Budget: {label}", { label: esc(report.year) })}</h2>`;
+	html += "<h3>" + t("Måned for måned") + "</h3>" + tableHtml([t("Måned"), t("Indkomst"), t("Faste"), t("Opsparing"), t("Til rådighed"), t("Brugt"), t("Tilbage")], monthRows);
+	html += '<p class="hint no-print">' + t("Stryg tabellen til siden for at se alle kolonner.") + "</p>";
+	html += "<h3>" + t("Brugt pr. kategori") + "</h3>" + tableHtml([t("Kategori"), t("I alt")], categoryRows);
+	html += "<h3>" + t("Udgifter") + "</h3>" + purchasesHtml(report.spending);
 	return html;
 }
 
@@ -1238,9 +1332,9 @@ function reportHtml() {
 	return `
 		<section class="card no-print">
 			<div class="buttons">
-				<button class="primary" data-action="download-csv">Hent til Excel (.csv)</button>
-				<button class="secondary" data-action="print-report">Udskriv eller gem som PDF</button>
-				<button class="secondary" data-action="close-report">‹ Tilbage til Indstillinger</button>
+				<button class="primary" data-action="download-csv">${t("Hent til Excel (.csv)")}</button>
+				<button class="secondary" data-action="print-report">${t("Udskriv eller gem som PDF")}</button>
+				<button class="secondary" data-action="close-report">${t("‹ Tilbage til Indstillinger")}</button>
 			</div>
 		</section>
 		<section class="card report">${body}</section>`;
@@ -1328,7 +1422,7 @@ document.addEventListener("click", (event) => {
 			break;
 		case "share-categories": {
 			const done = shareCategories(getMonth(viewMonth).categories.map((category) => category.name));
-			shareNote = done === 0 ? "Alle måneder har allerede kategorierne." : "Gjort: kategorierne er nu også i " + monthsText(done) + ".";
+			shareNote = done === 0 ? t("Alle måneder har allerede kategorierne.") : t("Gjort: kategorierne er nu også i {months}.", { months: monthsText(done) });
 			render();
 			break;
 		}
@@ -1456,6 +1550,10 @@ document.addEventListener("input", (event) => {
 // "change" fires when you leave a box (or press Enter) after editing it.
 document.addEventListener("change", (event) => {
 	const input = event.target;
+	if (input.id === "language-choice") {
+		changeLanguage(input.value);
+		return;
+	}
 	if (input.id === "bank-picture") {
 		const file = input.files[0];
 		input.value = "";   // so choosing the same picture again still counts as a change
@@ -1597,7 +1695,7 @@ function syncKidPages() {
 		saveKidPage(accountName, token, page.person, wanted).catch((error) => {
 			console.error(error);
 			delete kidPublished[token];   // so a later drawing tries again
-			setWarning("Kunne ikke opdatere barnets side: " + accountProblemText(error));
+			setWarning(t("Kunne ikke opdatere barnets side: {problem}", { problem: accountProblemText(error) }));
 		});
 	}
 }
@@ -1610,7 +1708,7 @@ function kidTokenOf(person) {
 // The link to give the kid. (On this computer's test copy it carries ?emulator, so the kid's page
 // uses the test copy too.)
 function kidLinkUrl(token) {
-	const link = kidLink(location.origin + location.pathname, accountName, token);
+	const link = kidLink(location.origin + location.pathname, accountName, token) + "&lang=" + getLanguage();
 	return USE_FIREBASE_EMULATOR ? link + "&emulator" : link;
 }
 
@@ -1620,32 +1718,32 @@ function kidAccessHtml(people) {
 		return "";
 	}
 	if (accountName === null) {
-		return accountsAvailable() ? '<p class="hint">Vil dine børn selv skrive, hvad de bruger? Log ind på en konto øverst først.</p>' : "";
+		return accountsAvailable() ? '<p class="hint">' + t("Vil dine børn selv skrive, hvad de bruger? Log ind på en konto øverst først.") + "</p>" : "";
 	}
 	let html = "";
 	for (const person of people) {
 		const name = esc(person.person);
 		const token = kidTokenOf(person.person);
 		if (token === null) {
-			html += `<div class="kid-access"><button type="button" class="secondary" data-action="make-kid-link" data-person="${name}">Giv ${name} sit eget link</button></div>`;
+			html += `<div class="kid-access"><button type="button" class="secondary" data-action="make-kid-link" data-person="${name}">${t("Giv {name} sit eget link", { name: name })}</button></div>`;
 			continue;
 		}
 		html += `
 			<div class="kid-access">
-				<label>${name}s link
-					<input readonly value="${esc(kidLinkUrl(token))}" data-kid-token="${esc(token)}" aria-label="${name}s link">
+				<label>${t("{name}s link", { name: name })}
+					<input readonly value="${esc(kidLinkUrl(token))}" data-kid-token="${esc(token)}" aria-label="${t("{name}s link", { name: name })}">
 				</label>
 				<div class="pot-buttons">
-					<button type="button" class="primary" data-action="copy-kid-link" data-token="${esc(token)}">Kopiér link</button>
-					<button type="button" class="secondary" data-action="remove-kid-link" data-token="${esc(token)}">Fjern linket</button>
+					<button type="button" class="primary" data-action="copy-kid-link" data-token="${esc(token)}">${t("Kopiér link")}</button>
+					<button type="button" class="secondary" data-action="remove-kid-link" data-token="${esc(token)}">${t("Fjern linket")}</button>
 				</div>
 			</div>`;
 	}
 	return html + `
 		<p id="kid-link-message" class="message" role="status">${esc(kidLinkNote)}</p>
 		<details class="explain">
-			<summary>Hvad kan barnet med linket?</summary>
-			<p class="hint">Barnet åbner linket og kan se, hvad det har, og skrive, hvad det bruger. Intet andet. Send linket kun til barnet: den, der har linket, kan skrive. Du kan altid slette en post eller fjerne linket. Åbner du selv linket på din egen telefon, så tryk bagefter "Ikke dig? Åbn budgettet".</p>
+			<summary>${t("Hvad kan barnet med linket?")}</summary>
+			<p class="hint">${t('Barnet åbner linket og kan se, hvad det har, og skrive, hvad det bruger. Intet andet. Send linket kun til barnet: den, der har linket, kan skrive. Du kan altid slette en post eller fjerne linket. Åbner du selv linket på din egen telefon, så tryk bagefter "Ikke dig? Åbn budgettet".')}</p>
 		</details>`;
 }
 
@@ -1656,14 +1754,14 @@ async function makeKidLink(person) {
 	const side = parentSideOf(data.months, person);
 	kidPublished[token] = side;
 	try {
-		kidLinkNote = "Linket er lavet. Tryk Kopiér, og send det til " + person + ".";
+		kidLinkNote = t("Linket er lavet. Tryk Kopiér, og send det til {name}.", { name: person });
 		await saveKidPage(accountName, token, person, side);
 		setMessage("kid-link-message", kidLinkNote, false);
 	} catch (error) {
 		console.error(error);
 		kidLinkNote = "";
 		delete kidPublished[token];
-		setWarning("Kunne ikke lave linket: " + accountProblemText(error));
+		setWarning(t("Kunne ikke lave linket: {problem}", { problem: accountProblemText(error) }));
 	}
 }
 
@@ -1675,11 +1773,11 @@ function copyKidLink(token) {
 			box.focus();
 			box.select();
 		}
-		setMessage("kid-link-message", "Hold fingeren på linket og vælg Kopiér.", false);
+		setMessage("kid-link-message", t("Hold fingeren på linket og vælg Kopiér."), false);
 	};
 	if (navigator.clipboard && navigator.clipboard.writeText) {
 		navigator.clipboard.writeText(url).then(
-			() => setMessage("kid-link-message", "Linket er kopieret. Send det til barnet.", false),
+			() => setMessage("kid-link-message", t("Linket er kopieret. Send det til barnet."), false),
 			showByHand,
 		);
 	} else {
@@ -1694,7 +1792,7 @@ async function removeKidLink(token) {
 	if (!page) {
 		return;
 	}
-	if (!confirm("Fjern " + page.person + "s link? Så virker det ikke mere. Det, " + page.person + " har skrevet, beholder du.")) {
+	if (!confirm(t("Fjern {name}s link? Så virker det ikke mere. Det, {name} har skrevet, beholder du.", { name: page.person }))) {
 		return;
 	}
 	kidLinkNote = "";
@@ -1720,20 +1818,20 @@ async function removeKidLink(token) {
 		await deleteKidPage(accountName, token);
 	} catch (error) {
 		console.error(error);
-		setWarning("Kunne ikke fjerne linket: " + accountProblemText(error));
+		setWarning(t("Kunne ikke fjerne linket: {problem}", { problem: accountProblemText(error) }));
 	}
 }
 
 // One entry the kid wrote (a mistake) is taken away.
 async function deleteKidsEntry(token, entryId) {
-	if (!confirm("Slet den post?")) {
+	if (!confirm(t("Slet den post?"))) {
 		return;
 	}
 	try {
 		await deleteKidEntry(accountName, token, entryId);
 	} catch (error) {
 		console.error(error);
-		setWarning("Kunne ikke slette: " + accountProblemText(error));
+		setWarning(t("Kunne ikke slette: {problem}", { problem: accountProblemText(error) }));
 	}
 }
 
@@ -1748,9 +1846,9 @@ function potCardHtml(person) {
 
 	let history = "";
 	for (const entry of person.entries.slice(0, 10)) {
-		const text = entry.note !== "" ? entry.note : (entry.amount < 0 ? "Brugte" : "Fik");
+		const text = entry.note !== "" ? entry.note : (entry.amount < 0 ? t("Brugte") : t("Fik"));
 		// An entry the kid wrote on their own page says so, and is deleted online, not from a month.
-		const own = entry.kidToken ? " · selv" : "";
+		const own = entry.kidToken ? " · " + t("selv") : "";
 		const remove = entry.kidToken
 			? `data-action="delete-kid-entry" data-id="${esc(entry.id)}" data-token="${esc(entry.kidToken)}"`
 			: `data-action="delete-pot" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}"`;
@@ -1758,32 +1856,32 @@ function potCardHtml(person) {
 			<li>
 				<div class="what">${esc(text)}<small>${esc(dateText(entry.date).slice(0, 6) + own)}</small></div>
 				<span class="money ${entry.amount < 0 ? "bad-text" : ""}">${formatKr(entry.amount)}</span>
-				<button class="icon" ${remove} aria-label="Slet">✕</button>
+				<button class="icon" ${remove} aria-label="${t("Slet")}">✕</button>
 			</li>`;
 	}
 
 	return `
 		<section class="card pot">
-			<div class="label">${name} har</div>
+			<div class="label">${t("{name} har", { name: name })}</div>
 			<div class="big-number ${person.balance < 0 ? "bad" : ""}">${formatKr(person.balance)}</div>
 			<p class="message" role="status">${esc(message)}</p>
 			<div class="pot-form" data-person="${name}">
-				<label>Beløb i kroner
-					<input name="amount" inputmode="decimal" placeholder="fx 300" autocomplete="off">
+				<label>${t("Beløb i kroner")}
+					<input name="amount" inputmode="decimal" placeholder="${t("fx 300")}" autocomplete="off">
 				</label>
-				<label>Hvad? (hvis du vil)
+				<label>${t("Hvad? (hvis du vil)")}
 					<input name="note" maxlength="${MAX_NOTE_LENGTH}" autocomplete="off">
 				</label>
 				<div class="pot-buttons">
-					<button type="button" class="primary" data-action="pot-used">${name} brugte</button>
-					<button type="button" class="secondary" data-action="pot-got">${name} fik</button>
+					<button type="button" class="primary" data-action="pot-used">${t("{name} brugte", { name: name })}</button>
+					<button type="button" class="secondary" data-action="pot-got">${t("{name} fik", { name: name })}</button>
 				</div>
 				<p class="message pot-error" role="status"></p>
 			</div>
 			<details class="explain">
-				<summary>Historik</summary>
+				<summary>${t("Historik")}</summary>
 				<ul class="list">${history}</ul>
-				<button type="button" class="link" data-action="delete-person" data-person="${name}">Fjern ${name}</button>
+				<button type="button" class="link" data-action="delete-person" data-person="${name}">${t("Fjern {name}", { name: name })}</button>
 			</details>
 		</section>`;
 }
@@ -1796,12 +1894,12 @@ function saveOthersEntry(button, sign) {
 
 	const ore = parseAmount(form.querySelector('[name="amount"]').value);
 	if (ore === null || ore <= 0) {
-		problem.textContent = "Skriv et beløb, fx 300.";
+		problem.textContent = t("Skriv et beløb, fx 300.");
 		problem.classList.add("bad");
 		return;
 	}
 	if (getMonth(viewMonth).pots.length >= MOST_POT_ENTRIES_PER_MONTH) {
-		problem.textContent = "For mange poster i denne måned.";
+		problem.textContent = t("For mange poster i denne måned.");
 		problem.classList.add("bad");
 		return;
 	}
@@ -1820,18 +1918,18 @@ function saveOthersEntry(button, sign) {
 	// If you have typed your savings (Fremtid), it moves with the kids: say what it is now.
 	// (formatKr already ends in "kr." so no full stop is added after it.)
 	const money = moneyNow(monthsForMoney());
-	const savingsText = money.savings ? " Opsparingen er nu " + formatKr(money.savingsNow) : "";
+	const savingsText = money.savings ? " " + t("Opsparingen er nu {amount}", { amount: formatKr(money.savingsNow) }) : "";
 	potMessage = {
 		person: now.person,
 		text: (sign < 0
-			? person + " brugte " + formatKr(ore) + " Nu har " + person + " " + left + " tilbage."
-			: person + " fik " + formatKr(ore) + " Nu har " + person + " " + left) + savingsText,
+			? t("{name} brugte {amount} Nu har {name} {left} tilbage.", { name: person, amount: formatKr(ore), left: left })
+			: t("{name} fik {amount} Nu har {name} {left}", { name: person, amount: formatKr(ore), left: left })) + savingsText,
 	};
 	render();
 }
 
 function deleteOthersEntry(id, monthKey) {
-	if (!confirm("Slet den post?")) {
+	if (!confirm(t("Slet den post?"))) {
 		return;
 	}
 	changeMonth((month) => {
@@ -1842,7 +1940,7 @@ function deleteOthersEntry(id, monthKey) {
 
 // Takes a kid away with every entry they have, in every month. Asks first: it can't be undone.
 function deletePerson(person) {
-	if (!confirm("Fjern " + person + " og alle posterne? Det kan ikke fortrydes.")) {
+	if (!confirm(t("Fjern {name} og alle posterne? Det kan ikke fortrydes.", { name: person }))) {
 		return;
 	}
 	const wanted = person.toLowerCase();
@@ -1858,7 +1956,7 @@ function deletePerson(person) {
 	if (token !== null) {
 		deleteKidPage(accountName, token).catch((error) => {
 			console.error(error);
-			setWarning("Kunne ikke fjerne linket: " + accountProblemText(error));
+			setWarning(t("Kunne ikke fjerne linket: {problem}", { problem: accountProblemText(error) }));
 		});
 	}
 	render();
@@ -1870,21 +1968,21 @@ function addPersonHtml() {
 	const people = potBalances(monthsForMoney());
 	const form = `
 		<form id="person-form" autocomplete="off">
-			<label>Barnets navn
-				<input name="person" maxlength="${MAX_NAME_LENGTH}" placeholder="fx Nathan" required>
+			<label>${t("Barnets navn")}
+				<input name="person" maxlength="${MAX_NAME_LENGTH}" placeholder="${t("fx Nathan")}" required>
 			</label>
-			<label>Hvor mange penge har barnet nu?
+			<label>${t("Hvor mange penge har barnet nu?")}
 				<input name="amount" inputmode="decimal" placeholder="0">
 			</label>
-			<button type="submit" class="secondary">Tilføj barn</button>
+			<button type="submit" class="secondary">${t("Tilføj barn")}</button>
 			<p id="person-message" class="message" role="status"></p>
 		</form>`;
 	return `
 		<section class="card">
-			<h2>Børn</h2>
-			<p class="hint">Børnenes penge i din bunke.</p>
+			<h2>${t("Børn")}</h2>
+			<p class="hint">${t("Børnenes penge i din bunke.")}</p>
 			${kidAccessHtml(people)}
-			${people.length > 0 ? `<details class="explain"><summary>+ Tilføj et barn mere</summary>${form}</details>` : form}
+			${people.length > 0 ? `<details class="explain"><summary>${t("+ Tilføj et barn mere")}</summary>${form}</details>` : form}
 		</section>`;
 }
 
@@ -1892,15 +1990,15 @@ function addPerson(form) {
 	const person = form.elements.person.value.trim().slice(0, MAX_NAME_LENGTH);
 	const ore = parseAmount(form.elements.amount.value);
 	if (person === "") {
-		setMessage("person-message", "Skriv barnets navn.", true);
+		setMessage("person-message", t("Skriv barnets navn."), true);
 		return;
 	}
 	if (ore === null) {
-		setMessage("person-message", "Skriv et beløb, fx 5000.", true);
+		setMessage("person-message", t("Skriv et beløb, fx 5000."), true);
 		return;
 	}
 	if (potBalances(monthsForMoney()).some((other) => other.person.toLowerCase() === person.toLowerCase())) {
-		setMessage("person-message", person + " findes allerede.", true);
+		setMessage("person-message", t("{name} findes allerede.", { name: person }), true);
 		return;
 	}
 
@@ -1908,10 +2006,10 @@ function addPerson(form) {
 	const date = today.slice(0, 7) === viewMonth ? today : viewMonth + "-01";
 	changeMonth((month) => {
 		// "start": this money was already in the pile, so it never moves the savings number.
-		month.pots.push({ id: newId(), date: date, person: person, amount: ore, note: "Start", start: true });
+		month.pots.push({ id: newId(), date: date, person: person, amount: ore, note: t("Start"), start: true });
 	});
 	render();
-	setMessage("person-message", person + " er tilføjet. Se under Overblik.", false);
+	setMessage("person-message", t("{name} er tilføjet. Se under Overblik.", { name: person }), false);
 }
 
 
@@ -1963,17 +2061,17 @@ async function startBankImport(file) {
 		job.status = "failed";
 		// No reader at all means it could not be downloaded; otherwise the picture was the problem.
 		job.problem = typeof Tesseract === "undefined"
-			? "Læseprogrammet kunne ikke hentes. Tjek, at du har internet, og prøv igen."
-			: "Billedet kunne ikke læses. Prøv med et andet skærmbillede.";
+			? t("Læseprogrammet kunne ikke hentes. Tjek, at du har internet, og prøv igen.")
+			: t("Billedet kunne ikke læses. Prøv med et andet skærmbillede.");
 	}
 	render();
 }
 
 function bankReadingText(stage, share) {
 	if (stage === "loading") {
-		return "Gør klar … Første gang hentes læseprogrammet (nogle få MB), så kan det tage lidt.";
+		return t("Gør klar … Første gang hentes læseprogrammet (nogle få MB), så kan det tage lidt.");
 	}
-	return "Læser billedet … " + Math.round(share * 100) + " %";
+	return t("Læser billedet … {percent} %", { percent: Math.round(share * 100) });
 }
 
 // The progress is updated in place, not by redrawing the screen many times a second.
@@ -2002,25 +2100,25 @@ function closeBankImport() {
 }
 
 function bankCategoryOptionsHtml(month, chosenId) {
-	let html = `<option value=""${chosenId === "" ? " selected" : ""}>Uden kategori</option>`;
+	let html = `<option value=""${chosenId === "" ? " selected" : ""}>${t("Uden kategori")}</option>`;
 	for (const category of month.categories) {
-		html += `<option value="${esc(category.id)}"${category.id === chosenId ? " selected" : ""}>${esc(category.name || "(uden navn)")}</option>`;
+		html += `<option value="${esc(category.id)}"${category.id === chosenId ? " selected" : ""}>${esc(category.name || t("(uden navn)"))}</option>`;
 	}
 	return html;
 }
 
 function bankRowHtml(row, index, month) {
-	const notes = { already: "findes allerede", "money-in": "ligner penge ind", check: "tjek beløbet" };
-	const why = row.why !== "" ? `<div class="scan-why">${notes[row.why]}</div>` : "";
+	const notes = { already: T("findes allerede"), "money-in": T("ligner penge ind"), check: T("tjek beløbet") };
+	const why = row.why !== "" ? `<div class="scan-why">${t(notes[row.why])}</div>` : "";
 	return `
 		<div class="scan-row ${row.tick ? "" : "off"}" data-index="${index}">
-			<input type="checkbox" class="scan-tick" data-scan="tick" ${row.tick ? "checked" : ""} aria-label="Tilføj denne udgift">
-			<input data-scan="note" value="${esc(row.note)}" maxlength="${MAX_NOTE_LENGTH}" placeholder="Tekst" aria-label="Tekst" autocomplete="off">
-			<input data-scan="amount" value="${esc(row.amountText)}" inputmode="decimal" aria-label="Beløb i kroner" autocomplete="off">
+			<input type="checkbox" class="scan-tick" data-scan="tick" ${row.tick ? "checked" : ""} aria-label="${t("Tilføj denne udgift")}">
+			<input data-scan="note" value="${esc(row.note)}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("Tekst")}" aria-label="${t("Tekst")}" autocomplete="off">
+			<input data-scan="amount" value="${esc(row.amountText)}" inputmode="decimal" aria-label="${t("Beløb i kroner")}" autocomplete="off">
 			${why}
 			<div class="scan-under">
 				<span class="scan-date">${esc(shortDayText(row.date))}</span>
-				<select data-scan="category" aria-label="Kategori">${bankCategoryOptionsHtml(month, row.categoryId)}</select>
+				<select data-scan="category" aria-label="${t("Kategori")}">${bankCategoryOptionsHtml(month, row.categoryId)}</select>
 			</div>
 		</div>`;
 }
@@ -2028,9 +2126,9 @@ function bankRowHtml(row, index, month) {
 function bankAddLabel(rows) {
 	const count = rows.filter((row) => row.tick).length;
 	if (count === 0) {
-		return "Ingen valgt";
+		return t("Ingen valgt");
 	}
-	return "Tilføj " + count + (count === 1 ? " udgift" : " udgifter");
+	return tn(count, "Tilføj {n} udgift", "Tilføj {n} udgifter");
 }
 
 // The card at the top of Overblik while a picture is being read or checked.
@@ -2039,23 +2137,21 @@ function bankImportHtml() {
 		return "";
 	}
 	const job = bankImport;
-	const monthName = monthLabel(job.monthKey);
-
 	if (job.status === "reading") {
 		return `
 			<section class="card" id="bank-import">
-				<h2>Læser billedet</h2>
+				<h2>${t("Læser billedet")}</h2>
 				<p id="bank-progress-text" class="hint">${esc(bankReadingText(job.stage, job.share))}</p>
 				<progress id="bank-progress" max="100" value="${Math.round(job.share * 100)}"></progress>
-				<button type="button" class="secondary" data-action="close-bank-import">Annullér</button>
+				<button type="button" class="secondary" data-action="close-bank-import">${t("Annullér")}</button>
 			</section>`;
 	}
 	if (job.status === "failed") {
 		return `
 			<section class="card" id="bank-import">
-				<h2>Det lykkedes ikke</h2>
+				<h2>${t("Det lykkedes ikke")}</h2>
 				<p>${esc(job.problem)}</p>
-				<button type="button" class="secondary" data-action="close-bank-import">Luk</button>
+				<button type="button" class="secondary" data-action="close-bank-import">${t("Luk")}</button>
 			</section>`;
 	}
 
@@ -2063,11 +2159,11 @@ function bankImportHtml() {
 	const found = job.rows.length;
 	let html = `
 		<section class="card" id="bank-import">
-			<h2>${found === 0 ? "Ingen udgifter fundet" : "Fundet " + found + (found === 1 ? " linje" : " linjer") + " til " + esc(monthName.toLowerCase())}</h2>
-			<p class="hint">Billedet kan være læst forkert. Tjek mod billedet, ret tekst og beløb, vælg kategori, og fjern fluebenet ved dem, du ikke vil have med.</p>
+			<h2>${found === 0 ? t("Ingen udgifter fundet") : tn(found, "Fundet {n} linje til {month}", "Fundet {n} linjer til {month}", { month: esc(monthInSentence(job.monthKey)) })}</h2>
+			<p class="hint">${t("Billedet kan være læst forkert. Tjek mod billedet, ret tekst og beløb, vælg kategori, og fjern fluebenet ved dem, du ikke vil have med.")}</p>
 			<details class="explain">
-				<summary>Se billedet</summary>
-				<img class="scan-picture" src="${esc(job.pictureUrl)}" alt="Dit skærmbillede">
+				<summary>${t("Se billedet")}</summary>
+				<img class="scan-picture" src="${esc(job.pictureUrl)}" alt="${t("Dit skærmbillede")}">
 			</details>`;
 
 	if (found > 0) {
@@ -2084,16 +2180,16 @@ function bankImportHtml() {
 	if (job.unclear.length > 0) {
 		html += `
 			<div class="scan-unclear">
-				<h3>Kunne ikke læses (${job.unclear.length})</h3>
-				<p class="hint">De er ikke med. Skriv dem selv ind under Tilføj udgift.</p>
+				<h3>${t("Kunne ikke læses ({n})", { n: job.unclear.length })}</h3>
+				<p class="hint">${t("De er ikke med. Skriv dem selv ind under Tilføj udgift.")}</p>
 				<ul class="scan-lines">${job.unclear.map((line) => "<li>" + esc(line) + "</li>").join("")}</ul>
 			</div>`;
 	}
 	if (job.elsewhere.length > 0) {
 		const months = [...new Set(job.elsewhere.map((line) => line.date.slice(0, 7)))].sort().slice(0, 3);
-		html += `<p class="hint">${job.elsewhere.length} ${job.elsewhere.length === 1 ? "linje er" : "linjer er"} fra andre måneder (${esc(months.map((key) => monthLabel(key).toLowerCase()).join(", "))}) og er ikke med. Gå til den måned, og vælg billedet igen.</p>`;
+		html += `<p class="hint">${tn(job.elsewhere.length, "{n} linje er fra andre måneder ({months}) og er ikke med. Gå til den måned, og vælg billedet igen.", "{n} linjer er fra andre måneder ({months}) og er ikke med. Gå til den måned, og vælg billedet igen.", { months: esc(months.map((key) => monthInSentence(key)).join(", ")) })}</p>`;
 	}
-	return html + `<button type="button" class="secondary" data-action="close-bank-import">Luk</button></section>`;
+	return html + `<button type="button" class="secondary" data-action="close-bank-import">${t("Luk")}</button></section>`;
 }
 
 // A box in a row was changed. The values live in bankImport.rows, so nothing is lost on a redraw.
@@ -2158,15 +2254,15 @@ function addBankRows() {
 		chosen.push({ date: row.date, categoryId: row.categoryId, amount: amount, note: row.note.trim().slice(0, MAX_NOTE_LENGTH) });
 	});
 	if (unreadable) {
-		setMessage("bank-message", "Ret de røde beløb, eller fjern fluebenet ved dem.", true);
+		setMessage("bank-message", t("Ret de røde beløb, eller fjern fluebenet ved dem."), true);
 		return;
 	}
 	if (chosen.length === 0) {
-		setMessage("bank-message", "Der er ikke valgt nogen.", true);
+		setMessage("bank-message", t("Der er ikke valgt nogen."), true);
 		return;
 	}
 	if (getMonth(job.monthKey).spending.length + chosen.length > MOST_SPENDING_PER_MONTH) {
-		setMessage("bank-message", "Der kan højst være " + MOST_SPENDING_PER_MONTH + " udgifter i en måned. Fjern nogle af fluebenene.", true);
+		setMessage("bank-message", t("Der kan højst være {max} udgifter i en måned. Fjern nogle af fluebenene.", { max: MOST_SPENDING_PER_MONTH }), true);
 		return;
 	}
 
@@ -2177,7 +2273,7 @@ function addBankRows() {
 	}, job.monthKey);
 	closeBankImport();
 	render();
-	setMessage("add-message", "Tilføjet " + chosen.length + (chosen.length === 1 ? " udgift" : " udgifter") + " fra billedet.", false);
+	setMessage("add-message", tn(chosen.length, "Tilføjet {n} udgift fra billedet.", "Tilføjet {n} udgifter fra billedet."), false);
 }
 
 
@@ -2200,19 +2296,19 @@ function pickCategoryFromNote(noteBox) {
 function addSpending(form) {
 	const amount = parseAmount(form.elements.amount.value);
 	if (amount === null || amount <= 0) {
-		setMessage("add-message", "Skriv et beløb større end 0, fx 49,95.", true);
+		setMessage("add-message", t("Skriv et beløb større end 0, fx 49,95."), true);
 		form.elements.amount.focus();
 		return;
 	}
 
 	const date = form.elements.date.value;
 	if (date.slice(0, 7) !== viewMonth) {
-		setMessage("add-message", "Datoen skal ligge i " + monthLabel(viewMonth).toLowerCase() + ".", true);
+		setMessage("add-message", t("Datoen skal ligge i {month}.", { month: monthInSentence(viewMonth) }), true);
 		return;
 	}
 
 	if (getMonth(viewMonth).spending.length >= MOST_SPENDING_PER_MONTH) {
-		setMessage("add-message", "Der er for mange udgifter i denne måned (" + MOST_SPENDING_PER_MONTH + "). Slet nogle gamle.", true);
+		setMessage("add-message", t("Der er for mange udgifter i denne måned ({max}). Slet nogle gamle.", { max: MOST_SPENDING_PER_MONTH }), true);
 		return;
 	}
 
@@ -2228,7 +2324,7 @@ function addSpending(form) {
 	// Draw again so every number updates, then tell the user it worked.
 	const where = categoryName(getMonth(viewMonth), categoryId);
 	render();
-	setMessage("add-message", "Tilføjet: " + formatKr(amount) + " til " + where + ".", false);
+	setMessage("add-message", t("Tilføjet: {amount} til {category}.", { amount: formatKr(amount), category: where }), false);
 }
 
 function deleteSpending(id) {
@@ -2237,7 +2333,7 @@ function deleteSpending(id) {
 		return;
 	}
 	const what = item.note !== "" ? item.note : categoryName(getMonth(viewMonth), item.categoryId);
-	if (!confirm("Slet " + formatKr(item.amount) + " (" + what + ")?")) {
+	if (!confirm(t("Slet {amount} ({what})?", { amount: formatKr(item.amount), what: what }))) {
 		return;
 	}
 	changeMonth((month) => {
@@ -2409,7 +2505,7 @@ function refreshMoneyNow() {
 
 function addRow(section) {
 	if (getMonth(viewMonth)[section.key].length >= section.mostRows) {
-		window.alert("Der kan højst være " + section.mostRows + " rækker her.");
+		window.alert(t("Der kan højst være {max} rækker her.", { max: section.mostRows }));
 		return;
 	}
 	const row = { id: newId(), name: "" };
@@ -2452,8 +2548,8 @@ function shareCategoriesHtml(month) {
 	}
 	if (count > 0) {
 		html += `
-			<p class="hint">${count === 1 ? "En anden måned mangler" : count + " andre måneder mangler"} nogle af kategorierne her.</p>
-			<button type="button" class="secondary" data-action="share-categories">Brug disse kategorier i alle måneder</button>`;
+			<p class="hint">${tn(count, "En anden måned mangler nogle af kategorierne her.", "{n} andre måneder mangler nogle af kategorierne her.")}</p>
+			<button type="button" class="secondary" data-action="share-categories">${t("Brug disse kategorier i alle måneder")}</button>`;
 	}
 	return html;
 }
@@ -2470,9 +2566,9 @@ function deleteRow(button) {
 	// An empty row can go without asking; one with content gets a safety question.
 	const hasContent = row.name !== "" || row[section.amountField] !== 0;
 	if (hasContent) {
-		let question = 'Slet "' + (row.name || "uden navn") + '"?';
+		let question = t('Slet "{name}"?', { name: row.name || t("uden navn") });
 		if (section.key === "categories") {
-			question += ' Udgifter, der allerede er skrevet ind her, bliver stående som "Uden kategori".';
+			question += " " + t('Udgifter, der allerede er skrevet ind her, bliver stående som "Uden kategori".');
 		}
 		if (!confirm(question)) {
 			return;
@@ -2490,7 +2586,7 @@ function deleteRow(button) {
 
 function exportBackup() {
 	downloadText("budget-kopi-" + dateKeyOf(new Date()) + ".json", JSON.stringify(data, null, 2), "application/json");
-	setMessage("backup-message", "Kopien er gemt som en fil.", false);
+	setMessage("backup-message", t("Kopien er gemt som en fil."), false);
 }
 
 async function importBackup(input) {
@@ -2504,12 +2600,12 @@ async function importBackup(input) {
 		const cleaned = cleanData(JSON.parse(await file.text()));
 		const monthCount = Object.keys(cleaned.months).length;
 		if (monthCount === 0) {
-			setMessage("backup-message", "Filen ligner ikke en kopi fra denne side.", true);
+			setMessage("backup-message", t("Filen ligner ikke en kopi fra denne side."), true);
 			return;
 		}
 		if (accountName !== null) {
 			// On an account, months are sent one by one; months not in the file stay as they are.
-			if (!confirm("Lægge kopiens " + monthsText(monthCount) + " ind på kontoen? Måneder med samme navn bliver erstattet.")) {
+			if (!confirm(t("Lægge kopiens {months} ind på kontoen? Måneder med samme navn bliver erstattet.", { months: monthsText(monthCount) }))) {
 				return;
 			}
 			for (const key of Object.keys(cleaned.months)) {
@@ -2517,16 +2613,16 @@ async function importBackup(input) {
 				saveMonth(key, cleaned.months[key]);
 			}
 		} else {
-			if (!confirm("Erstat alt, du har nu, med kopien (" + monthsText(monthCount) + ")?")) {
+			if (!confirm(t("Erstat alt, du har nu, med kopien ({months})?", { months: monthsText(monthCount) }))) {
 				return;
 			}
 			data = cleaned;
 			saveData();
 		}
 		render();
-		setMessage("backup-message", "Kopien er hentet.", false);
+		setMessage("backup-message", t("Kopien er hentet."), false);
 	} catch (error) {
-		setMessage("backup-message", "Kunne ikke læse filen.", true);
+		setMessage("backup-message", t("Kunne ikke læse filen."), true);
 	}
 }
 
@@ -2540,17 +2636,17 @@ async function importBackup(input) {
 // Reads the two boxes of the account form. Returns null (after saying why) if they're unusable.
 function readAccountForm(form) {
 	if (firebase === null) {
-		setMessage("account-message", "Kontoen er ved at starte. Prøv igen om et øjeblik.", true);
+		setMessage("account-message", t("Kontoen er ved at starte. Prøv igen om et øjeblik."), true);
 		return null;
 	}
 	const username = cleanUsername(form.elements.username.value);
 	const password = form.elements.password.value;
 	if (!isValidUsername(username)) {
-		setMessage("account-message", "Brugernavnet skal være 3–20 tegn: a–z, tal, - og _ (ingen æ, ø, å).", true);
+		setMessage("account-message", t("Brugernavnet skal være 3–20 tegn: a–z, tal, - og _ (ingen æ, ø, å)."), true);
 		return null;
 	}
 	if (password === "") {
-		setMessage("account-message", "Skriv en adgangskode.", true);
+		setMessage("account-message", t("Skriv en adgangskode."), true);
 		return null;
 	}
 	return { username: username, password: password };
@@ -2561,7 +2657,7 @@ async function signInFromForm(form) {
 	if (!login) {
 		return;
 	}
-	setMessage("account-message", "Logger ind …", false);
+	setMessage("account-message", t("Logger ind …"), false);
 	justSignedIn = true;
 	try {
 		await signIn(login.username, login.password);
@@ -2578,11 +2674,11 @@ async function createAccountFromForm(form) {
 	}
 
 	// A new password must be strong: the checker (zxcvbn) is downloaded the first time.
-	setMessage("account-message", "Tjekker adgangskoden …", false);
+	setMessage("account-message", t("Tjekker adgangskoden …"), false);
 	try {
 		await loadPasswordChecker();
 	} catch (error) {
-		setMessage("account-message", "Kunne ikke hente adgangskode-tjekket. Tjek internettet.", true);
+		setMessage("account-message", t("Kunne ikke hente adgangskode-tjekket. Tjek internettet."), true);
 		return;
 	}
 	const check = checkNewPassword(login.password, login.username);
@@ -2591,7 +2687,7 @@ async function createAccountFromForm(form) {
 		return;
 	}
 
-	setMessage("account-message", "Opretter kontoen …", false);
+	setMessage("account-message", t("Opretter kontoen …"), false);
 	justSignedIn = true;
 	try {
 		await createAccount(login.username, login.password);
@@ -2709,8 +2805,7 @@ function offerToMoveDeviceData() {
 	if (deviceKeys.length === 0) {
 		return;
 	}
-	const question = "Du har tal gemt på denne enhed fra før (" + monthsText(deviceKeys.length) + "). "
-		+ "Skal de lægges ind på kontoen? En måned, kontoen allerede har, beholder kontoens plan og får lagt de udgifter til, som kun står på denne enhed.";
+	const question = t("Du har tal gemt på denne enhed fra før ({months}). Skal de lægges ind på kontoen? En måned, kontoen allerede har, beholder kontoens plan og får lagt de udgifter til, som kun står på denne enhed.", { months: monthsText(deviceKeys.length) });
 	if (!confirm(question)) {
 		return;
 	}
@@ -2739,7 +2834,8 @@ function offerToMoveDeviceData() {
 
 // --- Start ---------------------------------------------------------------------------
 
-document.getElementById("app-version").textContent = "Version " + APP_VERSION;
+setLanguage(languageForStart());
+applyStaticTexts();
 applyTheme(currentTheme);   // (index.html has already put the colours on; this also sets the phone's top bar)
 
 // Opened with a kid's link (or on a device that remembers one): then it is only the kid's own page,
@@ -2755,7 +2851,7 @@ if (kidLinkKey !== null) {
 		startAccounts(onAccountChange).catch((error) => {
 			console.error(error);
 			accountFailed = true;
-			setWarning("Kunne ikke starte kontoen. Tjek internettet.");
+			setWarning(t("Kunne ikke starte kontoen. Tjek internettet."));
 			render();
 		});
 	}

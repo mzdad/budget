@@ -3,6 +3,29 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.14.0 - 2026-10-01
+
+- **Danish / English.** Under Indstillinger there is a new box **"Sprog · Language"** with Dansk and English.
+  Every text on every screen changes, also the tabs at the bottom, the month buttons, the messages, the
+  questions the page asks, the report and the kid's page.
+  - **Numbers and dates follow the language.** Danish: 12.500 kr., 30.09.2026, "30. september". English: DKK 12,500,
+    30/09/2026, "30 September". The money is still in kroner (the currency choice is the next item).
+    Typed amounts are understood in both styles: 49,95 and 49.95, 1.250,50 and 1,250.50.
+  - **The spreadsheet follows too**: Danish Excel gets `;` between cells and a decimal comma, English Excel gets `,` and a
+    decimal point. The headings are in the language.
+  - **A new month starts with names in the language** (Løn / Salary, Husleje / Rent, Mad og dagligvarer / Food and
+    groceries ...). What you have written yourself (categories, notes, names) stays as you wrote it.
+  - **Which language a device starts in:** the one you choose, kept on that phone or computer. A device that has never
+    used the page starts in the language of its phone or browser (Danish for a Danish one, English for any other). **A
+    device that has used the page before stays Danish**, so a Danish computer with an English browser does not turn
+    English on its own; choose English in the box if you want it.
+  - **Kids' links carry the language** (`&lang=da` / `&lang=en`): the kid's page opens in the language of the one who gave the
+    link, and keeps it on the kid's phone. (Existing links, made before this, follow the kid's own phone.)
+  - **The bank reader understands English** too: "Tuesday 30 September", "Oct 2", "Today", "Yesterday", "Balance".
+- **For whoever adds texts later:** a text on a screen is written in the code as `t("Dansk tekst")`; the Danish text is also
+  the key, and the English one is added in `texts.js` (a test fails if one is missing, or has other `{names}`).
+  New file `texts.js`.
+
 ## 1.13.1 - 2026-10-01
 
 - **Bug fix: "Læs fra skærmbillede" added nothing from a bank list laid out in columns** (you sent a real

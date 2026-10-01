@@ -1,0 +1,412 @@
+"use strict";
+
+// texts.js - the page's language: Danish (the default) or English.
+//
+// Every text on the screens is written in the code in Danish, inside t("..."). That Danish text is
+// also the KEY: with Danish chosen, t() gives it back as it is; with English chosen, t() looks it up
+// in ENGLISH (at the bottom of this file) and gives the English text. A text that has no English
+// yet falls back to the Danish one (a test checks that none is missing).
+//
+//   t("Slet")                               -> "Slet" / "Delete"
+//   t("Tilføjet {count} udgifter", { count: 3 })   -> "Tilføjet 3 udgifter" / "Added 3 expenses"
+//
+// {name} in a text is replaced by the value of that name. Words that depend on a number (1 linje /
+// 3 linjer) are two texts, chosen with tn(). A value that goes into a piece of HTML must already
+// be made safe with esc() by the one who calls t(); the texts themselves are fixed and trusted.
+//
+// Also here: the language setting, and the locale ("da-DK" / "en-GB") that dates and numbers use.
+// This file comes first in index.html; budget.js also loads it itself when it runs in Node (tests).
+
+const LANGUAGES = [
+	{ id: "da", name: "Dansk", locale: "da-DK" },
+	{ id: "en", name: "English", locale: "en-GB" },
+];
+const DEFAULT_LANGUAGE = "da";
+
+let currentLanguage = DEFAULT_LANGUAGE;
+
+function setLanguage(id) {
+	currentLanguage = LANGUAGES.some((language) => language.id === id) ? id : DEFAULT_LANGUAGE;
+}
+
+function getLanguage() {
+	return currentLanguage;
+}
+
+// "da-DK" or "en-GB": for Intl (month names, dates, number style).
+function uiLocale() {
+	return LANGUAGES.find((language) => language.id === currentLanguage).locale;
+}
+
+// The language a device starts in when nothing was chosen: the phone's own, if it is one we have.
+function languageOfPhone(languages) {
+	const codes = (languages || []).filter(Boolean);
+	if (codes.length === 0) {
+		return DEFAULT_LANGUAGE;   // the phone says nothing: the page's own language
+	}
+	for (const code of codes) {
+		const wanted = String(code).toLowerCase().slice(0, 2);
+		if (LANGUAGES.some((language) => language.id === wanted)) {
+			return wanted;
+		}
+	}
+	return "en";   // a language we do not have: English
+}
+
+function t(text, values) {
+	let result = text;
+	if (currentLanguage !== DEFAULT_LANGUAGE && Object.prototype.hasOwnProperty.call(ENGLISH, text)) {
+		result = ENGLISH[text];
+	}
+	if (values) {
+		result = result.replace(/\{(\w+)\}/g, (match, name) => (name in values ? String(values[name]) : match));
+	}
+	return result;
+}
+
+// Marks a text that sits in a list of data (a theme's name, a section's title) and is translated
+// later, with t(), where it is shown. Does nothing itself; it lets the check for missing English
+// texts find it.
+function T(text) {
+	return text;
+}
+
+// A text that depends on a number: `one` when it is 1, else `many`. The number is {n} in both.
+function tn(n, one, many, values) {
+	return t(n === 1 ? one : many, { n: n, ...values });
+}
+
+if (typeof module !== "undefined") {
+	module.exports = { LANGUAGES, DEFAULT_LANGUAGE, setLanguage, getLanguage, uiLocale, languageOfPhone, t, tn, T, ENGLISH_TEXTS: () => ENGLISH };
+}
+
+// The English texts. The key is the Danish text, exactly as it is in the code.
+const ENGLISH = {
+	"Grøn": "Green",
+	"Følger telefonens lyse eller mørke udseende": "Follows the phone's light or dark setting",
+	"Rød og sort": "Red and black",
+	"Altid mørk": "Always dark",
+	"Indkomst": "Income",
+	"Det du får, efter skat.": "What you receive, after tax.",
+	"+ Tilføj indkomst": "+ Add income",
+	"Faste udgifter": "Fixed expenses",
+	"Regninger og abonnementer.": "Bills and subscriptions.",
+	"+ Tilføj fast udgift": "+ Add fixed expense",
+	"Kategorier": "Categories",
+	"Det du bruger penge på, og hvor meget du højst vil bruge på hver. En ny kategori kommer i alle måneder; grænsen gælder kun denne måned.": "What you spend money on, and the most you want to spend on each. A new category appears in every month; the limit only applies to this month.",
+	"+ Tilføj kategori": "+ Add category",
+	"Din browser vil ikke gemme tal her (måske et privat vindue?). Det du skriver, forsvinder, når du lukker siden.": "Your browser will not save numbers here (a private window, maybe?). What you write disappears when you close the page.",
+	"Månedsbudget": "Monthly budget",
+	"Version {version}": "Version {version}",
+	"Kunne ikke gemme på kontoen: {problem}": "Could not save to the account: {problem}",
+	"(uden navn)": "(no name)",
+	"Uden kategori": "No category",
+	"Kunne ikke hente dine tal": "Could not fetch your numbers",
+	"Tjek, at du har internet, og prøv igen. Dine tal er ikke væk.": "Check that you have internet and try again. Your numbers are not gone.",
+	"Prøv igen": "Try again",
+	"Henter dine tal …": "Fetching your numbers …",
+	"Et øjeblik.": "One moment.",
+	"Ingen forbindelse. Dine ændringer gemmes, når du er online igen.": "No connection. Your changes are saved when you are online again.",
+	"Gemmer …": "Saving …",
+	"✓ Gemt på kontoen": "✓ Saved to the account",
+	"Kom i gang": "Get started",
+	"Skriv din indkomst og dine faste udgifter under <b>Plan</b>.": "Write your income and your fixed expenses under <b>Plan</b>.",
+	"Skriv hver udgift ind her.": "Write each expense in here.",
+	"Start med planen": "Start with the plan",
+	"Du er {amount} over budget.": "You are {amount} over budget.",
+	"Hele beløbet er brugt.": "The whole amount is used.",
+	"Der er næsten ikke noget tilbage.": "There is almost nothing left.",
+	"Tilbage at bruge": "Left to spend",
+	"Til rådighed": "Available",
+	"Brugt": "Spent",
+	"Tilføj udgift": "Add expense",
+	"Beløb i kroner": "Amount in kroner",
+	"fx 49,95": "e.g. 49.95",
+	"Note (hvis du vil)": "Note (if you like)",
+	"fx Rema 1000": "e.g. Grocery store",
+	"Kategori": "Category",
+	"Dato": "Date",
+	"Tilføj": "Add",
+	"Læs fra skærmbillede": "Read from screenshot",
+	"Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.": "A screenshot of the bank's list of purchases. It is read here on your phone and not sent anywhere. You check everything before it is saved.",
+	"Dine kategorier": "Your categories",
+	"Lav kategorier under Indstillinger.": "Make categories under Settings.",
+	"Åbn indstillinger": "Open settings",
+	"{amount} over": "{amount} over",
+	"{width} procent brugt": "{width} percent used",
+	"Ingen grænse": "No limit",
+	"{amount} over grænsen": "{amount} over the limit",
+	"{amount} tilbage": "{amount} left",
+	"{spent} af {limit}": "{spent} of {limit}",
+	"Brugt i alt i {month}": "Spent in total in {month}",
+	"Ingen udgifter endnu.": "No expenses yet.",
+	"Slet udgiften": "Delete the expense",
+	"Penge nu": "Money now",
+	"Opsparing er hele bunken, også børnenes penge.": "Savings is the whole pile, including the children's money.",
+	"Hvad står der på dine konti lige nu?": "What is in your accounts right now?",
+	"Lønkonto": "Main account",
+	"Opsparing": "Savings",
+	"Hvad betyder det?": "What does it mean?",
+	"Skriv tallene fra banken. Det nyeste, du skriver, gælder altid.": "Write the numbers from the bank. The newest one you write always counts.",
+	"Opsparing går ned, når et barn bruger penge, og op, når et barn får penge.": "Savings goes down when a child spends money, and up when a child receives money.",
+	"Lønkonto ændrer sig ikke af sig selv.": "The main account does not change by itself.",
+	"Opdateret {date}": "Updated {date}",
+	"siden da: børnene {change}": "since then: the children {change}",
+	"I alt:": "Total:",
+	"Regnes fra starten af {month}.": "Counted from the start of {month}.",
+	"Dit gamle tal:": "Your old number:",
+	"Skriv dine to konti her for at erstatte det.": "Write your two accounts here to replace it.",
+	"Skriv din indkomst under <b>Plan</b> først.": "Write your income under <b>Plan</b> first.",
+	"Lægges til: <b>{amount}</b> nu, ændrer sig senere": "Added: <b>{amount}</b> now, changes later",
+	"Lægges til hver måned <b>{amount}</b>": "Added every month <b>{amount}</b>",
+	"Kun opsparingen: <b>{amount}</b>": "Savings only: <b>{amount}</b>",
+	"Om {n} måneder har du": "In {n} months you will have",
+	"Ved udgangen af {month}.": "At the end of {month}.",
+	"Det store tal: du bruger præcis dine grænser og beholder resten. \"Kun opsparingen\": du bruger alt andet end det, du har sat til side. Et regnestykke, ikke en forudsigelse.": "The big number: you spend exactly your limits and keep the rest. \"Savings only\": you spend everything except what you have set aside. A calculation, not a prediction.",
+	"Måned for måned": "Month by month",
+	"Måned": "Month",
+	"Lægges til": "Added",
+	"Penge i alt": "Total money",
+	"Start": "Start",
+	"* = måneden er ikke sat op og bruger planen fra måneden før.": "* = the month is not set up and uses the plan from the month before.",
+	"børnene": "the children",
+	"Heraf {who} (i dag): <b>{others}</b> · Dine egne: <b>{yours}</b>": "Of which {who} (today): <b>{others}</b> · Your own: <b>{yours}</b>",
+	"Konto": "Account",
+	"Logget ind som <b>{name}</b>. Dine tal er gemt online.": "Signed in as <b>{name}</b>. Your numbers are saved online.",
+	"Log ud": "Sign out",
+	"Gem dine tal på en konto": "Save your numbers in an account",
+	"Så følger dine tal dig overalt, og de går ikke tabt.": "Then your numbers follow you everywhere, and are never lost.",
+	"Brugernavn": "Username",
+	"Adgangskode": "Password",
+	"Log ind": "Sign in",
+	"Opret ny konto": "Create new account",
+	"Brugernavn uden æ, ø, å. Adgangskode: mindst 10 tegn, fx tre ord og et tal.": "Username without æ, ø, å. Password: at least 10 characters, e.g. three words and a number.",
+	"Udseende": "Appearance",
+	"Vælg farverne. Valget gælder kun denne telefon eller computer.": "Choose the colours. The choice only applies to this phone or computer.",
+	"Denne måned: {month}": "This month: {month}",
+	"Hele året {year}": "The whole year {year}",
+	"Eksport": "Export",
+	"Hent en måned eller et helt år til Excel eller PDF.": "Get a month or a whole year for Excel or PDF.",
+	"Hvad vil du se?": "What do you want to see?",
+	"Åbn rapport": "Open report",
+	"Sådan ser måneden ud": "How the month looks",
+	"Fordelt på hverdagen": "Handed out for everyday",
+	"Ikke fordelt endnu": "Not handed out yet",
+	"Fordelt for meget": "Handed out too much",
+	"Du har fordelt mere, end du har.": "You have handed out more than you have.",
+	"Alt gemmes med det samme. Ændringer gælder kun denne måned.": "Everything is saved at once. Changes only apply to this month.",
+	"Ret kategorier og grænser →": "Edit categories and limits →",
+	"Ikke fordelt endnu:": "Not handed out yet:",
+	"Fordelt for meget:": "Handed out too much:",
+	"Til rådighed:": "Available:",
+	"Navn": "Name",
+	"Slet rækken": "Delete the row",
+	"Hver måned": "Every month",
+	"Hver 2. måned": "Every 2nd month",
+	"Hver 3. måned": "Every 3rd month",
+	"Hver 6. måned": "Every 6th month",
+	"Hvert år": "Every year",
+	"Hvor ofte?": "How often?",
+	"Første betaling": "First payment",
+	"Fra": "From",
+	"Til": "To",
+	"Ryd": "Clear",
+	"første gang {date}": "first time {date}",
+	"Gælder {when}": "Applies {when}",
+	"Betales i {month}: {amount}": "Paid in {month}: {amount}",
+	"Betales ikke i {month}. Næste gang: {next}": "Not paid in {month}. Next time: {next}",
+	"Betales ikke flere gange.": "Not paid any more.",
+	"Fra-datoen ligger efter til-datoen, så rækken tæller aldrig.": "The from-date is after the to-date, so the row never counts.",
+	"Gælder ikke i {month}.": "Does not apply in {month}.",
+	"Gælder hele {month}: {amount}": "Applies all of {month}: {amount}",
+	"I {month} tæller {active} af {days} dage: {amount}": "In {month}, {active} of {days} days count: {amount}",
+	"Hvor meget lægger du til side hver måned?": "How much do you set aside each month?",
+	"Opsparing pr. måned": "Savings per month",
+	"På iPhone: Del → Føj til hjemmeskærm, så Safari ikke rydder dine tal.": "On iPhone: Share → Add to Home Screen, so Safari does not clear your numbers.",
+	"Sikkerhedskopi": "Backup",
+	"Gem en kopi som ekstra sikkerhed.": "Save a copy as extra safety.",
+	"Gem kopi som fil": "Save copy as a file",
+	"Hent kopi fra fil": "Load copy from a file",
+	"Ingen udgifter.": "No expenses.",
+	"Note": "Note",
+	"Beløb": "Amount",
+	"Budget: {label}": "Budget: {label}",
+	"Oversigt": "Summary",
+	"Tilbage": "Left",
+	"Grænse": "Limit",
+	"Udgifter": "Expenses",
+	"Der er ingen gemte måneder i {year}.": "There are no saved months in {year}.",
+	"I alt": "Total",
+	"Faste": "Fixed",
+	"Stryg tabellen til siden for at se alle kolonner.": "Swipe the table sideways to see all columns.",
+	"Brugt pr. kategori": "Spent per category",
+	"Hent til Excel (.csv)": "Get for Excel (.csv)",
+	"Udskriv eller gem som PDF": "Print or save as PDF",
+	"‹ Tilbage til Indstillinger": "‹ Back to Settings",
+	"Alle måneder har allerede kategorierne.": "Every month already has the categories.",
+	"Gjort: kategorierne er nu også i {months}.": "Done: the categories are now in {months} too.",
+	"Kunne ikke opdatere barnets side: {problem}": "Could not update the child's page: {problem}",
+	"Vil dine børn selv skrive, hvad de bruger? Log ind på en konto øverst først.": "Do you want your children to write what they use themselves? Sign in to an account at the top first.",
+	"Giv {name} sit eget link": "Give {name} their own link",
+	"{name}s link": "{name}'s link",
+	"Kopiér link": "Copy link",
+	"Fjern linket": "Remove the link",
+	"Hvad kan barnet med linket?": "What can the child do with the link?",
+	"Barnet åbner linket og kan se, hvad det har, og skrive, hvad det bruger. Intet andet. Send linket kun til barnet: den, der har linket, kan skrive. Du kan altid slette en post eller fjerne linket. Åbner du selv linket på din egen telefon, så tryk bagefter \"Ikke dig? Åbn budgettet\".": "The child opens the link and can see what they have, and write what they spend. Nothing else. Send the link only to the child: whoever has the link can write. You can always delete an entry or remove the link. If you open the link yourself on your own phone, tap \"Not you? Open the budget\" afterwards.",
+	"Linket er lavet. Tryk Kopiér, og send det til {name}.": "The link is made. Press Copy, and send it to {name}.",
+	"Kunne ikke lave linket: {problem}": "Could not make the link: {problem}",
+	"Hold fingeren på linket og vælg Kopiér.": "Hold your finger on the link and choose Copy.",
+	"Linket er kopieret. Send det til barnet.": "The link is copied. Send it to the child.",
+	"Fjern {name}s link? Så virker det ikke mere. Det, {name} har skrevet, beholder du.": "Remove {name}'s link? Then it stops working. What {name} has written, you keep.",
+	"Kunne ikke fjerne linket: {problem}": "Could not remove the link: {problem}",
+	"Slet den post?": "Delete that entry?",
+	"Kunne ikke slette: {problem}": "Could not delete: {problem}",
+	"Brugte": "Spent",
+	"Fik": "Got",
+	"selv": "by the child",
+	"Slet": "Delete",
+	"{name} har": "{name} has",
+	"fx 300": "e.g. 300",
+	"Hvad? (hvis du vil)": "What? (if you like)",
+	"{name} brugte": "{name} spent",
+	"{name} fik": "{name} got",
+	"Historik": "History",
+	"Fjern {name}": "Remove {name}",
+	"Skriv et beløb, fx 300.": "Write an amount, e.g. 300.",
+	"For mange poster i denne måned.": "Too many entries in this month.",
+	"Opsparingen er nu {amount}": "Savings is now {amount}.",
+	"{name} brugte {amount} Nu har {name} {left} tilbage.": "{name} spent {amount}. Now {name} has {left} left.",
+	"{name} fik {amount} Nu har {name} {left}": "{name} got {amount}. Now {name} has {left}.",
+	"Fjern {name} og alle posterne? Det kan ikke fortrydes.": "Remove {name} and all the entries? This cannot be undone.",
+	"Barnets navn": "Child's name",
+	"fx Nathan": "e.g. Nathan",
+	"Hvor mange penge har barnet nu?": "How much money does the child have now?",
+	"Tilføj barn": "Add child",
+	"Børn": "Children",
+	"Børnenes penge i din bunke.": "The children's money in your pile.",
+	"+ Tilføj et barn mere": "+ Add another child",
+	"Skriv barnets navn.": "Write the child's name.",
+	"Skriv et beløb, fx 5000.": "Write an amount, e.g. 5000.",
+	"{name} findes allerede.": "{name} already exists.",
+	"{name} er tilføjet. Se under Overblik.": "{name} is added. See under Overview.",
+	"Læseprogrammet kunne ikke hentes. Tjek, at du har internet, og prøv igen.": "The reader could not be downloaded. Check that you have internet and try again.",
+	"Billedet kunne ikke læses. Prøv med et andet skærmbillede.": "The picture could not be read. Try another screenshot.",
+	"Gør klar … Første gang hentes læseprogrammet (nogle få MB), så kan det tage lidt.": "Getting ready … The first time the reader is downloaded (a few MB), so it can take a while.",
+	"Læser billedet … {percent} %": "Reading the picture … {percent} %",
+	"findes allerede": "already exists",
+	"ligner penge ind": "looks like money in",
+	"tjek beløbet": "check the amount",
+	"Tilføj denne udgift": "Add this expense",
+	"Tekst": "Text",
+	"Ingen valgt": "None chosen",
+	"Læser billedet": "Reading the picture",
+	"Annullér": "Cancel",
+	"Det lykkedes ikke": "That did not work",
+	"Luk": "Close",
+	"Ingen udgifter fundet": "No expenses found",
+	"Billedet kan være læst forkert. Tjek mod billedet, ret tekst og beløb, vælg kategori, og fjern fluebenet ved dem, du ikke vil have med.": "The picture may have been read wrongly. Check against the picture, fix text and amounts, choose a category, and untick the ones you do not want.",
+	"Se billedet": "See the picture",
+	"Dit skærmbillede": "Your screenshot",
+	"Kunne ikke læses ({n})": "Could not be read ({n})",
+	"De er ikke med. Skriv dem selv ind under Tilføj udgift.": "They are not included. Write them in yourself under Add expense.",
+	"Ret de røde beløb, eller fjern fluebenet ved dem.": "Fix the red amounts, or untick them.",
+	"Der er ikke valgt nogen.": "None are chosen.",
+	"Der kan højst være {max} udgifter i en måned. Fjern nogle af fluebenene.": "A month can hold at most {max} expenses. Untick some of them.",
+	"Skriv et beløb større end 0, fx 49,95.": "Write an amount larger than 0, e.g. 49.95.",
+	"Datoen skal ligge i {month}.": "The date must be in {month}.",
+	"Der er for mange udgifter i denne måned ({max}). Slet nogle gamle.": "There are too many expenses in this month ({max}). Delete some old ones.",
+	"Tilføjet: {amount} til {category}.": "Added: {amount} to {category}.",
+	"Slet {amount} ({what})?": "Delete {amount} ({what})?",
+	"Der kan højst være {max} rækker her.": "There can be at most {max} rows here.",
+	"Brug disse kategorier i alle måneder": "Use these categories in every month",
+	"Slet \"{name}\"?": "Delete \"{name}\"?",
+	"uden navn": "no name",
+	"Udgifter, der allerede er skrevet ind her, bliver stående som \"Uden kategori\".": "Expenses already written in here stay as \"No category\".",
+	"Kopien er gemt som en fil.": "The copy is saved as a file.",
+	"Filen ligner ikke en kopi fra denne side.": "The file does not look like a copy from this page.",
+	"Lægge kopiens {months} ind på kontoen? Måneder med samme navn bliver erstattet.": "Put the copy's {months} into the account? Months with the same name are replaced.",
+	"Erstat alt, du har nu, med kopien ({months})?": "Replace everything you have now with the copy ({months})?",
+	"Kopien er hentet.": "The copy is loaded.",
+	"Kunne ikke læse filen.": "Could not read the file.",
+	"Kontoen er ved at starte. Prøv igen om et øjeblik.": "The account is starting. Try again in a moment.",
+	"Brugernavnet skal være 3–20 tegn: a–z, tal, - og _ (ingen æ, ø, å).": "The username must be 3–20 characters: a–z, digits, - and _ (no æ, ø, å).",
+	"Skriv en adgangskode.": "Write a password.",
+	"Logger ind …": "Signing in …",
+	"Tjekker adgangskoden …": "Checking the password …",
+	"Kunne ikke hente adgangskode-tjekket. Tjek internettet.": "Could not fetch the password check. Check the internet.",
+	"Opretter kontoen …": "Creating the account …",
+	"Du har tal gemt på denne enhed fra før ({months}). Skal de lægges ind på kontoen? En måned, kontoen allerede har, beholder kontoens plan og får lagt de udgifter til, som kun står på denne enhed.": "You have numbers saved on this device from before ({months}). Should they be put into the account? A month the account already has keeps the account's plan and gets the expenses that are only on this device.",
+	"Kunne ikke starte kontoen. Tjek internettet.": "Could not start the account. Check the internet.",
+	"{n} måned": "{n} month",
+	"{n} måneder": "{n} months",
+	"Det svarer til ca. {amount} om dagen i {n} dag.": "That is about {amount} a day for {n} day.",
+	"Det svarer til ca. {amount} om dagen i {n} dage.": "That is about {amount} a day for {n} days.",
+	"Tilføj {n} udgift": "Add {n} expense",
+	"Tilføj {n} udgifter": "Add {n} expenses",
+	"Fundet {n} linje til {month}": "Found {n} line for {month}",
+	"Fundet {n} linjer til {month}": "Found {n} lines for {month}",
+	"{n} linje er fra andre måneder ({months}) og er ikke med. Gå til den måned, og vælg billedet igen.": "{n} line is from other months ({months}) and is not included. Go to that month and choose the picture again.",
+	"{n} linjer er fra andre måneder ({months}) og er ikke med. Gå til den måned, og vælg billedet igen.": "{n} lines are from other months ({months}) and are not included. Go to that month and choose the picture again.",
+	"Tilføjet {n} udgift fra billedet.": "Added {n} expense from the picture.",
+	"Tilføjet {n} udgifter fra billedet.": "Added {n} expenses from the picture.",
+	"En anden måned mangler nogle af kategorierne her.": "Another month lacks some of the categories here.",
+	"{n} andre måneder mangler nogle af kategorierne her.": "{n} other months lack some of the categories here.",
+	"Løn": "Salary",
+	"Husleje": "Rent",
+	"El og varme": "Electricity and heating",
+	"Telefon og internet": "Phone and internet",
+	"Forsikring": "Insurance",
+	"Abonnementer": "Subscriptions",
+	"Mad og dagligvarer": "Food and groceries",
+	"Transport": "Transport",
+	"Fritid og fornøjelser": "Leisure and fun",
+	"Tøj og personlig pleje": "Clothes and personal care",
+	"Sundhed": "Health",
+	"Andet": "Other",
+	"hvert år": "every year",
+	"hver 2. måned": "every 2nd month",
+	"hver 3. måned": "every 3rd month",
+	"hver 6. måned": "every 6th month",
+	"hver {n}. måned": "every {n}th month",
+	"fra {date}": "from {date}",
+	"til {date}": "to {date}",
+	"Budget": "Budget",
+	"Ikke dig? Åbn budgettet": "Not you? Open the budget",
+	"Henter …": "Fetching …",
+	"Linket virker ikke mere": "The link no longer works",
+	"Bed om et nyt link.": "Ask for a new link.",
+	"Kunne ikke hente": "Could not fetch",
+	"Tjek, at du har internet, og prøv igen.": "Check that you have internet and try again.",
+	"Brugte du penge?": "Did you spend money?",
+	"Hvor mange kroner?": "How many kroner?",
+	"fx 25": "e.g. 25",
+	"Hvad købte du? (hvis du vil)": "What did you buy? (if you like)",
+	"Skriv ind": "Write it in",
+	"Det virkede ikke. Måske er linket fjernet. Bed om et nyt.": "That did not work. Maybe the link was removed. Ask for a new one.",
+	"Det virkede ikke. Prøv igen om lidt.": "That did not work. Try again in a little while.",
+	"Skriv et beløb, fx 25.": "Write an amount, e.g. 25.",
+	"Skrevet: {amount} Nu har du {left} tilbage.": "Written: {amount}. Now you have {left} left.",
+	"Det brugernavn er optaget. Vælg et andet.": "That username is taken. Choose another.",
+	"Brugernavn eller adgangskode passer ikke.": "Username or password does not match.",
+	"For mange forsøg. Vent lidt og prøv igen.": "Too many tries. Wait a little and try again.",
+	"Firebase afviste adgangskoden. Den skal være mindst 10 tegn, og Firebase kan også kræve store og små bogstaver og tal. Brug fx \"Lilla-tiger-raket-47\".": "Firebase refused the password. It must be at least 10 characters, and Firebase may also require capital and small letters and digits. Try e.g. \"Lilla-tiger-raket-47\".",
+	"Det er lukket for nye konti lige nu.": "New accounts are closed right now.",
+	"Konti er ikke sat op endnu (se SETUP-ACCOUNTS.md).": "Accounts are not set up yet (see SETUP-ACCOUNTS.md).",
+	"Ingen forbindelse til internettet.": "No connection to the internet.",
+	"Kontoen måtte ikke gemme det. Er reglerne i Firebase lagt ind? (se SETUP-ACCOUNTS.md, trin 6)": "The account was not allowed to save that. Are the rules in Firebase published? (see SETUP-ACCOUNTS.md, step 6)",
+	"Noget gik galt ({code}).": "Something went wrong ({code}).",
+	"Adgangskoden skal være mindst {min} tegn. Der mangler {missing}.": "The password must be at least {min} characters. {missing} missing.",
+	"Adgangskoden må ikke indeholde dit brugernavn.": "The password must not contain your username.",
+	"Adgangskode-tjekket er ved at blive hentet. Prøv igen om et øjeblik.": "The password check is being downloaded. Try again in a moment.",
+	"Adgangskoden er for nem at gætte. Brug fx tre almindelige ord og et tal, som \"Lilla-tiger-raket-47\".": "The password is too easy to guess. Try e.g. three ordinary words and a number, like \"Lilla-tiger-raket-47\".",
+	"Forrige måned": "Previous month",
+	"Gå til denne måned": "Go to this month",
+	"Næste måned": "Next month",
+	"Skærme": "Screens",
+	"Overblik": "Overview",
+	"Fremtid": "Future",
+	"Plan": "Plan",
+	"Indstillinger": "Settings",
+	"Vælg sproget. Valget gælder kun denne telefon eller computer.": "Choose the language. The choice only applies to this phone or computer.",
+	"Sprog": "Language",
+};

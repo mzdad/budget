@@ -74,33 +74,33 @@ function kidTotal() {
 
 // The whole kid screen as HTML. Takes the state as it is given, so it can be tested on its own.
 function kidScreenHtml(state, total) {
-	const leave = '<p class="hint kid-leave"><button type="button" class="link" data-kid-action="leave">Ikke dig? Åbn budgettet</button></p>';
+	const leave = '<p class="hint kid-leave"><button type="button" class="link" data-kid-action="leave">' + t("Ikke dig? Åbn budgettet") + "</button></p>";
 
 	if (state.status === "loading") {
-		return '<section class="card"><h2>Henter …</h2><p class="hint">Et øjeblik.</p></section>';
+		return '<section class="card"><h2>' + t("Henter …") + '</h2><p class="hint">' + t("Et øjeblik.") + "</p></section>";
 	}
 	if (state.status === "gone") {
-		return '<section class="card"><h2>Linket virker ikke mere</h2><p class="hint">Bed om et nyt link.</p></section>' + leave;
+		return '<section class="card"><h2>' + t("Linket virker ikke mere") + '</h2><p class="hint">' + t("Bed om et nyt link.") + "</p></section>" + leave;
 	}
 	if (state.status === "failed") {
-		return '<section class="card"><h2>Kunne ikke hente</h2><p class="hint">Tjek, at du har internet, og prøv igen.</p><button class="primary" data-kid-action="retry">Prøv igen</button></section>' + leave;
+		return '<section class="card"><h2>' + t("Kunne ikke hente") + '</h2><p class="hint">' + t("Tjek, at du har internet, og prøv igen.") + '</p><button class="primary" data-kid-action="retry">' + t("Prøv igen") + "</button></section>" + leave;
 	}
 
 	const name = esc(state.person);
 	return `
 		<section class="card">
-			<div class="label">${name} har</div>
+			<div class="label">${t("{name} har", { name: name })}</div>
 			<div class="big-number ${total < 0 ? "bad" : ""}" id="kid-total">${formatKr(total)}</div>
 		</section>
 		<form id="kid-form" class="card" autocomplete="off">
-			<h2>Brugte du penge?</h2>
-			<label>Hvor mange kroner?
-				<input name="amount" inputmode="decimal" placeholder="fx 25" required>
+			<h2>${t("Brugte du penge?")}</h2>
+			<label>${t("Hvor mange kroner?")}
+				<input name="amount" inputmode="decimal" placeholder="${t("fx 25")}" required>
 			</label>
-			<label>Hvad købte du? (hvis du vil)
+			<label>${t("Hvad købte du? (hvis du vil)")}
 				<input name="note" maxlength="${MAX_NOTE_LENGTH}">
 			</label>
-			<button type="submit" class="primary">Skriv ind</button>
+			<button type="submit" class="primary">${t("Skriv ind")}</button>
 			<p class="message ${state.messageIsError ? "bad" : ""}" role="status">${esc(state.message)}</p>
 		</form>
 		${leave}`;
@@ -168,9 +168,9 @@ function onKidProblem(error) {
 function kidProblemText(error) {
 	const code = (error && error.code) || "";
 	if (code === "permission-denied") {
-		return "Det virkede ikke. Måske er linket fjernet. Bed om et nyt.";
+		return t("Det virkede ikke. Måske er linket fjernet. Bed om et nyt.");
 	}
-	return "Det virkede ikke. Prøv igen om lidt.";
+	return t("Det virkede ikke. Prøv igen om lidt.");
 }
 
 // The kid presses "Skriv ind": one new entry, with a negative amount. The kid's own entries are
@@ -178,7 +178,7 @@ function kidProblemText(error) {
 function kidSubmit(form) {
 	const ore = parseAmount(form.elements.amount.value);
 	if (ore === null || ore <= 0) {
-		kidState.message = "Skriv et beløb, fx 25.";
+		kidState.message = t("Skriv et beløb, fx 25.");
 		kidState.messageIsError = true;
 		renderKid();
 		return;
@@ -193,7 +193,7 @@ function kidSubmit(form) {
 		kidState.messageIsError = true;
 		renderKid();
 	});
-	kidState.message = "Skrevet: " + formatKr(ore) + " Nu har du " + formatKr(left) + " tilbage.";
+	kidState.message = t("Skrevet: {amount} Nu har du {left} tilbage.", { amount: formatKr(ore), left: formatKr(left) });
 	kidState.messageIsError = false;
 	renderKid();
 }

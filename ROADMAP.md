@@ -5,6 +5,24 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.14.0
+
+- **2.2 Danish / English language switch** (you said: "danish/english shifter for language", and later "do 2.1-2-3").
+  Indstillinger -> "Sprog · Language". The decisions I made for the open questions:
+  - **Money stays in kroner** in both languages; only the NUMBER STYLE changes (12.500 kr. / DKK 12,500) and the dates
+    (30.09.2026 / 30/09/2026, "30. september" / "30 September"). Typed amounts are understood in both styles.
+  - **The kid's page follows the one who gave the link**: a kid's link now ends in `&lang=da` or `&lang=en`, and the kid's
+    phone keeps it. Older links follow the kid's own phone.
+  - **A new device starts in the phone's language** (Danish for a Danish phone, English for any other). **A device that has
+    used the page before stays Danish**: found while testing, this computer's browser is English, so without this rule your
+    computer would have turned English by itself. Choose English in the box if you want it.
+  - Kept per device (no change to Firebase's rules). The spreadsheet follows the language (`;` and decimal comma in Danish,
+    `,` and decimal point in English).
+  - How: every text is `t("Danish text")` in the code (about 330), English in `texts.js`; checked by tests (none missing,
+    none left over, same `{names}`), and by drawing every screen in English. Danish was compared screen for screen with
+    1.13.1 before and after (66 screens and message sets, character for character): only the new box is different.
+  - The bank-picture reader also reads English dates and words ("Tuesday 30 September", "Oct 2", "Today", "Balance").
+
 ## Done in 1.13.1
 
 - **1.2 (first part) Your bank's layout** (you sent a real screenshot and said: "the black numbers need to be
@@ -83,7 +101,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.2 | **Danish / English language switch** in Indstillinger (you asked for it, 1 October 2026). | Today every word on the screens is written straight into the code in Danish, so the work is to gather all the texts in one place, one list per language, and have the screens read from it. To decide: the money stays in kroner either way (only the words and the month and day names change); whether the kid's own page follows the language of the device it is opened on; which language a new device starts in (the phone's own setting is the natural pick). | L |
 | 2.3 | **Choose the currency**: euro, US dollar, British pound and more (you asked for it, 1 October 2026). | Today every amount is shown as kroner by one function (`formatKr` in `budget.js`), and the amounts are stored as whole hundredths ("øre"), which works for any currency that has hundredths, so the stored numbers would not change. To decide: **no conversion, only the label** (1.000 kr. would become 1.000 €, nothing recalculated; real exchange rates are a different, bigger feature); whether the choice is kept per account or per device; Danish number style (1.250,00 kr.) or the currency's own country's; and the things that say "kr" in words or files: the spreadsheet export, the kid's page and the bank-picture reader (it must then understand €, $ and £). Goes well together with 2.2. | M |
 
 ## 3. Money and planning

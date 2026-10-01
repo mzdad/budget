@@ -47,6 +47,10 @@ A small monthly budget page for phone and PC. Danish, kroner.
   number the reader may have got wrong says "tjek beløbet". The picture is never sent anywhere; the reader (Tesseract.js,
   about 6 MB) is downloaded from jsdelivr the first time it is used. (Code: `scan.js` reads the
   picture; "Reading the bank's list from a picture" in `budget.js` makes purchases of the text.)
+- **Danish / English.** Indstillinger -> "Sprog · Language". Every text is written in the code as `t("Dansk tekst")`;
+  the Danish text is the key and the English one is in `texts.js`. Numbers, dates and the spreadsheet follow the
+  language. Kept per device (a device that has used the page before stays Danish until you choose). A kid's link
+  carries the language. A test checks that every text has an English one.
 - **Colours.** Indstillinger -> Udseende: the normal green (follows the phone's light or dark setting) or
   red and black (always dark). Kept on the device. A theme is one block of colours at the top of
   `style.css` plus one line in `THEMES` in `app.js`.
@@ -69,6 +73,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
 |---|---|
 | `index.html` | The page frame, top bar and tab bar |
 | `style.css` | How it looks (colours at the top; dark mode follows the phone) |
+| `texts.js` | The language: `t("Danish text")` gives the Danish or the English text; all the English texts; the locale for dates and numbers |
 | `budget.js` | The maths: amounts, totals, months, the forecast, the reports and spreadsheet text. No screen code |
 | `app.js` | The screens, taps, saving, and the sign-in flow |
 | `account.js` | Talks to Firebase (sign in, save and watch the months, and the kids' pages). No screen code |

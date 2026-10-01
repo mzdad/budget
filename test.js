@@ -920,11 +920,11 @@ function pretendPage() {
 		removeItem: (key) => { delete store[key]; },
 	};
 	const context = vm.createContext({
-		document, window, localStorage, navigator: { onLine: true }, console,
+		document, window, localStorage, navigator: { onLine: true, language: "da-DK", languages: ["da-DK"] }, console,
 		URL, URLSearchParams, Blob, setTimeout, confirm: window.confirm, alert: window.alert, location: {},
 		FIREBASE_CONFIG: null, USE_FIREBASE_EMULATOR: false,   // accounts off: nothing here talks to Firebase
 	});
-	for (const file of ["budget.js", "password.js", "account.js", "kid.js", "scan.js", "app.js"]) {
+	for (const file of ["texts.js", "budget.js", "password.js", "account.js", "kid.js", "scan.js", "app.js"]) {
 		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
 	}
 	return { context, handlers, saved, root, store, view: () => shown, run: (code) => vm.runInContext(code, context) };
@@ -1161,7 +1161,139 @@ for (const [, name, block] of themeBlocks) {
 check("themes: the dark-mode colours cover the same names too", colourNamesIn(cssText.match(/@media \(prefers-color-scheme: dark\) \{\s*:root \{([^}]*)\}/)[1]), normalColours);
 const frame = fs.readFileSync(__dirname + "/index.html", "utf8");
 check("themes: index.html puts the saved theme on before the page is drawn", frame.includes('localStorage.getItem("budget.theme")') && frame.indexOf("budget.theme") < frame.indexOf("<body>"), true);
-check("themes: every theme in app.js has colours in style.css", [...fs.readFileSync(__dirname + "/app.js", "utf8").matchAll(/\{ id: "([a-z]+)", name: "[^"]+", note:/g)].map((match) => match[1]).filter((id) => id !== "green"), themeBlocks.map((match) => match[1]));
+check("themes: every theme in app.js has colours in style.css", [...fs.readFileSync(__dirname + "/app.js", "utf8").matchAll(/\{ id: "([a-z]+)", name: T\("[^"]+"\), note:/g)].map((match) => match[1]).filter((id) => id !== "green"), themeBlocks.map((match) => match[1]));
+
+// --- Language: Danish (the start) and English ---
+const texts = require("./texts.js");
+
+// Every text the code asks for: the first text of t(...) and T(...), both texts of tn(...), and the
+// data-i18n* texts of index.html.
+function textsInCode() {
+	const STRING = String.raw`("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')`;
+	const literal = (source) => Function("return " + source)();
+	const found = new Set();
+	for (const name of ["app.js", "budget.js", "kid.js", "account.js", "password.js", "scan.js"]) {
+		const source = fs.readFileSync(__dirname + "/" + name, "utf8");
+		for (const match of source.matchAll(new RegExp(String.raw`(?<![\w.$])[tT]\(\s*` + STRING, "g"))) {
+			found.add(literal(match[1]));
+		}
+		for (const match of source.matchAll(new RegExp(String.raw`(?<![\w.$])tn\(\s*[^,()]+,\s*` + STRING + String.raw`\s*,\s*` + STRING, "g"))) {
+			found.add(literal(match[1]));
+			found.add(literal(match[2]));
+		}
+	}
+	for (const match of fs.readFileSync(__dirname + "/index.html", "utf8").matchAll(/data-i18n(?:-aria|-title)?="([^"]*)"/g)) {
+		found.add(match[1]);
+	}
+	return [...found].filter((text) => /[A-Za-zÆØÅæøå]/.test(text));
+}
+const codeTexts = textsInCode();
+const englishTexts = texts.ENGLISH_TEXTS();
+const markers = (text) => (text.match(/\{\w+\}|<\/?b>/g) || []).sort();
+check("language: the code asks for texts (so this check looks at something)", codeTexts.length > 300, true);
+check("language: every text in the code has an English text", codeTexts.filter((text) => !(text in englishTexts)), []);
+check("language: no English text is left over that the code does not use", Object.keys(englishTexts).filter((text) => !codeTexts.includes(text)), []);
+check("language: an English text has the same {names} and <b> tags as the Danish one", codeTexts.filter((text) => text in englishTexts && JSON.stringify(markers(text)) !== JSON.stringify(markers(englishTexts[text]))), []);
+check("language: an English text is not empty and not just the Danish one copied (except names that are the same in both)", codeTexts.filter((text) => text in englishTexts && englishTexts[text] === text && text.length > 25), []);
+
+check("language: Danish is the start", texts.getLanguage(), "da");
+check("t: Danish gives the text as it is", texts.t("Slet"), "Slet");
+check("t: values are put in", texts.t("{name} har", { name: "Nathan" }), "Nathan har");
+check("tn: Danish, one and many", [texts.tn(1, "{n} måned", "{n} måneder"), texts.tn(3, "{n} måned", "{n} måneder")], ["1 måned", "3 måneder"]);
+check("language: the phone's language: Danish, English, another one, and none", [texts.languageOfPhone(["da-DK"]), texts.languageOfPhone(["en-GB"]), texts.languageOfPhone(["de-DE", "en-US"]), texts.languageOfPhone(["de-DE"]), texts.languageOfPhone([]), texts.languageOfPhone([undefined])], ["da", "en", "en", "en", "da", "da"]);
+check("language: a language that does not exist becomes Danish", (texts.setLanguage("xx"), texts.getLanguage()), "da");
+
+texts.setLanguage("en");
+check("t: English gives the English text", texts.t("Slet"), "Delete");
+check("t: a text with no English yet falls back to the Danish one", texts.t("Ukendt tekst {x}", { x: 1 }), "Ukendt tekst 1");
+check("t: a value that is not given stays as {name}", texts.t("{name} har", {}), "{name} has");
+check("tn: English, one and many", [texts.tn(1, "{n} måned", "{n} måneder"), texts.tn(3, "{n} måned", "{n} måneder")], ["1 month", "3 months"]);
+check("english: amounts show with English number style", [0, 4995, 123456, 1250000].map((ore) => plain(budget.formatKr(ore))), ["DKK 0", "DKK 49.95", "DKK 1,234.56", "DKK 12,500"]);
+check("english: an amount goes into a box with a dot", [100, 4995].map(budget.amountToInput), ["1", "49.95"]);
+check("english: typed amounts, either style", ["49.95", "49,95", "1,250", "1,250.50", "1.250,50", "12.500", "12,34"].map(budget.parseAmount), [4995, 4995, 125000, 125050, 125050, 1250000, 1234]);
+check("english: and what is not an amount", ["abc", "1,2,3", "1,250.5.0"].map(budget.parseAmount), [null, null, null]);
+check("english: month names", [budget.monthLabel("2026-09"), budget.shortMonthLabel("2026-09"), budget.dayLabel("2026-09-30")], ["September 2026", "Sept 2026", "Wednesday 30 September"]);
+check("english: dates in numbers", budget.dateText("2026-09-30"), "30/09/2026");
+check("english: how often", [2, 3, 6, 12].map(budget.everyText), ["every 2nd month", "every 3rd month", "every 6th month", "every year"]);
+check("english: from and to", budget.windowText({ id: "r", name: "x", amount: 1, from: "2026-10-12", to: "2026-11-30" }), "from 12/10/2026 to 30/11/2026");
+check("english: a spreadsheet uses , between cells and . for decimals", [budget.csvDelimiter(), budget.csvAmount(4995), budget.csvAmount(-5), budget.csvText("a,b"), budget.csvText("a;b")], [",", "49.95", "-0.05", '"a,b"', "a;b"]);
+check("english: a new month starts with English names", budget.starterMonth().categories.map((category) => category.name).slice(0, 3), ["Food and groceries", "Transport", "Leisure and fun"]);
+check("english: the spreadsheet's headings", budget.monthCsv(budget.monthReport(month, "2026-09")).split("\r\n").slice(0, 5), ["Budget,September 2026", "", "Summary", "Income," + budget.csvAmount(budget.summarize(month, "2026-09").income), "Fixed expenses," + budget.csvAmount(budget.summarize(month, "2026-09").fixed)]);
+check("english: the bank reader knows English dates", budget.parseBankText("Tuesday 30 September\nTesco -4.50\nOct 2\nShop -3.00", "2026-09", new Date(2026, 9, 1)).lines.map((line) => [line.date, line.note, line.ore]), [["2026-09-30", "Tesco", 450], ["2026-09-30", "Shop", 300]]);
+check("english: ...and 'today' and 'yesterday'", budget.parseBankText("Yesterday\nA -1.00\nToday\nB -2.00", "2026-10", new Date(2026, 9, 1)).lines.map((line) => line.date), ["2026-09-30", "2026-10-01"]);
+check("english: ...and a balance line is not a purchase", budget.parseBankText("30 Sep\nBalance 1,234.50\nTesco -4.50", "2026-09", new Date(2026, 9, 1)).lines.map((line) => line.note), ["Tesco"]);
+texts.setLanguage("da");
+check("danish again: amounts, dates and spreadsheet are as before", [plain(budget.formatKr(4995)), budget.dateText("2026-09-30"), budget.csvDelimiter(), budget.csvAmount(4995)], ["49,95 kr.", "30.09.2026", ";", "49,95"]);
+
+// Every screen in English: nothing is missing, and the language box works.
+if (page !== null) {
+	attempt("language: every screen draws in English", () => {
+		const english = pretendPage();
+		english.run("setLanguage('en'); var missingTexts = []; (function () { const original = t; t = function (text, values) { if (!Object.prototype.hasOwnProperty.call(ENGLISH, text)) { missingTexts.push(text); } return original(text, values); }; })();");
+		english.run("data = cleanData(" + JSON.stringify({ months: { "2026-09": JSON.parse(JSON.stringify(month)) } }) + "); viewMonth = '2026-09';");
+		english.run("data.months['2026-09'].pots = [{ id: 'p1', date: '2026-09-01', person: 'Nathan', amount: 500000, note: 'Start', start: true }];");
+		const drawn = {};
+		for (const tab of ["overview", "expenses", "future", "plan", "settings"]) {
+			english.run("activeTab = '" + tab + "'; render();");
+			drawn[tab] = english.view();
+		}
+		english.run("accountName = 'mama'; accountReady = true; kidPagesLoaded = true; kidPages = {}; kidEntries = {}; activeTab = 'settings'; render();");
+		drawn.signedIn = english.view();
+		english.run("reportScope = { type: 'month', key: '2026-09' }; activeTab = 'report'; render();");
+		drawn.report = english.view();
+		english.run("reportScope = { type: 'year', key: '2026' }; render();");
+		drawn.yearReport = english.view();
+		english.run("bankImport = { status: 'ready', monthKey: '2026-09', pictureUrl: 'blob:x', stage: 'loading', share: 0, rows: [{ date: '2026-09-30', note: 'A', amountText: '1', categoryId: '', tick: true, why: 'check', touched: false }, { date: '2026-09-30', note: 'B', amountText: '1', categoryId: '', tick: false, why: 'already', touched: false }], elsewhere: [{ date: '2026-08-01', note: 'x', amount: 1 }], unclear: ['x'], problem: '' }; activeTab = 'overview'; render();");
+		drawn.bank = english.view();
+		check("language: nothing is missing from the English texts when every screen is drawn", english.run("missingTexts"), []);
+		check("language: the English screens say so", [drawn.overview.includes("Add expense"), drawn.expenses.includes("Spent in total in September 2026"), drawn.future.includes("Money now"), drawn.plan.includes("How the month looks"), drawn.settings.includes("Categories"), drawn.report.includes("Budget: September 2026"), drawn.bank.includes("check the amount")], [true, true, true, true, true, true, true]);
+		check("language: no Danish is left on the English screens (apart from what you wrote yourself)", ["Tilføj udgift", "Indkomst", "Faste udgifter", "Opsparing", "Brugt i alt", "Hvad betyder det", "Indstillinger", "Sikkerhedskopi", "Kunne ikke læses"].filter((word) => Object.values(drawn).some((html) => html.includes(word))), []);
+		check("language: the language box offers both and has both names in its heading", drawn.settings.includes("Language · Sprog") && drawn.settings.includes('<option value="en" selected>English</option>') && drawn.settings.includes('<option value="da">Dansk</option>'), true);
+	});
+	attempt("language: choosing a language in Indstillinger", () => {
+		page.run("accountName = null; setLanguage('da'); activeTab = 'settings'; render();");
+		check("language: the Danish page has the box, with Dansk chosen", page.view().includes("Sprog · Language") && page.view().includes('<option value="da" selected>Dansk</option>'), true);
+		const staticTexts = [{ dataset: { i18n: "Overblik" }, textContent: "Overblik" }];
+		page.run("document.querySelectorAll = (selector) => (selector === '[data-i18n]' ? globalThis.fakeTabs : []);");
+		page.context.fakeTabs = staticTexts;
+		page.handlers.change.forEach((handler) => handler({ target: { id: "language-choice", value: "en" } }));
+		check("language: choosing English changes the page, and is remembered on this device", [page.run("getLanguage()"), page.store["budget.language"], page.view().includes("Language · Sprog"), page.view().includes("Appearance")], ["en", "en", true, true]);
+		check("language: the texts in index.html follow", staticTexts[0].textContent, "Overview");
+		page.handlers.change.forEach((handler) => handler({ target: { id: "language-choice", value: "da" } }));
+		check("language: and back to Danish", [page.run("getLanguage()"), page.store["budget.language"], staticTexts[0].textContent, page.view().includes("Udseende")], ["da", "da", "Overblik", true]);
+		const clearStore = () => { for (const key of Object.keys(page.store)) { delete page.store[key]; } };
+		clearStore();
+		check("language: a brand new device starts in the language of the phone", [
+			page.run("navigator.languages = ['en-US']; loadLanguage()"),
+			page.run("navigator.languages = ['da-DK']; loadLanguage()"),
+			page.run("navigator.languages = ['de-DE']; loadLanguage()"),
+		], ["en", "da", "en"]);
+		page.store["budget.v1"] = "{}";
+		check("language: a device that has used the page before stays Danish, whatever the browser says", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		clearStore();
+		page.store["budget.signedInAs"] = "mama";
+		check("language: ...also when it was signed in", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		page.store["budget.language"] = "en";
+		check("language: a saved choice wins over everything", page.run("navigator.languages = ['da-DK']; loadLanguage()"), "en");
+		page.store["budget.language"] = "<script>";
+		check("language: a saved choice that is not a language is ignored", page.run("navigator.languages = ['en-US']; loadLanguage()"), "da");
+		clearStore();
+		check("language: a link can name the language, and it is kept on the device", [
+			page.run("location.search = '?kid=mama.abc&lang=en'; navigator.languages = ['da-DK']; languageForStart()"),
+			page.store["budget.language"],
+			page.run("location.search = ''; languageForStart()"),
+		], ["en", "en", "en"]);
+		clearStore();
+		check("language: a link with a language that does not exist is ignored", page.run("location.search = '?lang=xx'; navigator.languages = ['da-DK']; languageForStart()"), "da");
+		page.run("location.search = '';");
+		page.run("accountName = 'mama'; setLanguage('en');");
+		check("language: a kid's link carries the language, so the kid's page is in it", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=en"), true);
+		page.run("setLanguage('da');");
+		check("language: ...Danish too", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=da"), true);
+		delete page.store["budget.language"];
+		page.run("setLanguage('da'); accountName = 'mama'; activeTab = 'overview'; render();");
+	});
+}
 
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps

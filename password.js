@@ -35,22 +35,22 @@ function loadPasswordChecker() {
 	return checkerPromise;
 }
 
-// Returns { ok, message }. message is what to tell the user (in Danish), or "" when the
+// Returns { ok, message }. message is what to tell the user (in the page's language), or "" when the
 // password is fine. Needs loadPasswordChecker() to have finished.
 function checkNewPassword(password, username) {
 	if (password.length < MIN_PASSWORD_LENGTH) {
 		const missing = MIN_PASSWORD_LENGTH - password.length;
-		return { ok: false, message: "Adgangskoden skal være mindst " + MIN_PASSWORD_LENGTH + " tegn. Der mangler " + missing + "." };
+		return { ok: false, message: t("Adgangskoden skal være mindst {min} tegn. Der mangler {missing}.", { min: MIN_PASSWORD_LENGTH, missing: missing }) };
 	}
 	if (username && password.toLowerCase().includes(username.toLowerCase())) {
-		return { ok: false, message: "Adgangskoden må ikke indeholde dit brugernavn." };
+		return { ok: false, message: t("Adgangskoden må ikke indeholde dit brugernavn.") };
 	}
 	if (typeof zxcvbn !== "function") {
-		return { ok: false, message: "Adgangskode-tjekket er ved at blive hentet. Prøv igen om et øjeblik." };
+		return { ok: false, message: t("Adgangskode-tjekket er ved at blive hentet. Prøv igen om et øjeblik.") };
 	}
 	const score = zxcvbn(password, [username, ...APP_WORDS].filter(Boolean)).score;
 	if (score < MIN_PASSWORD_SCORE) {
-		return { ok: false, message: "Adgangskoden er for nem at gætte. Brug fx tre almindelige ord og et tal, som \"Lilla-tiger-raket-47\"." };
+		return { ok: false, message: t("Adgangskoden er for nem at gætte. Brug fx tre almindelige ord og et tal, som \"Lilla-tiger-raket-47\".") };
 	}
 	return { ok: true, message: "" };
 }

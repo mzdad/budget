@@ -281,35 +281,35 @@ async function addKidEntry(parent, token, entryId, entry) {
 }
 
 
-// Turns a Firebase error into a message for the user, in Danish.
+// Turns a Firebase error into a message for the user, in the page's language.
 function accountProblemText(error) {
 	const code = (error && error.code) || "";
 	switch (code) {
 		case "auth/email-already-in-use":
-			return "Det brugernavn er optaget. Vælg et andet.";
+			return t("Det brugernavn er optaget. Vælg et andet.");
 		case "auth/invalid-credential":
 		case "auth/invalid-login-credentials":
 		case "auth/wrong-password":
 		case "auth/user-not-found":
-			return "Brugernavn eller adgangskode passer ikke.";
+			return t("Brugernavn eller adgangskode passer ikke.");
 		case "auth/too-many-requests":
-			return "For mange forsøg. Vent lidt og prøv igen.";
+			return t("For mange forsøg. Vent lidt og prøv igen.");
 		case "auth/weak-password":
 		case "auth/password-does-not-meet-requirements":
 			// Firebase can also require a capital letter, a small letter and a digit, depending on
 			// what is ticked in its console (see SETUP-ACCOUNTS.md, step 4).
-			return "Firebase afviste adgangskoden. Den skal være mindst 10 tegn, og Firebase kan også kræve store og små bogstaver og tal. Brug fx \"Lilla-tiger-raket-47\".";
+			return t("Firebase afviste adgangskoden. Den skal være mindst 10 tegn, og Firebase kan også kræve store og små bogstaver og tal. Brug fx \"Lilla-tiger-raket-47\".");
 		case "auth/operation-not-allowed":
 		case "auth/admin-restricted-operation":
-			return "Det er lukket for nye konti lige nu.";
+			return t("Det er lukket for nye konti lige nu.");
 		case "auth/configuration-not-found":
-			return "Konti er ikke sat op endnu (se SETUP-ACCOUNTS.md).";
+			return t("Konti er ikke sat op endnu (se SETUP-ACCOUNTS.md).");
 		case "auth/network-request-failed":
 		case "unavailable":
-			return "Ingen forbindelse til internettet.";
+			return t("Ingen forbindelse til internettet.");
 		case "permission-denied":
-			return "Kontoen måtte ikke gemme det. Er reglerne i Firebase lagt ind? (se SETUP-ACCOUNTS.md, trin 6)";
+			return t("Kontoen måtte ikke gemme det. Er reglerne i Firebase lagt ind? (se SETUP-ACCOUNTS.md, trin 6)");
 		default:
-			return "Noget gik galt (" + (code || String(error)) + ").";
+			return t("Noget gik galt ({code}).", { code: code || String(error) });
 	}
 }

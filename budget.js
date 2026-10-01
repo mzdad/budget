@@ -7,17 +7,23 @@
 // Computers add decimals slightly wrong (0.1 + 0.2 gives 0.30000000000000004),
 // but whole numbers are always exact. Amounts only become "kr" when shown.
 
+// The texts of the page (t) and the language's locale: in the browser texts.js is loaded before this
+// file; in Node (the tests) this file loads it itself.
+if (typeof module !== "undefined" && typeof require === "function") {
+	var { t, tn, T, getLanguage, uiLocale } = require("./texts.js");
+}
+
 // The first time the app opens, these rows are there so you are not staring at
 // an empty page. Every amount starts at 0 - you fill in your own.
-const STARTER_INCOME = ["Løn"];
-const STARTER_FIXED = ["Husleje", "El og varme", "Telefon og internet", "Forsikring", "Abonnementer"];
+const STARTER_INCOME = [T("Løn")];
+const STARTER_FIXED = [T("Husleje"), T("El og varme"), T("Telefon og internet"), T("Forsikring"), T("Abonnementer")];
 const STARTER_CATEGORIES = [
-	"Mad og dagligvarer",
-	"Transport",
-	"Fritid og fornøjelser",
-	"Tøj og personlig pleje",
-	"Sundhed",
-	"Andet",
+	T("Mad og dagligvarer"),
+	T("Transport"),
+	T("Fritid og fornøjelser"),
+	T("Tøj og personlig pleje"),
+	T("Sundhed"),
+	T("Andet"),
 ];
 
 // 10 million kr, in øre. A bigger number is almost certainly a typing slip.
@@ -41,26 +47,52 @@ const MOST_POT_ENTRIES_PER_MONTH = 500;
 
 // --- Amounts ----------------------------------------------------------------
 
-// Turns what the user typed ("49,95", "1.250", "12500 kr") into øre.
+// Turns what the user typed ("49,95", "49.95", "1.250", "1,250.50", "12500 kr") into øre.
 // Returns 0 for an empty box and null when the text can't be understood.
+//
+// Both Danish and English style are understood: when both a dot and a comma are there, the LAST one
+// is the decimal mark and the other one marks thousands ("1.250,50", "1,250.50"). A single mark
+// followed by one or two digits is the decimal mark ("49,95", "49.95"); a dot followed by exactly
+// three digits, or one that is there more than once, marks thousands ("12.500", "1.250.000"). A
+// comma does the same only when the page is in English ("1,250"): in Danish a comma is only ever the
+// decimal mark, so "12,345" is unreadable.
 function parseAmount(text) {
-	let t = String(text).trim().replace(/\s/g, "").replace(/kr\.?$/i, "");
-	if (t === "") {
+	let value = String(text).trim().replace(/\s/g, "").replace(/kr\.?$/i, "");
+	if (value === "") {
 		return 0;
 	}
 
-	if (t.includes(",")) {
-		// Danish style: dots are thousand separators, the comma is the decimal point.
-		t = t.replace(/\./g, "").replace(",", ".");
-	} else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
-		// "12.500" - a dot followed by exactly three digits is a thousand separator.
-		t = t.replace(/\./g, "");
+	const lastDot = value.lastIndexOf(".");
+	const lastComma = value.lastIndexOf(",");
+	if (lastDot !== -1 && lastComma !== -1) {
+		const decimal = lastDot > lastComma ? "." : ",";
+		const thousands = decimal === "." ? "," : ".";
+		const whole = value.slice(0, value.lastIndexOf(decimal));
+		const group = new RegExp("^\\d{1,3}(\\" + thousands + "\\d{3})*$");
+		if (!group.test(whole)) {
+			return null;
+		}
+		value = whole.split(thousands).join("") + "." + value.slice(value.lastIndexOf(decimal) + 1);
+	} else if (lastDot !== -1 || lastComma !== -1) {
+		const mark = lastDot !== -1 ? "." : ",";
+		const pieces = value.split(mark);
+		if (mark === "," && getLanguage() === "da" && (pieces.length > 2 || pieces[1].length === 3)) {
+			return null;   // in Danish a comma is only ever the decimal mark, and "12,345" has too many decimals
+		}
+		if (pieces.length > 2 || pieces[1].length === 3) {
+			if (!new RegExp("^\\d{1,3}(\\" + mark + "\\d{3})+$").test(value)) {
+				return null;
+			}
+			value = pieces.join("");
+		} else {
+			value = pieces.join(".");
+		}
 	}
 
-	if (!/^\d+(\.\d{1,2})?$/.test(t)) {
+	if (!/^\d+(\.\d{1,2})?$/.test(value)) {
 		return null;
 	}
-	const ore = Math.round(parseFloat(t) * 100);
+	const ore = Math.round(parseFloat(value) * 100);
 	if (ore > MAX_AMOUNT) {
 		return null;
 	}
@@ -79,16 +111,27 @@ function parseSignedAmount(text) {
 	return parseAmount(t);
 }
 
-// Two number formats: no decimals for whole kroner, two decimals otherwise.
-const WHOLE_KR = new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 });
-const FULL_KR = new Intl.NumberFormat("da-DK", { style: "currency", currency: "DKK" });
+// Two number formats: no decimals for whole kroner, two decimals otherwise. One of each is made per
+// language the first time it is needed (Danish: 12.500 kr., English: DKK 12,500).
+const moneyFormats = {};
+
+function moneyFormat(whole) {
+	const key = uiLocale() + (whole ? "|whole" : "|full");
+	if (!moneyFormats[key]) {
+		const options = whole ? { style: "currency", currency: "DKK", maximumFractionDigits: 0 } : { style: "currency", currency: "DKK" };
+		moneyFormats[key] = new Intl.NumberFormat(uiLocale(), options);
+	}
+	return moneyFormats[key];
+}
 
 // 1250000 -> "12.500 kr."   4995 -> "49,95 kr."
 function formatKr(ore) {
-	if (ore % 100 === 0) {
-		return WHOLE_KR.format(ore / 100);
-	}
-	return FULL_KR.format(ore / 100);
+	return moneyFormat(ore % 100 === 0).format(ore / 100);
+}
+
+// The decimal mark of the page's language: "," in Danish, "." in English.
+function decimalMark() {
+	return getLanguage() === "da" ? "," : ".";
 }
 
 // What goes back into an input box when editing: 4995 -> "49,95", 0 -> "".
@@ -99,7 +142,7 @@ function amountToInput(ore) {
 	if (ore % 100 === 0) {
 		return String(ore / 100);
 	}
-	return (ore / 100).toFixed(2).replace(".", ",");
+	return (ore / 100).toFixed(2).replace(".", decimalMark());
 }
 
 function sumOf(list, field) {
@@ -137,21 +180,21 @@ function shiftMonth(key, steps) {
 
 function monthLabel(key) {
 	const { year, month } = splitMonthKey(key);
-	const text = new Intl.DateTimeFormat("da-DK", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
+	const text = new Intl.DateTimeFormat(uiLocale(), { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
 	return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // "2026-09" -> "sep. 2026" (short, for tables)
 function shortMonthLabel(key) {
 	const { year, month } = splitMonthKey(key);
-	return new Intl.DateTimeFormat("da-DK", { month: "short", year: "numeric" }).format(new Date(year, month - 1, 1));
+	return new Intl.DateTimeFormat(uiLocale(), { month: "short", year: "numeric" }).format(new Date(year, month - 1, 1));
 }
 
 // "2026-09-30" -> "onsdag 30. september"
 function dayLabel(dateKey) {
 	const parts = dateKey.split("-").map(Number);
 	const date = new Date(parts[0], parts[1] - 1, parts[2]);
-	return new Intl.DateTimeFormat("da-DK", { weekday: "long", day: "numeric", month: "long" }).format(date);
+	return new Intl.DateTimeFormat(uiLocale(), { weekday: "long", day: "numeric", month: "long" }).format(date);
 }
 
 function lastDayOfMonth(key) {
@@ -182,7 +225,7 @@ function newId() {
 // between drawing a row and reacting to a tap on it.
 function starterRows(names, amountField) {
 	return names.map((name, index) => {
-		const row = { id: "starter-" + amountField + "-" + index, name: name };
+		const row = { id: "starter-" + amountField + "-" + index, name: t(name) };
 		row[amountField] = 0;
 		return row;
 	});
@@ -336,13 +379,13 @@ function spendingByCategory(month) {
 	for (const category of month.categories) {
 		const items = month.spending.filter((item) => item.categoryId === category.id);
 		if (items.length > 0) {
-			groups.push({ id: category.id, name: category.name || "(uden navn)", total: sumOf(items, "amount"), items: spendingNewestFirst(items) });
+			groups.push({ id: category.id, name: category.name || t("(uden navn)"), total: sumOf(items, "amount"), items: spendingNewestFirst(items) });
 		}
 	}
 	const knownIds = new Set(month.categories.map((category) => category.id));
 	const others = month.spending.filter((item) => !knownIds.has(item.categoryId));
 	if (others.length > 0) {
-		groups.push({ id: "", name: "Uden kategori", total: sumOf(others, "amount"), items: spendingNewestFirst(others) });
+		groups.push({ id: "", name: t("Uden kategori"), total: sumOf(others, "amount"), items: spendingNewestFirst(others) });
 	}
 	return groups;
 }
@@ -425,9 +468,18 @@ function nextDueKey(row, key) {
 // "hver 3. måned", "hvert år"
 function everyText(every) {
 	if (every === 12) {
-		return "hvert år";
+		return t("hvert år");
 	}
-	return "hver " + every + ". måned";
+	if (every === 2) {
+		return t("hver 2. måned");
+	}
+	if (every === 3) {
+		return t("hver 3. måned");
+	}
+	if (every === 6) {
+		return t("hver 6. måned");
+	}
+	return t("hver {n}. måned", { n: every });
 }
 
 
@@ -467,10 +519,10 @@ function windowText(row) {
 		parts.push(everyText(row.every));
 	}
 	if (row.from) {
-		parts.push("fra " + dateText(row.from));
+		parts.push(t("fra {date}", { date: dateText(row.from) }));
 	}
 	if (row.to) {
-		parts.push("til " + dateText(row.to));
+		parts.push(t("til {date}", { date: dateText(row.to) }));
 	}
 	return parts.join(" ");
 }
@@ -622,10 +674,11 @@ function forecast(month, key, howMany, months, startTotal) {
 
 // --- Reports and export -----------------------------------------------------
 
-// "2026-09-30" -> "30.09.2026"
+// "2026-09-30" -> "30.09.2026" (Danish) or "30/09/2026" (English)
 function dateText(dateKey) {
 	const parts = dateKey.split("-");
-	return parts[2] + "." + parts[1] + "." + parts[0];
+	const mark = getLanguage() === "da" ? "." : "/";
+	return parts[2] + mark + parts[1] + mark + parts[0];
 }
 
 function byDateOldestFirst(list) {
@@ -635,7 +688,7 @@ function byDateOldestFirst(list) {
 
 function categoryNameIn(month, categoryId) {
 	const category = month.categories.find((other) => other.id === categoryId);
-	return category ? (category.name || "(uden navn)") : "Uden kategori";
+	return category ? (category.name || t("(uden navn)")) : t("Uden kategori");
 }
 
 // Everything the report for one month shows. The screen, the printout and the spreadsheet
@@ -683,9 +736,9 @@ function yearReport(months, year) {
 		}
 
 		// Spending per category NAME, so a category that exists in several months adds up.
-		const spentHere = s.categories.map((c) => ({ name: c.name || "(uden navn)", spent: c.spent }));
+		const spentHere = s.categories.map((c) => ({ name: c.name || t("(uden navn)"), spent: c.spent }));
 		if (s.otherSpent > 0) {
-			spentHere.push({ name: "Uden kategori", spent: s.otherSpent });
+			spentHere.push({ name: t("Uden kategori"), spent: s.otherSpent });
 		}
 		for (const entry of spentHere) {
 			if (!spentByCategory[entry.name]) {
@@ -715,65 +768,69 @@ function yearsWithData(months) {
 	return [...years].sort();
 }
 
-// Spreadsheet text. Danish Excel expects ; between cells and , as the decimal mark.
-//
+// Spreadsheet text. Danish Excel expects ; between cells and , as the decimal mark; English Excel
+// expects , between cells and . as the decimal mark. The page's language decides.
+function csvDelimiter() {
+	return getLanguage() === "da" ? ";" : ",";
+}
+
 // An amount as a spreadsheet cell: 4995 -> "49,95", -150 -> "-150,00". Whole-number maths,
 // so there are never rounding surprises.
 function csvAmount(ore) {
 	const sign = ore < 0 ? "-" : "";
 	const absolute = Math.abs(ore);
-	return sign + Math.floor(absolute / 100) + "," + String(absolute % 100).padStart(2, "0");
+	return sign + Math.floor(absolute / 100) + decimalMark() + String(absolute % 100).padStart(2, "0");
 }
 
 // Text as a spreadsheet cell. Two protections:
 // - a cell that starts with = + - @ would be run as a formula by Excel, so it gets a ' in front;
-// - a cell with ; or a quote or a line break is wrapped in quotes.
+// - a cell with the delimiter or a quote or a line break is wrapped in quotes.
 function csvText(text) {
 	let cell = String(text);
 	if (/^[=+\-@\t\r]/.test(cell)) {
 		cell = "'" + cell;
 	}
-	if (/[;"\n\r]/.test(cell)) {
+	if (cell.includes(csvDelimiter()) || /["\n\r]/.test(cell)) {
 		cell = '"' + cell.replace(/"/g, '""') + '"';
 	}
 	return cell;
 }
 
 function csvLine(cells) {
-	return cells.join(";");
+	return cells.join(csvDelimiter());
 }
 
 // The spreadsheet for one month, as text (lines joined with \r\n, as Excel likes).
 function monthCsv(report) {
 	const s = report.summary;
 	const lines = [
-		csvLine([csvText("Budget"), csvText(report.label)]),
+		csvLine([csvText(t("Budget")), csvText(report.label)]),
 		"",
-		csvText("Oversigt"),
-		csvLine([csvText("Indkomst"), csvAmount(s.income)]),
-		csvLine([csvText("Faste udgifter"), csvAmount(s.fixed)]),
-		csvLine([csvText("Opsparing"), csvAmount(s.savings)]),
-		csvLine([csvText("Til rådighed"), csvAmount(s.available)]),
-		csvLine([csvText("Brugt"), csvAmount(s.spent)]),
-		csvLine([csvText("Tilbage"), csvAmount(s.left)]),
+		csvText(t("Oversigt")),
+		csvLine([csvText(t("Indkomst")), csvAmount(s.income)]),
+		csvLine([csvText(t("Faste udgifter")), csvAmount(s.fixed)]),
+		csvLine([csvText(t("Opsparing")), csvAmount(s.savings)]),
+		csvLine([csvText(t("Til rådighed")), csvAmount(s.available)]),
+		csvLine([csvText(t("Brugt")), csvAmount(s.spent)]),
+		csvLine([csvText(t("Tilbage")), csvAmount(s.left)]),
 		"",
-		csvText("Indkomst"),
+		csvText(t("Indkomst")),
 	];
 	for (const row of report.income) {
 		lines.push(csvLine([csvText(row.name), csvAmount(row.amount)]));
 	}
-	lines.push("", csvText("Faste udgifter"));
+	lines.push("", csvText(t("Faste udgifter")));
 	for (const row of report.fixed) {
 		lines.push(csvLine([csvText(row.name), csvAmount(row.amount)]));
 	}
-	lines.push("", csvText("Kategorier"), csvLine([csvText("Kategori"), csvText("Grænse"), csvText("Brugt"), csvText("Tilbage")]));
+	lines.push("", csvText(t("Kategorier")), csvLine([csvText(t("Kategori")), csvText(t("Grænse")), csvText(t("Brugt")), csvText(t("Tilbage"))]));
 	for (const c of report.categories) {
-		lines.push(csvLine([csvText(c.name || "(uden navn)"), csvAmount(c.limit), csvAmount(c.spent), csvAmount(c.left)]));
+		lines.push(csvLine([csvText(c.name || t("(uden navn)")), csvAmount(c.limit), csvAmount(c.spent), csvAmount(c.left)]));
 	}
 	if (report.otherSpent > 0) {
-		lines.push(csvLine([csvText("Uden kategori"), "", csvAmount(report.otherSpent), ""]));
+		lines.push(csvLine([csvText(t("Uden kategori")), "", csvAmount(report.otherSpent), ""]));
 	}
-	lines.push("", csvText("Udgifter"), csvLine([csvText("Dato"), csvText("Kategori"), csvText("Note"), csvText("Beløb")]));
+	lines.push("", csvText(t("Udgifter")), csvLine([csvText(t("Dato")), csvText(t("Kategori")), csvText(t("Note")), csvText(t("Beløb"))]));
 	for (const item of report.spending) {
 		lines.push(csvLine([csvText(dateText(item.date)), csvText(item.category), csvText(item.note), csvAmount(item.amount)]));
 	}
@@ -784,24 +841,24 @@ function monthCsv(report) {
 // every purchase.
 function yearCsv(report) {
 	const lines = [
-		csvLine([csvText("Budget"), csvText(report.year)]),
+		csvLine([csvText(t("Budget")), csvText(report.year)]),
 		"",
-		csvText("Måned for måned"),
-		csvLine(["Måned", "Indkomst", "Faste udgifter", "Opsparing", "Til rådighed", "Brugt", "Tilbage"].map(csvText)),
+		csvText(t("Måned for måned")),
+		csvLine([t("Måned"), t("Indkomst"), t("Faste udgifter"), t("Opsparing"), t("Til rådighed"), t("Brugt"), t("Tilbage")].map(csvText)),
 	];
 	for (const row of report.rows) {
 		lines.push(csvLine([csvText(row.label), csvAmount(row.income), csvAmount(row.fixed), csvAmount(row.savings), csvAmount(row.available), csvAmount(row.spent), csvAmount(row.left)]));
 	}
-	const t = report.totals;
-	lines.push(csvLine([csvText("I alt"), csvAmount(t.income), csvAmount(t.fixed), csvAmount(t.savings), csvAmount(t.available), csvAmount(t.spent), csvAmount(t.left)]));
+	const sums = report.totals;
+	lines.push(csvLine([csvText(t("I alt")), csvAmount(sums.income), csvAmount(sums.fixed), csvAmount(sums.savings), csvAmount(sums.available), csvAmount(sums.spent), csvAmount(sums.left)]));
 
-	lines.push("", csvText("Brugt pr. kategori"));
-	lines.push(csvLine([csvText("Kategori"), ...report.monthKeys.map((key) => csvText(monthLabel(key))), csvText("I alt")]));
+	lines.push("", csvText(t("Brugt pr. kategori")));
+	lines.push(csvLine([csvText(t("Kategori")), ...report.monthKeys.map((key) => csvText(monthLabel(key))), csvText(t("I alt"))]));
 	for (const c of report.categories) {
 		lines.push(csvLine([csvText(c.name), ...report.monthKeys.map((key) => csvAmount(c.perMonth[key] || 0)), csvAmount(c.total)]));
 	}
 
-	lines.push("", csvText("Udgifter"), csvLine(["Dato", "Kategori", "Note", "Beløb"].map(csvText)));
+	lines.push("", csvText(t("Udgifter")), csvLine([t("Dato"), t("Kategori"), t("Note"), t("Beløb")].map(csvText)));
 	for (const item of report.spending) {
 		lines.push(csvLine([csvText(dateText(item.date)), csvText(item.category), csvText(item.note), csvAmount(item.amount)]));
 	}
@@ -1049,19 +1106,19 @@ function noteHistory(months) {
 			const category = categoryNameIn(month, item.categoryId);
 			const entry = byKey[key];
 			if (!entry) {
-				byKey[key] = { note: note, count: 1, lastDate: item.date, categoryName: category === "Uden kategori" ? "" : category };
+				byKey[key] = { note: note, count: 1, lastDate: item.date, categoryName: category === t("Uden kategori") ? "" : category };
 				continue;
 			}
 			entry.count += 1;
 			if (item.date >= entry.lastDate) {
 				entry.lastDate = item.date;
 				entry.note = note;
-				entry.categoryName = category === "Uden kategori" ? "" : category;
+				entry.categoryName = category === t("Uden kategori") ? "" : category;
 			}
 		}
 	}
 	return Object.values(byKey)
-		.sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0) || a.note.localeCompare(b.note, "da"))
+		.sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : a.lastDate > b.lastDate ? -1 : 0) || a.note.localeCompare(b.note, uiLocale()))
 		.slice(0, MOST_SUGGESTED_NOTES);
 }
 
@@ -1088,11 +1145,17 @@ function categoryIdForNote(history, note, month) {
 // yourself. (The reading of the picture makes mistakes; that is why the page shows everything for
 // checking before anything is saved.)
 
-const BANK_MONTH_NAMES = "januar|jan|februar|feb|marts|mar|april|apr|maj|juni|jun|juli|jul|august|aug|september|sept|sep|oktober|okt|november|nov|december|dec";
+const BANK_MONTH_NAMES = "januar|january|jan|februar|february|feb|marts|march|mar|april|apr|maj|may|juni|june|jun|juli|july|jul|august|aug|september|sept|sep|oktober|october|okt|oct|november|nov|december|dec";
 const BANK_MONTH_SHORT = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
-const BANK_WEEKDAYS = "mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|man|tir|ons|tor|fre|lør|søn";
-const BANK_SKIP_NOTE = /^(saldo|disponibel|rådighedsbeløb|i alt|total|sum)(\s|$)/i;
+const BANK_WEEKDAYS = "mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|man|tir|ons|tor|fre|lør|søn|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun";
+const BANK_SKIP_NOTE = /^(saldo|balance|disponibel|available|rådighedsbeløb|i alt|total|sum)(\s|$)/i;
 const MOST_BANK_ROWS = 300;
+
+// 1 to 12 for a month's name or short name in Danish or English ("sep", "oktober", "Oct", "May").
+function bankMonthNumber(word) {
+	const short = word.toLowerCase().slice(0, 3);
+	return BANK_MONTH_SHORT.indexOf({ may: "maj", oct: "okt" }[short] || short) + 1;
+}
 
 // A date at the start of a line: "30. sep.", "30. september 2026", "30/09", "30-09-2026", "Tirsdag
 // 30. sep.", "I dag", "I går". Returns { day, month, year (null when the line has none), rest } with
@@ -1100,16 +1163,16 @@ const MOST_BANK_ROWS = 300;
 function bankDateAtStart(line, today) {
 	const noWeekday = line.replace(new RegExp("^(?:" + BANK_WEEKDAYS + ")\\.?,?\\s+", "i"), "");
 
-	const relative = /^i\s?(dag|går|forgårs)(?![a-zæøå])[\s,:]*/i.exec(noWeekday);
+	const relative = /^(i\s?dag|i\s?går|i\s?forgårs|today|yesterday)(?![a-zæøå])[\s,:]*/i.exec(noWeekday);
 	if (relative) {
-		const back = { dag: 0, går: 1, forgårs: 2 }[relative[1].toLowerCase()];
+		const back = { idag: 0, igår: 1, iforgårs: 2, today: 0, yesterday: 1 }[relative[1].toLowerCase().replace(/\s/g, "")];
 		const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
 		return { day: day.getDate(), month: day.getMonth() + 1, year: day.getFullYear(), rest: noWeekday.slice(relative[0].length) };
 	}
 
 	const named = new RegExp("^(\\d{1,2})\\.?\\s*(" + BANK_MONTH_NAMES + ")\\.?(?![a-zæøå])(?:\\s+(\\d{4})(?![\\d,.]))?[\\s,;:|]*", "i").exec(noWeekday);
 	if (named) {
-		const month = BANK_MONTH_SHORT.indexOf(named[2].toLowerCase().slice(0, 3)) + 1;
+		const month = bankMonthNumber(named[2]);
 		return { day: Number(named[1]), month: month, year: named[3] ? Number(named[3]) : null, rest: noWeekday.slice(named[0].length) };
 	}
 
@@ -1728,7 +1791,7 @@ function sameData(a, b) {
 // functions above.
 if (typeof module !== "undefined") {
 	module.exports = {
-		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
+		parseAmount, parseSignedAmount, formatKr, amountToInput, decimalMark, csvDelimiter, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
