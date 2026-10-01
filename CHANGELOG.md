@@ -3,6 +3,12 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.9.0 - 2026-10-01
+
+- **Udgifter is split by category.** Each category gets a heading with what was spent in it, and
+  under it the purchases, newest day first. Each line shows its day ("2. sep."). Categories with no
+  purchases are left out, and purchases with no category come last under "Uden kategori".
+
 ## 1.8.2 - 2026-10-01
 
 - **"Tilføj udgift" keeps the date you used.** After adding a purchase, the date box now stays on

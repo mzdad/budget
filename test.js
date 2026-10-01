@@ -438,6 +438,27 @@ check("merge: a pot entry only on the device is added, one already there is not"
 check("merge: pot entries count as added", mergedPots.added, 4 + 1);
 check("same data: a pot entry counts", budget.sameData({ months: { "2026-09": accountWithPots } }, { months: { "2026-09": { ...accountWithPots, pots: [] } } }), false);
 
+// --- Udgifter split by category ---
+const groupedMonth = {
+	categories: [{ id: "mad", name: "Mad", limit: 0 }, { id: "fri", name: "Fritid", limit: 0 }, { id: "tom", name: "Tom", limit: 0 }, { id: "x", name: "", limit: 0 }],
+	spending: [
+		{ id: "1", date: "2026-09-01", categoryId: "mad", amount: 1000, note: "a" },
+		{ id: "2", date: "2026-09-05", categoryId: "fri", amount: 500, note: "b" },
+		{ id: "3", date: "2026-09-03", categoryId: "mad", amount: 2000, note: "c" },
+		{ id: "4", date: "2026-09-03", categoryId: "mad", amount: 300, note: "d" },
+		{ id: "5", date: "2026-09-02", categoryId: "", amount: 70, note: "e" },
+		{ id: "6", date: "2026-09-04", categoryId: "deleted", amount: 80, note: "f" },
+		{ id: "7", date: "2026-09-06", categoryId: "x", amount: 9, note: "g" },
+	],
+};
+const groups = budget.spendingByCategory(groupedMonth);
+check("by category: plan order, empty ones left out, no-category last", groups.map((g) => g.name), ["Mad", "Fritid", "(uden navn)", "Uden kategori"]);
+check("by category: each group's total", groups.map((g) => g.total), [3300, 500, 9, 150]);
+check("by category: newest day first, the same day latest added first", groups[0].items.map((i) => i.id), ["4", "3", "1"]);
+check("by category: deleted and empty category ids go together under no category, newest first", groups[3].items.map((i) => i.id), ["6", "5"]);
+check("by category: no purchases, no groups", budget.spendingByCategory({ categories: groupedMonth.categories, spending: [] }), []);
+check("by category: nothing is lost", groups.reduce((sum, g) => sum + g.items.length, 0), groupedMonth.spending.length);
+
 // --- Money now: Lønkonto and Opsparing ---
 check("signed amount: plain number", budget.parseSignedAmount("1.250,50"), 125050);
 check("signed amount: minus", budget.parseSignedAmount("-500"), -50000);

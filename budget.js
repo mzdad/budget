@@ -302,6 +302,27 @@ function spendingNewestFirst(list) {
 }
 
 
+// The month's purchases split by category, for the Udgifter screen: [{ id, name, total, items }].
+// The categories come in the order of the plan and only those with purchases are listed. Purchases
+// with no category (or one that was deleted later) come last, as "Uden kategori". Inside each group
+// the newest day is first, and on one day the one added last.
+function spendingByCategory(month) {
+	const groups = [];
+	for (const category of month.categories) {
+		const items = month.spending.filter((item) => item.categoryId === category.id);
+		if (items.length > 0) {
+			groups.push({ id: category.id, name: category.name || "(uden navn)", total: sumOf(items, "amount"), items: spendingNewestFirst(items) });
+		}
+	}
+	const knownIds = new Set(month.categories.map((category) => category.id));
+	const others = month.spending.filter((item) => !knownIds.has(item.categoryId));
+	if (others.length > 0) {
+		groups.push({ id: "", name: "Uden kategori", total: sumOf(others, "amount"), items: spendingNewestFirst(others) });
+	}
+	return groups;
+}
+
+
 // --- Rows that start or stop on a date -------------------------------------
 
 // An income or fixed-bill row can have a first day (from) and a last day (to), both optional and
@@ -1107,7 +1128,7 @@ if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst,
+		newId, starterMonth, copyPlanOf, nearestMonthWithData, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,

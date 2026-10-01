@@ -581,28 +581,33 @@ function expensesHtml(month) {
 		return html + '<section class="card"><p class="hint">Ingen udgifter endnu.</p></section>';
 	}
 
+	// One heading per category (with what was spent in it), the newest purchase first under it.
+	// Each line says its day, because there are no day headings any more.
 	html += '<section class="card">';
-	let currentDay = "";
-	for (const item of spendingNewestFirst(month.spending)) {
-		// A new heading whenever the date changes.
-		if (item.date !== currentDay) {
-			if (currentDay !== "") {
-				html += "</ul>";
-			}
-			html += `<h3>${esc(dayLabel(item.date))}</h3><ul class="list">`;
-			currentDay = item.date;
-		}
-		const category = categoryName(month, item.categoryId);
-		const title = item.note !== "" ? item.note : category;
-		const small = item.note !== "" ? `<small>${esc(category)}</small>` : "";
+	for (const group of spendingByCategory(month)) {
 		html += `
-			<li>
-				<div class="what">${esc(title)}${small}</div>
-				<span class="money">${formatKr(item.amount)}</span>
-				<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="Slet udgiften">✕</button>
-			</li>`;
+			<div class="group-head"><h3>${esc(group.name)}</h3><span class="group-total">${formatKr(group.total)}</span></div>
+			<ul class="list">`;
+		for (const item of group.items) {
+			const day = shortDayText(item.date);
+			const title = item.note !== "" ? esc(item.note) : day;
+			const small = item.note !== "" ? `<small>${day}</small>` : "";
+			html += `
+				<li>
+					<div class="what">${title}${small}</div>
+					<span class="money">${formatKr(item.amount)}</span>
+					<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="Slet udgiften">✕</button>
+				</li>`;
+		}
+		html += "</ul>";
 	}
-	return html + "</ul></section>";
+	return html + "</section>";
+}
+
+// "2026-09-02" -> "2. sep."
+function shortDayText(dateKey) {
+	const parts = dateKey.split("-").map(Number);
+	return new Intl.DateTimeFormat("da-DK", { day: "numeric", month: "short" }).format(new Date(parts[0], parts[1] - 1, parts[2]));
 }
 
 

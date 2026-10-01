@@ -426,6 +426,31 @@ label.button.secondary {
 	padding: 0;
 }
 
+/* A category heading on Udgifter, with what was spent in it on the right. */
+.group-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 10px;
+	margin: 18px 0 2px;
+}
+
+.group-head h3 {
+	margin: 0;
+}
+
+.card .group-head:first-child {
+	margin-top: 0;
+}
+
+.group-total {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
 .list li {
 	margin-top: 0;
 	display: flex;
