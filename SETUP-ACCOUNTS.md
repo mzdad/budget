@@ -92,7 +92,8 @@ making the account, the page asks whether to move them in.
 
 **Stop strangers from making accounts** (recommended once your account exists): Authentication
 → **Settings** → **User actions** → untick **Enable create (sign-up)** → **Save**. Signing in
-keeps working. Tick it again whenever you want to add an account.
+keeps working. Tick it again whenever you want to add an account. Since version 1.17.0 the page tells everyone who is not logged in to
+create an account or log in, so while this is unticked, "Opret ny konto" is refused.
 
 **Forgot the password?** The made-up emails can't receive a reset link. Instead: Authentication
 → **Users** → find `yourname@budget.example.com` → **⋮** → **Delete account**. Then make the

@@ -64,13 +64,17 @@ A small monthly budget page for phone and PC. Danish, kroner.
   are in.
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
-  - **No account:** saved on the device only (the browser's localStorage). Nothing is sent
-    anywhere.
   - **With an account** (username + password): saved online, the same on every phone and
     computer you sign in on, and kept safe if you lose your phone. Only your own account can
-    read it (see `firestore.rules`). The account box is hidden until Firebase is set up: see
-    [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md).
-- "Gem kopi som fil" in Indstillinger makes a backup file either way.
+    read it (see `firestore.rules`). See [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md).
+  - **Not logged in = try mode** (once Firebase is set up): a note on every screen says to create an
+    account or log in for the full version with saved numbers. Overblik, Udgifter, Plan and the
+    categories can be tried, but **nothing is saved** (it is gone when the page closes). Fremtid, the
+    report, the kids, the bank picture and the backup say "log in first". Numbers that an earlier
+    version left on the device are never deleted: at the first login the page offers to move them in.
+  - **Without Firebase** (`firebase-config.js` empty): no accounts, no try mode; saved on the device
+    only (the browser's localStorage). Nothing is sent anywhere.
+- "Gem kopi som fil" in Indstillinger makes a backup file (when logged in).
 
 ## Files
 

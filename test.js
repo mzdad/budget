@@ -1390,6 +1390,101 @@ if (page !== null) {
 	});
 }
 
+// --- Try mode: accounts are on, nobody is logged in ---
+if (page !== null) {
+	// A page where accounts are switched on and nobody is logged in. The switch is flipped after the page has
+	// started, so nothing here talks to Firebase. "deviceNumbers" puts an old copy of September in the device's notebook.
+	const tryPage = (deviceNumbers) => {
+		const p = pretendPage();
+		if (deviceNumbers) {
+			p.store["budget.v1"] = JSON.stringify({ months: { "2026-09": JSON.parse(JSON.stringify(month)) } });
+		}
+		p.run("FIREBASE_CONFIG = {}; accountName = null; data = signedOutData(); viewMonth = '2026-09'; activeTab = 'overview'; render();");
+		return p;
+	};
+	const tabHtml = (p, tab) => { p.run("activeTab = '" + tab + "'; render();"); return p.view(); };
+	const bannerOf = (html) => (html.match(/<section class="card try-banner">[\s\S]*?<\/section>/) || [""])[0];
+	const click = (p, action) => p.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+	const tabs = ["overview", "expenses", "future", "plan", "settings"];
+	const lockedWords = "Log ind eller opret en konto først";
+
+	attempt("try mode: what is on the screens", () => {
+		const p = tryPage(false);
+		check("try mode: every screen says to create an account or log in for the full version", tabs.map((tab) => { const html = tabHtml(p, tab); return ["Du er ikke logget ind", "fulde version", "gemte tal"].every((word) => html.includes(word)); }), [true, true, true, true, true]);
+		check("try mode: the note has a button to the login box, except on Indstillinger where the box is right there", [bannerOf(tabHtml(p, "overview")).includes('data-action="go-login"'), bannerOf(tabHtml(p, "settings")).includes('data-action="go-login"'), bannerOf(tabHtml(p, "settings")) !== ""], [true, false, true]);
+		const future = tabHtml(p, "future");
+		check("try mode: Fremtid says to log in first, and shows no numbers", [future.includes(lockedWords), future.includes("Penge nu")], [true, false]);
+		const settings = tabHtml(p, "settings");
+		check("try mode: Indstillinger keeps the login box and the categories, and locks the kids, the report and the backup", [
+			settings.includes('id="account-form"'), settings.includes("Kategorier"),
+			settings.includes('id="person-form"'), settings.includes('data-action="open-report"'), settings.includes('data-action="export"'), settings.includes('id="import-file"'),
+			(settings.match(new RegExp(lockedWords, "g")) || []).length,
+		], [true, true, false, false, false, false, 3]);
+		const overview = tabHtml(p, "overview");
+		check("try mode: Overblik can be tried, but the bank picture needs a login", [overview.includes('id="add-form"'), overview.includes('id="bank-picture"'), overview.includes("Læs fra skærmbillede: log ind først")], [true, false, true]);
+		check("try mode: Udgifter and Plan can be tried", [tabHtml(p, "expenses").includes("Brugt i alt"), tabHtml(p, "plan").includes("Sådan ser måneden ud")], [true, true]);
+		click(p, "go-login");
+		check("try mode: the button goes to the login box", [p.run("activeTab"), p.view().includes('id="account-form"')], ["settings", true]);
+	});
+
+	attempt("try mode: nothing is saved, and numbers from before are left alone", () => {
+		const fresh = tryPage(false);
+		fresh.run("changeMonth((month) => { month.spending.push({ id: 'x1', date: '2026-09-05', categoryId: '', amount: 1000, note: 'Test' }); }); saveData();");
+		check("try mode: a new device keeps nothing", fresh.store["budget.v1"], undefined);
+		check("try mode: but what you write is on the screen until you close the page", fresh.run("getMonth(viewMonth).spending.length"), 1);
+
+		const old = tryPage(true);
+		const before = old.store["budget.v1"];
+		check("try mode: numbers kept on the device from before are not on the screen", old.run("getMonth('2026-09').spending.length"), 0);
+		old.run("changeMonth((month) => { month.spending.push({ id: 'x1', date: '2026-09-05', categoryId: '', amount: 1000, note: 'Test' }); }); saveData();");
+		check("try mode: and they are not changed or deleted", old.store["budget.v1"] === before, true);
+		check("try mode: the first login can still find them, to move them into the account", old.run("Object.keys(loadData().months)"), ["2026-09"]);
+		check("try mode: the note says they are safe, and only when there are some", [tabHtml(old, "overview").includes("er ikke væk"), tabHtml(fresh, "overview").includes("er ikke væk")], [true, false]);
+		check("try mode: a log out starts from an empty page, not from the device's copy", JSON.stringify(old.run("signedOutData()")), '{"months":{}}');
+	});
+
+	attempt("try mode: buttons that were drawn before do nothing", () => {
+		const p = tryPage(false);
+		p.run("reportScope = null; activeTab = 'settings'; openReport();");
+		check("try mode: the report cannot be opened", p.run("activeTab"), "settings");
+		p.run("reportScope = { type: 'month', key: '2026-09' }; activeTab = 'report'; render();");
+		check("try mode: the report screen cannot be drawn", p.view().includes("Budget: September 2026"), false);
+		p.saved.length = 0;
+		p.run("exportBackup();");
+		check("try mode: the backup file is not offered", p.saved, []);
+		p.context.pictureFile = new Blob(["x"]);
+		p.run("bankImport = null; startBankImport(pictureFile);");
+		check("try mode: a bank picture is not read", p.run("bankImport"), null);
+		p.context.backupInput = { files: [{ text: () => { p.context.backupWasRead = true; return Promise.resolve("{}"); } }], value: "x" };
+		p.run("backupWasRead = false; importBackup(backupInput);");
+		check("try mode: a backup file is not read", p.run("backupWasRead"), false);
+		p.run("data = { months: {} }; activeTab = 'settings'; render();");
+		const form = { elements: { person: { value: "Nathan" }, amount: { value: "100" } } };
+		p.context.form = form;
+		p.run("addPerson(form);");
+		check("try mode: no kid can be added", p.run("potBalances(monthsForMoney()).length"), 0);
+	});
+
+	attempt("try mode: logged in is the full page, and without accounts nothing changes", () => {
+		const p = tryPage(false);
+		p.run("accountName = 'mama'; accountReady = true; kidPagesLoaded = true; kidPages = {}; kidEntries = {}; data = cleanData(" + JSON.stringify({ months: { "2026-09": month } }) + ");");
+		check("try mode: logged in there is no note and nothing is locked", tabs.map((tab) => { const html = tabHtml(p, tab); return html.includes("Du er ikke logget ind") || html.includes(lockedWords); }), [false, false, false, false, false]);
+		const settings = tabHtml(p, "settings");
+		check("try mode: logged in the report, kids and backup are there", [settings.includes('data-action="open-report"'), settings.includes('id="person-form"'), settings.includes('id="import-file"'), tabHtml(p, "overview").includes('id="bank-picture"'), tabHtml(p, "future").includes("Penge nu")], [true, true, true, true, true]);
+		page.run("accountName = null; activeTab = 'overview'; render();");
+		check("try mode: with accounts switched off the page is as before (no note, saved on the device)", [page.view().includes("Du er ikke logget ind"), page.run("saveData(); localStorage.getItem('budget.v1') !== null")], [false, true]);
+	});
+
+	attempt("try mode: in English", () => {
+		const p = tryPage(true);
+		p.run("setLanguage('en'); var missingTexts = []; (function () { const original = t; t = function (text, values) { if (!Object.prototype.hasOwnProperty.call(ENGLISH, text)) { missingTexts.push(text); } return original(text, values); }; })();");
+		const drawn = tabs.map((tab) => tabHtml(p, tab)).join("");
+		check("try mode: the English texts are all there", p.run("missingTexts"), []);
+		check("try mode: the English note", ["You are not logged in", "Create an account or log in first to get the full version with saved numbers", "Log in or create an account first to use this.", "Read from a picture: log in first", "are not gone"].every((words) => drawn.includes(words)), true);
+		check("try mode: no Danish is left in the English note", ["Du er ikke logget ind", "Opret en konto", "log ind først for"].filter((words) => drawn.includes(words)), []);
+	});
+}
+
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps
 // an old file next to a new index.html would otherwise mix versions.

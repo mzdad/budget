@@ -180,6 +180,15 @@ main {
 	margin-bottom: 12px;
 }
 
+/* The note at the top of every screen while nobody is logged in: a coloured edge so it is seen. */
+.try-banner {
+	border-left: 5px solid var(--accent);
+}
+
+.try-banner h2 {
+	margin-top: 0;
+}
+
 .warning {
 	max-width: 520px;
 	margin: 12px auto 0;

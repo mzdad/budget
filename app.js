@@ -91,7 +91,7 @@ let kidPagesLoaded = false;                   // true once the account has said 
 let kidPublished = {};                        // { <token>: the parentSide we sent and have not seen come back }
 let kidLinkNote = "";                         // what the last link button said, shown under the link buttons
 
-let data = accountName === null ? loadData() : { months: {} };   // { months: { "2026-09": {...} } }
+let data = accountName === null ? signedOutData() : { months: {} };   // { months: { "2026-09": {...} } }
 let viewMonth = monthKeyOf(new Date());       // the month on screen
 let activeTab = "overview";                   // "overview", "expenses", "future", "plan", "settings" or "report"
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
@@ -123,6 +123,54 @@ function loadData() {
 	return { months: {} };
 }
 
+// --- Try mode: nobody is logged in ----------------------------------------------
+//
+// When accounts are switched on and nobody is logged in, the page is only a taste. Overblik,
+// Udgifter, Plan and the categories can be tried, but NOTHING is saved: it is gone when the page
+// closes. Fremtid, the report, the kids, the bank picture and the backup say "log in first".
+// Numbers that an earlier version left on this device are never read, changed or deleted in this
+// mode: the first login offers to move them into the account (offerToMoveDeviceData).
+// Without accounts (firebase-config.js empty) the page works as it always did, saving on the device.
+
+function tryMode() {
+	return accountsAvailable() && accountName === null;
+}
+
+// The numbers to start from when nobody is logged in.
+function signedOutData() {
+	return tryMode() ? { months: {} } : loadData();
+}
+
+// A card that says "log in first" in the place of something that needs an account.
+function lockedHtml(title) {
+	return `
+		<section class="card">
+			<h2>${title}</h2>
+			<p class="hint">${t("Log ind eller opret en konto først for at bruge dette.")}</p>
+			<button class="secondary" data-action="go-login">${t("Log ind eller opret konto")}</button>
+		</section>`;
+}
+
+// The note at the top of every screen while nobody is logged in.
+function tryBannerHtml() {
+	// Numbers from before, still on this device: say that they are safe.
+	let kept = "";
+	if (Object.keys(loadData().months).length > 0) {
+		kept = `<p class="hint">${t("Tal, der er gemt på denne enhed fra før, er ikke væk: du kan lægge dem ind på kontoen, når du logger ind.")}</p>`;
+	}
+	// On Indstillinger the login box is right below, so no button there.
+	const button = activeTab === "settings"
+		? ""
+		: `<button class="secondary" data-action="go-login">${t("Log ind eller opret konto")}</button>`;
+	return `
+		<section class="card try-banner">
+			<h2>${t("Du er ikke logget ind")}</h2>
+			<p>${t("Opret en konto eller log ind først for at få den fulde version med gemte tal. Indtil da kan du kun prøve det af: det du skriver, bliver ikke gemt og er væk, når du lukker siden.")}</p>
+			${kept}
+			${button}
+		</section>`;
+}
+
 function noStorageWarning() {
 	return t("Din browser vil ikke gemme tal her (måske et privat vindue?). Det du skriver, forsvinder, når du lukker siden.");
 }
@@ -135,6 +183,9 @@ function setWarning(text) {
 }
 
 function saveData() {
+	if (tryMode()) {
+		return;   // nothing is saved while nobody is logged in
+	}
 	let worked = true;
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -147,6 +198,9 @@ function saveData() {
 // Some browsers (private windows) refuse to save. Find out at start, so the
 // warning shows before the user types anything.
 function checkStorage() {
+	if (tryMode()) {
+		return;   // nothing is going to be saved here, so there is nothing to warn about
+	}
 	let worked = true;
 	try {
 		localStorage.setItem("budget.check", "1");
@@ -471,13 +525,16 @@ function render() {
 	} else if (activeTab === "expenses") {
 		html = expensesHtml(month);
 	} else if (activeTab === "future") {
-		html = futureHtml(month);
+		html = tryMode() ? lockedHtml(t("Fremtid")) : futureHtml(month);
 	} else if (activeTab === "settings") {
 		html = settingsHtml(month);
-	} else if (activeTab === "report" && reportScope !== null) {
+	} else if (activeTab === "report" && reportScope !== null && !tryMode()) {
 		html = reportHtml();
 	} else {
 		html = planHtml(month);
+	}
+	if (tryMode()) {
+		html = tryBannerHtml() + html;
 	}
 	document.getElementById("view").innerHTML = html;
 	showSyncStatus();
@@ -647,11 +704,22 @@ function addFormHtml(month) {
 			</label>
 			<button type="submit" class="primary">${t("Tilføj")}</button>
 			<p id="add-message" class="message" role="status"></p>
-			<label class="button secondary">${t("Læs fra skærmbillede")}
-				<input type="file" id="bank-picture" accept="image/*" hidden>
-			</label>
-			<p class="hint">${t("Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.")}</p>
+			${tryMode() ? bankPictureLockedHtml() : bankPictureButtonHtml()}
 		</form>`;
+}
+
+function bankPictureButtonHtml() {
+	return `
+		<label class="button secondary">${t("Læs fra skærmbillede")}
+			<input type="file" id="bank-picture" accept="image/*" hidden>
+		</label>
+		<p class="hint">${t("Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.")}</p>`;
+}
+
+// While nobody is logged in the button is a "log in first" instead (a button, not a form field,
+// so it does not submit the form above it).
+function bankPictureLockedHtml() {
+	return `<button type="button" class="secondary" data-action="go-login">${t("Læs fra skærmbillede: log ind først")}</button>`;
 }
 
 // The categories card: a fold. Open, each category has a bar and a note. Folded, it shows a
@@ -1070,6 +1138,9 @@ function changeLanguage(id) {
 
 // The "Eksport" box on Indstillinger: pick a month or a year and open its report.
 function exportHtml() {
+	if (tryMode()) {
+		return lockedHtml(t("Eksport"));
+	}
 	let options = `<option value="month:${viewMonth}">${t("Denne måned: {month}", { month: esc(monthLabel(viewMonth)) })}</option>`;
 	for (const year of yearsWithData(data.months)) {
 		options += `<option value="year:${year}">${t("Hele året {year}", { year: year })}</option>`;
@@ -1270,6 +1341,9 @@ function savingsHtml(month) {
 }
 
 function backupHtml() {
+	if (tryMode()) {
+		return lockedHtml(t("Sikkerhedskopi"));
+	}
 	// Safari can clear a web page's saved numbers after a week. An account makes that harmless.
 	const iPhoneTip = accountName === null
 		? " " + t("På iPhone: Del → Føj til hjemmeskærm, så Safari ikke rydder dine tal.")
@@ -1409,6 +1483,9 @@ function reportHtml() {
 }
 
 function openReport() {
+	if (tryMode()) {
+		return;
+	}
 	const choice = document.getElementById("export-scope").value.split(":");
 	reportScope = { type: choice[0], key: choice[1] };
 	activeTab = "report";
@@ -1547,6 +1624,11 @@ document.addEventListener("click", (event) => {
 		case "toggle-report-short":
 			reportShort = !reportShort;
 			render();
+			break;
+		case "go-login":
+			activeTab = "settings";   // the login box is the first card there
+			render();
+			window.scrollTo(0, 0);
 			break;
 		case "download-csv":
 			downloadReportCsv();
@@ -2041,6 +2123,9 @@ function deletePerson(person) {
 // The "Børn" box on Indstillinger: a kid's name, and what they have now. Once a kid is added, their card
 // shows up on Overblik.
 function addPersonHtml() {
+	if (tryMode()) {
+		return lockedHtml(t("Børn"));
+	}
 	const people = potBalances(monthsForMoney());
 	const form = `
 		<form id="person-form" autocomplete="off">
@@ -2063,6 +2148,9 @@ function addPersonHtml() {
 }
 
 function addPerson(form) {
+	if (tryMode()) {
+		return;
+	}
 	const person = form.elements.person.value.trim().slice(0, MAX_NAME_LENGTH);
 	const ore = parseAmount(form.elements.amount.value);
 	if (person === "") {
@@ -2102,7 +2190,7 @@ function addPerson(form) {
 // why, touched }: what the boxes show, kept here so a redraw of the screen does not lose your edits.
 
 async function startBankImport(file) {
-	if (!file) {
+	if (!file || tryMode()) {
 		return;
 	}
 	closeBankImport();
@@ -2661,6 +2749,9 @@ function deleteRow(button) {
 // ---- Backup ----------------------------------------------------------------------
 
 function exportBackup() {
+	if (tryMode()) {
+		return;
+	}
 	downloadText("budget-kopi-" + dateKeyOf(new Date()) + ".json", JSON.stringify(data, null, 2), "application/json");
 	setMessage("backup-message", t("Kopien er gemt som en fil."), false);
 }
@@ -2668,7 +2759,7 @@ function exportBackup() {
 async function importBackup(input) {
 	const file = input.files[0];
 	input.value = "";   // so choosing the same file again still counts as a change
-	if (!file) {
+	if (!file || tryMode()) {
 		return;
 	}
 
@@ -2794,7 +2885,10 @@ function onAccountChange(username) {
 	setWarning("");
 
 	if (username === null) {
-		data = loadData();   // back to this device's own copy
+		data = signedOutData();   // signed out: an empty page to try (nothing of the account is left on screen)
+		if (activeTab === "report") {
+			activeTab = "settings";   // the report needs an account
+		}
 	} else {
 		data = { months: {} };   // until the account's months arrive (onAccountMonths)
 		stopWatching = watchAccountMonths(username, onAccountMonths, onAccountProblem);

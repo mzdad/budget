@@ -415,4 +415,10 @@ const ENGLISH = {
 	"Valuta": "Currency",
 	"Vis kun de vigtigste tal": "Show only the most important numbers",
 	"Vis alle poster": "Show every item",
+	"Log ind eller opret en konto først for at bruge dette.": "Log in or create an account first to use this.",
+	"Log ind eller opret konto": "Log in or create an account",
+	"Tal, der er gemt på denne enhed fra før, er ikke væk: du kan lægge dem ind på kontoen, når du logger ind.": "Numbers saved on this device from before are not gone: you can add them to the account when you log in.",
+	"Du er ikke logget ind": "You are not logged in",
+	"Opret en konto eller log ind først for at få den fulde version med gemte tal. Indtil da kan du kun prøve det af: det du skriver, bliver ikke gemt og er væk, når du lukker siden.": "Create an account or log in first to get the full version with saved numbers. Until then you can only try it out: what you write is not saved and is gone when you close the page.",
+	"Læs fra skærmbillede: log ind først": "Read from a picture: log in first",
 };

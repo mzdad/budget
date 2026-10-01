@@ -3,6 +3,22 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.17.0 - 2026-10-01
+
+- **Not logged in: only a taste ("try mode").** When nobody is logged in, every screen has a note at the top:
+  *"Du er ikke logget ind. Opret en konto eller log ind først for at få den fulde version med gemte tal ..."*,
+  with a button to the login box.
+  - **Can still be tried:** Overblik (add expenses), Udgifter, Plan and the categories. **Nothing is saved**: what you
+    write is gone when the page closes.
+  - **Says "log in first":** Fremtid, the report (Eksport), Børn, "Læs fra skærmbillede" (the bank picture) and the backup
+    (Sikkerhedskopi). The colours, the language and the currency can still be chosen.
+  - **Numbers an earlier version left on the device are not touched**: not shown, not changed, not deleted. The note says so,
+    and at the first login the page still offers to move them into the account.
+  - Logging out leaves an empty page to try (nothing of the account stays on the screen).
+  - Only when accounts are switched on (`firebase-config.js`); without Firebase the page works as before, saving on the device.
+  - **To remember:** Firebase's "Enable create (sign-up)" is switched off on the project (you did that on purpose), so
+    "Opret ny konto" will say no until it is switched on again: see SETUP-ACCOUNTS.md.
+
 ## 1.16.0 - 2026-10-01
 
 - **A short report: only the important numbers.** On the report screen (Indstillinger -> Eksport -> Åbn rapport) there is a new

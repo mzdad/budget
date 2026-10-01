@@ -5,6 +5,20 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.17.0
+
+- **5.3 Log in for the full version** (you said: "if you are not logged in, it should say to create an account or log in
+  first to get the full version with saved stuff, and if you are not logged in you should not be able to use it much").
+  Not logged in is now **try mode**: a note on every screen, Overblik / Udgifter / Plan / categories can be tried but
+  **nothing is saved**, and Fremtid, the report, Børn, the bank picture and the backup say "log in first". The decisions I
+  made (you chose "try it, nothing saved"):
+  - **Old numbers on a device are never deleted**: not shown, not changed; the note says they are safe, and the first
+    login offers to move them into the account (that already existed).
+  - Colours, language and currency can still be chosen, since they are only about how it looks.
+  - Only when accounts are switched on; without Firebase the page works as before.
+  - Tested with 26 new checks, and by breaking each rule on purpose to see the checks fail. Not run end to end against the
+    local Firebase test copy this time (its tool is not installed here); the sign-in path itself was not changed.
+
 ## Done in 1.16.0
 
 - **3.5 A short report: only the important numbers** (you said: "make it so the report is possible to only print the
@@ -149,6 +163,7 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 |---|---|---|---|
 | 5.1 | **Open the page without internet** (a "service worker"). | Today the page needs internet to start, even though the numbers are saved on the phone. The Kortpris app has one. | M |
 | 5.2 | **Try a kid's link on a real phone.** | I could only test it against the local test copy of Firebase, never your real project (I never sign in to it). Make a link, open it on a phone, write something, and see it on the kid's card. | S (you) |
+| 5.4 | **Let new people create an account** (you, in the Firebase console). | Firebase's "Enable create (sign-up)" is switched off on your project (you did that on purpose, 30 September). The page now says "create an account or log in", but "Opret ny konto" will be refused until you tick it on again: Authentication -> Settings -> User actions -> tick Enable create -> Save. Your own login keeps working either way. Decide whether to leave it on for everyone, or switch it on only while someone new signs up. | S (you) |
 
 ## Not planned
 
