@@ -15,6 +15,10 @@ const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") ||
 const STORAGE_KEY = "budget.v1";
 // Whether the categories card on Overblik is open or folded. Only a convenience, kept on this device.
 const CATEGORIES_OPEN_KEY = "budget.categoriesOpen";
+// The same for the small dates / "Hvor ofte?" box under each income and fixed-bill row: what you
+// chose for each row ({ rowId: true or false }), kept on this device.
+const DATES_OPEN_KEY = "budget.datesOpen";
+const MOST_REMEMBERED_ROWS = 300;
 // Remembers which account was signed in, so that at the next start the page waits for that
 // account's numbers instead of showing (and letting you edit) this device's own copy.
 const SIGNED_IN_HINT_KEY = "budget.signedInAs";
@@ -76,6 +80,7 @@ let activeTab = "overview";                   // "overview", "expenses", "future
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
+let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
 
 
 // --- Saving and loading ------------------------------------------------------
@@ -139,6 +144,30 @@ function loadCategoriesOpen() {
 function saveCategoriesOpen(isOpen) {
 	try {
 		localStorage.setItem(CATEGORIES_OPEN_KEY, isOpen ? "1" : "0");
+	} catch (error) {
+		// Only a convenience; the page works without it.
+	}
+}
+
+function loadDatesOpen() {
+	try {
+		const saved = JSON.parse(localStorage.getItem(DATES_OPEN_KEY));
+		return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+	} catch (error) {
+		return {};
+	}
+}
+
+// Remembers that you opened or folded this row's box. Only the newest MOST_REMEMBERED_ROWS rows
+// are kept, so rows you deleted long ago don't pile up.
+function rememberDatesOpen(rowId, isOpen) {
+	delete datesOpen[rowId];
+	datesOpen[rowId] = isOpen;   // (re-added last, so it counts as the newest)
+	for (const oldest of Object.keys(datesOpen).slice(0, -MOST_REMEMBERED_ROWS)) {
+		delete datesOpen[oldest];
+	}
+	try {
+		localStorage.setItem(DATES_OPEN_KEY, JSON.stringify(datesOpen));
 	} catch (error) {
 		// Only a convenience; the page works without it.
 	}
@@ -857,7 +886,8 @@ function rowHtml(section, row) {
 
 // The small box under an income or fixed-bill row. It is a <details>: folded to one line of small
 // text (which also says what the row is now) until you need it, and open from the start for a
-// row that has dates or a frequency. (The maths is in budget.js: amountIn, isDueIn.)
+// row that has dates or a frequency, unless you have opened or folded it yourself: then it stays
+// the way you left it, in every month (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
 // A fixed bill can also say how often it comes: every month, every 2nd/3rd/6th month, or once a
 // year. Then the date means "first payment" (only the month counts).
 const EVERY_LABELS = { 1: "Hver måned", 2: "Hver 2. måned", 3: "Hver 3. måned", 6: "Hver 6. måned", 12: "Hvert år" };
@@ -868,8 +898,10 @@ function datesHtml(row, section) {
 		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${EVERY_LABELS[every]}</option>`).join("");
 		frequencyBox = `<label>Hvor ofte? <select data-field="every">${options}</select></label>`;
 	}
+	const hasSomething = Boolean(row.from || row.to || row.every > 1);
+	const isOpen = datesOpen[row.id] !== undefined ? datesOpen[row.id] : hasSomething;
 	return `
-		<details class="dates" ${row.from || row.to || row.every > 1 ? "open" : ""}>
+		<details class="dates" ${isOpen ? "open" : ""}>
 			<summary>${esc(datesSummaryText(row, section))}</summary>
 			${frequencyBox}
 			<div class="dates-line">
@@ -1089,6 +1121,17 @@ document.addEventListener("toggle", (event) => {
 		saveCategoriesOpen(categoriesOpen);
 	}
 }, true);
+
+// A tap on the one-line summary of a row's dates box opens or folds it. We note what YOU chose (the
+// click comes just before the box flips, so the new state is the opposite of the current one).
+// A "toggle" event would also fire when the page itself draws a box open, which is not a choice.
+document.addEventListener("click", (event) => {
+	const summary = event.target.closest(".dates > summary");
+	const rowElement = summary && summary.closest(".row");
+	if (rowElement) {
+		rememberDatesOpen(rowElement.dataset.id, !summary.parentElement.open);
+	}
+});
 
 // Typing in the Note box: if it is a note you have used before, fill in its usual category.
 document.addEventListener("input", (event) => {

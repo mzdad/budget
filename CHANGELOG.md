@@ -3,6 +3,13 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.8.1 - 2026-10-01
+
+- **A folded "Hvor ofte?" box stays folded.** The small box under an income or fixed-bill row opens
+  by itself when it has a frequency or dates. If you folded it, it opened again the next time the
+  screen was drawn (for example when you changed month). Now it stays the way you left it, in every
+  month and after a restart, for each row on its own. (Rows you never touched behave as before.)
+
 ## 1.8.0 - 2026-10-01
 
 - **Penge nu: Lønkonto and Opsparing.** On Fremtid you type what is on your two accounts. Each
