@@ -1,59 +1,91 @@
-# Roadmap - ideas for later
+# Månedsbudget roadmap
 
-Not built yet. The things that are built are in [CHANGELOG.md](CHANGELOG.md). Newest idea first.
+What to build next, and why. Started 1 October 2026 at version 1.11.0, and kept up to date: finished
+items move to "Done" with their version, and keep their number. Biggest wins first within each part;
+the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
+Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
-## Add purchases from a screenshot of the bank - BUILT in 1.12.0, still to improve
+## Done in 1.12.0
 
-Built: "Læs fra skærmbillede" on Overblik (see CHANGELOG 1.12.0). It reads the picture on the phone
-(free, nothing leaves the phone). Sending the picture to a Claude model would read better but costs
-money for every picture and needs a small server, so it was left out (decided 2026-10-01).
+- **1.1 Add purchases from a screenshot of the bank** (you said: "could be cool if I can send a screenshot of my
+  bank and the app would add on Overblik instead of me adding 1 at a time ... if the app has problems reading some
+  of them it tells me what it could not read"). On Overblik, "Læs fra skærmbillede" under "Tilføj udgift":
+  - The picture is read **on the phone** with a free reader (Tesseract.js, `scan.js`); it is never sent anywhere. The
+    reader itself (about 6 MB) is downloaded from jsdelivr the first time, so that first time needs internet.
+  - What it found is shown **before anything is saved**: a tick, a text, an amount, the day and a category on each
+    line, all editable. "Se billedet" shows the picture again for comparing. A shop you wrote before gets its usual
+    category, also when the bank's text is longer ("REMA 1000 AARHUS C" finds "Rema 1000"), and picking a category on
+    one line fills it in for the same shop on the others.
+  - **What it could not read is listed** in a box ("Kunne ikke læses") and never guessed, so you can add it yourself.
+  - A purchase already written in (same day and amount) is not ticked ("findes allerede"), so a second picture that
+    overlaps the first adds nothing twice. A line that looks like money coming in is not ticked either.
+  - Only lines from the month on screen are added; lines from other months are counted and left out (choose the
+    picture again in that month).
+  - **Why in the app and not Claude** (your rule: use Claude if it is free for others to use, else read in the app):
+    Claude's API costs money for every picture and needs a small server to keep the key secret, and the picture would
+    leave the phone. So it reads in the page.
+  - Tested on pictures drawn by the test itself (light, dark mode, and a small blurry one: all read exactly) and with
+    the page's own 480-odd checks. **Not yet on a real bank screenshot**: see 1.2.
 
-Still to do, once it has been tried on real screenshots from the bank:
-- Teach it the way YOUR bank lays out its list (a name and an amount on separate lines, a little
-  picture in front of each shop, a total per day, and so on). Needs a real example.
-- Several pictures at once, and pictures stitched from a long scroll.
-- If the reading is too weak: a stronger reader, or an optional "send to Claude" button for someone
-  who is willing to pay for it.
+## Done in 1.11.1
 
-## Choose the currency: euro, dollar, pound and more (asked for 2026-10-01)
+- **A category you make now goes into every month** (you said: "when I make categories in October, they don't go back
+  to September"). Each month keeps its own category list, so a category made in October never reached September. Now a
+  new category is added to every saved month, with no limit there (the limit counts only in the month you set it in);
+  renaming or deleting still only changes the month you are in. For categories made before: a button "Brug disse
+  kategorier i alle måneder" under Indstillinger -> Kategorier.
 
-A choice (in Indstillinger) of which currency the page uses, instead of only kroner: euro, US dollar,
-British pound and more. Today every amount is shown as kroner by one function (`formatKr` in
-`budget.js`), and the amounts are stored as whole "øre" (hundredths), which works the same for any
-currency that has hundredths, so the stored numbers would not need to change. Things to decide when we
-get to it:
-- **No conversion, only the label.** Changing the currency would NOT recalculate your numbers (1.000 kr.
-  would just become 1.000 €); real exchange rates would be a different, bigger feature. The choice is
-  for someone who budgets in another currency from the start.
-- Whether the choice is kept per account (follows you to every device) or per device.
-- How the numbers look: Danish style (1.250,00 kr.) or the style of the currency's country.
-- The things that mention "kr" in words or files: the spreadsheet export, the kid's page, and the bank
-  screenshot reader (it must then understand €, $ and £ on the bank's list).
-- It goes well together with the language switch below, so the two could be done as one piece of work.
+## Done in 1.11.0
 
-## Danish / English language switch (asked for 2026-10-01)
+- **4.1 The kids' own page** (you said: "make it possible for my kids to log in, see what money they have and type if
+  they use money, nothing else"). Under Indstillinger -> Børn each kid gets a private link ("Giv Nathan sit eget
+  link"). Opened on the kid's phone it shows only what the kid has and a box to write what they used: no budget, no
+  tabs, no way to add money. What the kid writes shows on their card on Overblik (marked "selv"), in "Heraf" and
+  lowers Opsparing on Fremtid. You can delete a post or take the link away. It needs an account. A link and not a
+  username and password, because Firebase's sign-up is switched off on your project and a link needs no setup in
+  Firebase's console: see 4.2. Tested against the local test copy (two "devices"); the rules were published by you on
+  1 October 2026, but a real kid's phone has not been tried: see 5.2.
 
-A switch (in Indstillinger) between Danish and English. Today every word on the screens is written
-straight into the code in Danish, so the work is to gather all the texts in one place, one list per
-language, and have the screens read from it. Things to decide when we get to it: the money stays in
-kroner either way (only the words and the month and day names change); whether the kid's own page
-follows the language of the device it is opened on; and which language a new device starts in
-(the phone's own setting is the natural pick).
+## 1. Reading the bank's list from a picture
 
-## Colour themes (asked for 2026-10-01)
+| | What | Why | Size |
+|---|---|---|---|
+| 1.2 | **Teach it your bank's layout**, once it has been tried on a real screenshot. | Every bank lists things differently: a name and its amount on separate lines, a little picture in front of each shop, a total per day, the date on each line or as a heading. It reads pictures I drew myself perfectly, but that proves little. Needs a real example: a screenshot with the account numbers hidden. | M |
+| 1.3 | **Several pictures at once**, and a long list stitched from a scroll. | A month is more than one screen of the bank's list. Today each picture is read on its own, and a very long picture is made smaller until it fits (12 million pixels), which makes the letters smaller. | S-M |
+| 1.4 | **A stronger reader**, or an optional "send to Claude" button. | If the reading proves too weak on real pictures. A Claude model reads much better, but costs a little for every picture, needs a small server to keep the key secret, and the picture of the bank (account numbers!) leaves the phone, so it would be a choice you make for each picture, never the default. | M |
 
-A way to pick a look for the page, with more than one theme. The first one asked for is a **red and
-black** theme. The colours already live in one place at the top of `style.css` (plus the dark-mode
-set), so a theme is a new set of those colours and a small "Udseende" choice in Indstillinger that
-remembers the pick on the device. Things to decide when we get to it: should the themes also follow
-the phone's light/dark setting, and should the kid's own page use the same theme.
+## 2. How it looks and speaks
 
-## Smaller ideas that were offered but not chosen
+| | What | Why | Size |
+|---|---|---|---|
+| 2.1 | **Colour themes**, the first one **red and black** (you asked for it, 1 October 2026). | A way to pick a look for the page, with more than one theme. The colours already live in one place at the top of `style.css` (plus the dark-mode set), so a theme is a new set of those colours and a small "Udseende" choice in Indstillinger that remembers the pick on the device. To decide: should the themes also follow the phone's light/dark setting, and should the kid's own page use the same theme. | M |
+| 2.2 | **Danish / English language switch** in Indstillinger (you asked for it, 1 October 2026). | Today every word on the screens is written straight into the code in Danish, so the work is to gather all the texts in one place, one list per language, and have the screens read from it. To decide: the money stays in kroner either way (only the words and the month and day names change); whether the kid's own page follows the language of the device it is opened on; which language a new device starts in (the phone's own setting is the natural pick). | L |
+| 2.3 | **Choose the currency**: euro, US dollar, British pound and more (you asked for it, 1 October 2026). | Today every amount is shown as kroner by one function (`formatKr` in `budget.js`), and the amounts are stored as whole hundredths ("øre"), which works for any currency that has hundredths, so the stored numbers would not change. To decide: **no conversion, only the label** (1.000 kr. would become 1.000 €, nothing recalculated; real exchange rates are a different, bigger feature); whether the choice is kept per account or per device; Danish number style (1.250,00 kr.) or the currency's own country's; and the things that say "kr" in words or files: the spreadsheet export, the kid's page and the bank-picture reader (it must then understand €, $ and £). Goes well together with 2.2. | M |
 
-- One-off expenses in Fremtid (a holiday, say), and a longer horizon than 12 months.
-- A real Excel file (.xlsx) instead of .csv.
-- Open the page without internet (a "service worker").
-- Spread a yearly bill over the months, as "put aside per month".
-- On a kid's "fik": a tick for "only moved inside the pile", so Opsparing does not change.
-- Kids with their own username and password instead of a link (needs Firebase's sign-up switched
-  on while the kid's login is made).
+## 3. Money and planning
+
+| | What | Why | Size |
+|---|---|---|---|
+| 3.1 | **One-off expenses in Fremtid** (a holiday, say), and a longer horizon than 12 months. | Fremtid only repeats the plan month after month, so a big expense you know is coming is not in it. | M |
+| 3.2 | **A real Excel file (.xlsx)** instead of .csv. | The .csv opens fine in Excel (Danish format), but a real file keeps the look. Needs a library. | M |
+| 3.3 | **Spread a yearly bill over the months**, as "put aside per month". | A bill that comes once a year is charged in full in its month and 0 in the others. Spread out, each month carries its share. | S |
+| 3.4 | **On a kid's "fik": a tick for "only moved inside the pile"**, so Opsparing does not change. | A kid's "fik" always raises Opsparing (your choice, option A, 1.8.0); if it was only money moved inside the pile you retype the real Opsparing today. | S |
+
+## 4. Kids
+
+| | What | Why | Size |
+|---|---|---|---|
+| 4.2 | **Kids with their own username and password** instead of a link. | A link is the key: anyone who has it can write on the kid's page. A login is safer if the link is passed on. Needs Firebase's sign-up switched on while the kid's login is made (you turned it off on purpose), so it is more setup for you. | M |
+
+## 5. Keeping the app working
+
+| | What | Why | Size |
+|---|---|---|---|
+| 5.1 | **Open the page without internet** (a "service worker"). | Today the page needs internet to start, even though the numbers are saved on the phone. The Kortpris app has one. | M |
+| 5.2 | **Try a kid's link on a real phone.** | I could only test it against the local test copy of Firebase, never your real project (I never sign in to it). Make a link, open it on a phone, write something, and see it on the kid's card. | S (you) |
+
+## Not planned
+
+- **Sending every bank picture to a Claude model for everyone** (decided 1 October 2026, see 1.1 and 1.4). It costs
+  money for every picture, needs a server, and the picture of the bank would leave the phone. Only maybe as an
+  optional button, for a single picture you choose.

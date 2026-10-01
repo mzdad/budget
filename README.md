@@ -69,7 +69,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
 | `account.js` | Talks to Firebase (sign in, save and watch the months, and the kids' pages). No screen code |
 | `kid.js` | The kid's own page (opened with a kid's link): what the kid has, and a box to write what they used |
 | `scan.js` | Reads the text in a picture (a screenshot of the bank's list) on the phone, with Tesseract.js. No screen code |
-| `ROADMAP.md` | Ideas for later, not built yet |
+| `ROADMAP.md` | What comes next, and why (numbered items, like Kortpris); finished ones move to "Done" with their version |
 | `password.js` | Decides whether a new password is strong enough |
 | `firebase-config.js` | Which Firebase project to use (`null` until set up) |
 | `firestore.rules` | The privacy rules, published by hand in the Firebase console |
