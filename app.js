@@ -91,6 +91,7 @@ let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on 
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
 let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
+let bankImport = null;                        // a picture of the bank being read or checked (see "Add purchases from a picture")
 
 
 // --- Saving and loading ------------------------------------------------------
@@ -380,6 +381,7 @@ function overviewHtml(month) {
 	if (s.income === 0 && month.spending.length === 0) {
 		html += welcomeHtml();
 	}
+	html += bankImportHtml();
 	html += leftCardHtml(s);
 	html += addFormHtml(month);
 	html += categoryBarsHtml(s);
@@ -491,6 +493,10 @@ function addFormHtml(month) {
 			</label>
 			<button type="submit" class="primary">Tilføj</button>
 			<p id="add-message" class="message" role="status"></p>
+			<label class="button secondary">Læs fra skærmbillede
+				<input type="file" id="bank-picture" accept="image/*" hidden>
+			</label>
+			<p class="hint">Et skærmbillede af bankens liste over køb. Det læses her på din telefon og sendes ikke videre. Du tjekker alt, før det gemmes.</p>
 		</form>`;
 }
 
@@ -1233,16 +1239,19 @@ document.addEventListener("click", (event) => {
 
 	switch (button.dataset.action) {
 		case "previous-month":
+			closeBankImport();   // a picture belongs to the month it was chosen in
 			viewMonth = shiftMonth(viewMonth, -1);
 			render();
 			window.scrollTo(0, 0);
 			break;
 		case "next-month":
+			closeBankImport();
 			viewMonth = shiftMonth(viewMonth, 1);
 			render();
 			window.scrollTo(0, 0);
 			break;
 		case "this-month":
+			closeBankImport();
 			viewMonth = monthKeyOf(new Date());
 			render();
 			window.scrollTo(0, 0);
@@ -1289,6 +1298,10 @@ document.addEventListener("click", (event) => {
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
+		case "close-bank-import":
+			closeBankImport();
+			render();
+			break;
 		case "export":
 			exportBackup();
 			break;
@@ -1329,6 +1342,9 @@ document.addEventListener("submit", (event) => {
 	} else if (event.target.id === "person-form") {
 		event.preventDefault();
 		addPerson(event.target);
+	} else if (event.target.id === "bank-form") {
+		event.preventDefault();
+		addBankRows();
 	}
 });
 
@@ -1359,6 +1375,10 @@ document.addEventListener("click", (event) => {
 
 // Typing in the Note box: if it is a note you have used before, fill in its usual category.
 document.addEventListener("input", (event) => {
+	if (event.target.dataset && event.target.dataset.scan) {
+		editBankRow(event.target);
+		return;
+	}
 	if (event.target.name === "note" && event.target.form && event.target.form.id === "add-form") {
 		pickCategoryFromNote(event.target);
 	}
@@ -1367,6 +1387,16 @@ document.addEventListener("input", (event) => {
 // "change" fires when you leave a box (or press Enter) after editing it.
 document.addEventListener("change", (event) => {
 	const input = event.target;
+	if (input.id === "bank-picture") {
+		const file = input.files[0];
+		input.value = "";   // so choosing the same picture again still counts as a change
+		startBankImport(file);
+		return;
+	}
+	if (input.dataset && input.dataset.scan) {
+		editBankRow(input);
+		return;
+	}
 	if (input.name === "category" && input.form && input.form.id === "add-form") {
 		input.dataset.touched = "1";   // you chose a category yourself: a note won't change it
 		return;
@@ -1813,6 +1843,272 @@ function addPerson(form) {
 	});
 	render();
 	setMessage("person-message", person + " er tilføjet. Se under Overblik.", false);
+}
+
+
+// ---- Add purchases from a picture of the bank (Overblik -> "Læs fra skærmbillede") ----------
+//
+// You choose a screenshot of the bank's list of purchases. scan.js reads the text in it, on the
+// phone (the picture is never sent anywhere), planBankImport() in budget.js turns the text into
+// purchases, and they are shown here for you to check before anything is saved: untick one, fix a
+// text or an amount, pick a category. What could not be read is listed, so you can write it in
+// yourself. Only purchases of the month the picture was chosen in are added.
+//
+// bankImport is null, or { status: "reading" | "ready" | "failed", monthKey, pictureUrl, stage,
+// share, rows, elsewhere, unclear, problem }. A row is { date, note, amountText, categoryId, tick,
+// why, touched }: what the boxes show, kept here so a redraw of the screen does not lose your edits.
+
+async function startBankImport(file) {
+	if (!file) {
+		return;
+	}
+	closeBankImport();
+	const job = { status: "reading", monthKey: viewMonth, pictureUrl: URL.createObjectURL(file), stage: "loading", share: 0, rows: [], elsewhere: [], unclear: [], problem: "" };
+	bankImport = job;
+	render();
+	window.scrollTo(0, 0);
+
+	try {
+		const text = await readPicture(file, (stage, share) => showReadingProgress(job, stage, share));
+		if (bankImport !== job) {
+			return;   // closed (or another month chosen) while it was reading
+		}
+		const plan = planBankImport(text, job.monthKey, new Date(), getMonth(job.monthKey), noteHistory(data.months));
+		job.rows = plan.rows.map((row) => ({
+			date: row.date,
+			note: row.note,
+			amountText: amountToInput(row.amount),
+			categoryId: row.categoryId,
+			tick: row.tick,
+			why: row.why,
+			touched: false,
+		}));
+		job.elsewhere = plan.elsewhere;
+		job.unclear = plan.unclear;
+		job.status = "ready";
+	} catch (error) {
+		if (bankImport !== job) {
+			return;
+		}
+		console.error(error);
+		job.status = "failed";
+		// No reader at all means it could not be downloaded; otherwise the picture was the problem.
+		job.problem = typeof Tesseract === "undefined"
+			? "Læseprogrammet kunne ikke hentes. Tjek, at du har internet, og prøv igen."
+			: "Billedet kunne ikke læses. Prøv med et andet skærmbillede.";
+	}
+	render();
+}
+
+function bankReadingText(stage, share) {
+	if (stage === "loading") {
+		return "Gør klar … Første gang hentes læseprogrammet (nogle få MB), så kan det tage lidt.";
+	}
+	return "Læser billedet … " + Math.round(share * 100) + " %";
+}
+
+// The progress is updated in place, not by redrawing the screen many times a second.
+function showReadingProgress(job, stage, share) {
+	if (bankImport !== job) {
+		return;
+	}
+	job.stage = stage;
+	job.share = share;
+	const bar = document.getElementById("bank-progress");
+	const text = document.getElementById("bank-progress-text");
+	if (bar) {
+		bar.value = Math.round(share * 100);
+	}
+	if (text) {
+		text.textContent = bankReadingText(stage, share);
+	}
+}
+
+function closeBankImport() {
+	if (bankImport !== null) {
+		stopReadingPicture();
+		URL.revokeObjectURL(bankImport.pictureUrl);
+		bankImport = null;
+	}
+}
+
+function bankCategoryOptionsHtml(month, chosenId) {
+	let html = `<option value=""${chosenId === "" ? " selected" : ""}>Uden kategori</option>`;
+	for (const category of month.categories) {
+		html += `<option value="${esc(category.id)}"${category.id === chosenId ? " selected" : ""}>${esc(category.name || "(uden navn)")}</option>`;
+	}
+	return html;
+}
+
+function bankRowHtml(row, index, month) {
+	const notes = { already: "findes allerede", "money-in": "ligner penge ind" };
+	const why = row.why !== "" ? `<div class="scan-why">${notes[row.why]}</div>` : "";
+	return `
+		<div class="scan-row ${row.tick ? "" : "off"}" data-index="${index}">
+			<input type="checkbox" class="scan-tick" data-scan="tick" ${row.tick ? "checked" : ""} aria-label="Tilføj denne udgift">
+			<input data-scan="note" value="${esc(row.note)}" maxlength="${MAX_NOTE_LENGTH}" placeholder="Tekst" aria-label="Tekst" autocomplete="off">
+			<input data-scan="amount" value="${esc(row.amountText)}" inputmode="decimal" aria-label="Beløb i kroner" autocomplete="off">
+			${why}
+			<div class="scan-under">
+				<span class="scan-date">${esc(shortDayText(row.date))}</span>
+				<select data-scan="category" aria-label="Kategori">${bankCategoryOptionsHtml(month, row.categoryId)}</select>
+			</div>
+		</div>`;
+}
+
+function bankAddLabel(rows) {
+	const count = rows.filter((row) => row.tick).length;
+	if (count === 0) {
+		return "Ingen valgt";
+	}
+	return "Tilføj " + count + (count === 1 ? " udgift" : " udgifter");
+}
+
+// The card at the top of Overblik while a picture is being read or checked.
+function bankImportHtml() {
+	if (bankImport === null) {
+		return "";
+	}
+	const job = bankImport;
+	const monthName = monthLabel(job.monthKey);
+
+	if (job.status === "reading") {
+		return `
+			<section class="card" id="bank-import">
+				<h2>Læser billedet</h2>
+				<p id="bank-progress-text" class="hint">${esc(bankReadingText(job.stage, job.share))}</p>
+				<progress id="bank-progress" max="100" value="${Math.round(job.share * 100)}"></progress>
+				<button type="button" class="secondary" data-action="close-bank-import">Annullér</button>
+			</section>`;
+	}
+	if (job.status === "failed") {
+		return `
+			<section class="card" id="bank-import">
+				<h2>Det lykkedes ikke</h2>
+				<p>${esc(job.problem)}</p>
+				<button type="button" class="secondary" data-action="close-bank-import">Luk</button>
+			</section>`;
+	}
+
+	const month = getMonth(job.monthKey);
+	const found = job.rows.length;
+	let html = `
+		<section class="card" id="bank-import">
+			<h2>${found === 0 ? "Ingen udgifter fundet" : "Fundet " + found + (found === 1 ? " linje" : " linjer") + " til " + esc(monthName.toLowerCase())}</h2>
+			<p class="hint">Billedet kan være læst forkert. Tjek mod billedet, ret tekst og beløb, vælg kategori, og fjern fluebenet ved dem, du ikke vil have med.</p>
+			<details class="explain">
+				<summary>Se billedet</summary>
+				<img class="scan-picture" src="${esc(job.pictureUrl)}" alt="Dit skærmbillede">
+			</details>`;
+
+	if (found > 0) {
+		html += '<form id="bank-form" autocomplete="off">';
+		job.rows.forEach((row, index) => {
+			html += bankRowHtml(row, index, month);
+		});
+		html += `
+				<button type="submit" class="primary" id="bank-add-button" ${job.rows.some((row) => row.tick) ? "" : "disabled"}>${bankAddLabel(job.rows)}</button>
+				<p id="bank-message" class="message" role="status"></p>
+			</form>`;
+	}
+
+	if (job.unclear.length > 0) {
+		html += `
+			<div class="scan-unclear">
+				<h3>Kunne ikke læses (${job.unclear.length})</h3>
+				<p class="hint">De er ikke med. Skriv dem selv ind under Tilføj udgift.</p>
+				<ul class="scan-lines">${job.unclear.map((line) => "<li>" + esc(line) + "</li>").join("")}</ul>
+			</div>`;
+	}
+	if (job.elsewhere.length > 0) {
+		const months = [...new Set(job.elsewhere.map((line) => line.date.slice(0, 7)))].sort().slice(0, 3);
+		html += `<p class="hint">${job.elsewhere.length} ${job.elsewhere.length === 1 ? "linje er" : "linjer er"} fra andre måneder (${esc(months.map((key) => monthLabel(key).toLowerCase()).join(", "))}) og er ikke med. Gå til den måned, og vælg billedet igen.</p>`;
+	}
+	return html + `<button type="button" class="secondary" data-action="close-bank-import">Luk</button></section>`;
+}
+
+// A box in a row was changed. The values live in bankImport.rows, so nothing is lost on a redraw.
+function editBankRow(input) {
+	const rowElement = input.closest(".scan-row");
+	const row = bankImport && bankImport.status === "ready" && rowElement ? bankImport.rows[Number(rowElement.dataset.index)] : undefined;
+	if (!row) {
+		return;
+	}
+	const field = input.dataset.scan;
+	if (field === "tick") {
+		row.tick = input.checked;
+		rowElement.classList.toggle("off", !row.tick);
+		const button = document.getElementById("bank-add-button");
+		if (button) {
+			button.textContent = bankAddLabel(bankImport.rows);
+			button.disabled = !bankImport.rows.some((other) => other.tick);
+		}
+	} else if (field === "note") {
+		row.note = input.value;
+	} else if (field === "amount") {
+		row.amountText = input.value;
+		input.classList.remove("bad");
+	} else if (field === "category") {
+		row.categoryId = input.value;
+		row.touched = true;
+		// The same shop on other lines that have no category yet gets this one too.
+		const same = row.note.trim().toLowerCase();
+		bankImport.rows.forEach((other, index) => {
+			if (other !== row && !other.touched && other.categoryId === "" && same !== "" && other.note.trim().toLowerCase() === same) {
+				other.categoryId = row.categoryId;
+				const box = document.querySelector('.scan-row[data-index="' + index + '"] [data-scan="category"]');
+				if (box) {
+					box.value = row.categoryId;
+				}
+			}
+		});
+	}
+}
+
+// "Tilføj N udgifter": the ticked rows are written in, and the card closes.
+function addBankRows() {
+	const job = bankImport;
+	if (job === null || job.status !== "ready") {
+		return;
+	}
+	const chosen = [];
+	let unreadable = false;
+	job.rows.forEach((row, index) => {
+		if (!row.tick) {
+			return;
+		}
+		const amount = parseAmount(row.amountText);
+		if (amount === null || amount <= 0) {
+			unreadable = true;
+			const box = document.querySelector('.scan-row[data-index="' + index + '"] [data-scan="amount"]');
+			if (box) {
+				box.classList.add("bad");
+			}
+			return;
+		}
+		chosen.push({ date: row.date, categoryId: row.categoryId, amount: amount, note: row.note.trim().slice(0, MAX_NOTE_LENGTH) });
+	});
+	if (unreadable) {
+		setMessage("bank-message", "Ret de røde beløb, eller fjern fluebenet ved dem.", true);
+		return;
+	}
+	if (chosen.length === 0) {
+		setMessage("bank-message", "Der er ikke valgt nogen.", true);
+		return;
+	}
+	if (getMonth(job.monthKey).spending.length + chosen.length > MOST_SPENDING_PER_MONTH) {
+		setMessage("bank-message", "Der kan højst være " + MOST_SPENDING_PER_MONTH + " udgifter i en måned. Fjern nogle af fluebenene.", true);
+		return;
+	}
+
+	changeMonth((month) => {
+		for (const item of chosen) {
+			month.spending.push({ id: newId(), date: item.date, categoryId: item.categoryId, amount: item.amount, note: item.note });
+		}
+	}, job.monthKey);
+	closeBankImport();
+	render();
+	setMessage("add-message", "Tilføjet " + chosen.length + (chosen.length === 1 ? " udgift" : " udgifter") + " fra billedet.", false);
 }
 
 

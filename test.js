@@ -632,6 +632,74 @@ const savingsAndKid = budget.withKidEntries({ "2026-10": { balances: typed["2026
 check("kid entries move Opsparing when written after the number was typed, and not before", budget.moneyNow(savingsAndKid).savingsNow, 18000000 - 4500);
 check("kid entries: the kid's page total is the parent side plus what the kid wrote", 470000 + kidWrote.reduce((sum, entry) => sum + entry.amount, 0), 470000 - 5500);
 
+// --- Reading the bank's list from a picture (the text the reader found) ---
+const bankToday = new Date(2026, 9, 1);   // 1 October 2026
+const bankParse = (text, monthKey) => budget.parseBankText(text, monthKey || "2026-09", bankToday);
+const bankRowsOf = (text) => bankParse(text).lines.map((line) => [line.date, line.note, line.ore, line.sign]);
+
+check("bank text: a heading with a date counts for the lines under it", bankRowsOf(
+	"Posteringer\nTirsdag 30. september\nNETTO ÅRHUS C            -123,45 kr.\nMad og dagligvarer\nRema 1000    -45,00 kr.\n29. sep.\nSpotify -99,00 kr."), [
+	["2026-09-30", "NETTO ÅRHUS C", 12345, -1],
+	["2026-09-30", "Rema 1000", 4500, -1],
+	["2026-09-29", "Spotify", 9900, -1],
+]);
+check("bank text: a date at the start of every line, in four writings", bankRowsOf(
+	"30-09-2026 Netto -45,00\n29/09 Kiosken -12,50\n28.09.2026 Apotek 129,95\n27.09 14:32 Cafe Smørrebrød -88,00 DKK"), [
+	["2026-09-30", "Netto", 4500, -1],
+	["2026-09-29", "Kiosken", 1250, -1],
+	["2026-09-28", "Apotek", 12995, 0],
+	["2026-09-27", "Cafe Smørrebrød", 8800, -1],
+]);
+check("bank text: the long minus, a plus, and thousands dots", bankRowsOf("30. sep.\nFøtex −1.234,50 kr.\nLøn +25.000,00 kr."), [
+	["2026-09-30", "Føtex", 123450, -1],
+	["2026-09-30", "Løn", 2500000, 1],
+]);
+check("bank text: a dot instead of the decimal comma still reads", bankRowsOf("30. sep.\nBageren 45.00 kr.")[0][2], 4500);
+check("bank text: no decimals needs a sign or kr", bankRowsOf("30. sep.\nA -45\nB 12 kr.\nC 77").map((row) => row[1]), ["A", "B"]);
+check("bank text: a bare number (Rema 1000) is not an amount, and not a problem", bankParse("30. sep.\nRema 1000"), { lines: [], unclear: [] });
+check("bank text: i dag and i går use today's date", budget.parseBankText("I dag\nA -1,00 kr.\nI går\nB -2,00 kr.", "2026-10", bankToday).lines.map((line) => line.date), ["2026-10-01", "2026-09-30"]);
+check("bank text: a year in the date wins over the month on screen", bankRowsOf("30. sep. 2025\nA -1,00 kr.")[0][0], "2025-09-30");
+check("bank text: a month's long name and capitals", bankRowsOf("TIRSDAG 30. SEPTEMBER 2026\nA -1,00 kr.")[0][0], "2026-09-30");
+check("bank text: a balance or a total is not a purchase", bankRowsOf("30. sep.\nSaldo 12.345,67 kr.\nI alt -500,00 kr.\nSpotify -99,00 kr.").map((row) => row[1]), ["Spotify"]);
+check("bank text: a shop's little picture in front is dropped", bankRowsOf("30. sep.\n© Netto -45,00 kr.")[0][1], "Netto");
+check("bank text: no date anywhere -> not read, listed", bankParse("Netto -45,00 kr."), { lines: [], unclear: ["Netto -45,00 kr."] });
+check("bank text: a damaged amount is listed, the rest is read", bankParse("30. sep.\nNetto -45,0O kr.\nBageren -22,00 kr."), {
+	lines: [{ date: "2026-09-30", note: "Bageren", ore: 2200, sign: -1, raw: "Bageren -22,00 kr." }],
+	unclear: ["Netto -45,0O kr."],
+});
+check("bank text: an impossible date is listed, and the lines under it get no date", bankParse("31. sep.\nA -10,00 kr."), { lines: [], unclear: ["31. sep.", "A -10,00 kr."] });
+check("bank text: 0 kr is listed", bankParse("30. sep.\nA 0,00 kr.").unclear, ["A 0,00 kr."]);
+check("bank text: empty text", bankParse(""), { lines: [], unclear: [] });
+check("bank text: a time at the front of a line is not part of the note", bankRowsOf("30. sep.\n14:32 Netto -45,00 kr.")[0][1], "Netto");
+
+// What the page shows for checking: the month's purchases, the other months, and what was unclear.
+const bankMonth = {
+	categories: [{ id: "m", name: "Mad og dagligvarer", limit: 0 }, { id: "s", name: "Sjov", limit: 0 }],
+	spending: [{ id: "x", date: "2026-09-30", categoryId: "m", amount: 12345, note: "Netto Århus" }],
+};
+const bankHistory = [
+	{ note: "Netto", count: 5, lastDate: "2026-09-02", categoryName: "Mad og dagligvarer" },
+	{ note: "Spotify", count: 2, lastDate: "2026-09-02", categoryName: "Sjov" },
+	{ note: "Rema 1000", count: 1, lastDate: "2026-09-02", categoryName: "Mad og dagligvarer" },
+];
+const bankPlan = budget.planBankImport("Tirsdag 30. september\nNETTO ÅRHUS C -123,45 kr.\nNETTO ÅRHUS C -50,00 kr.\nspotify -99,00 kr.\nLøn +25.000,00 kr.\n29. aug. Gammel -10,00 kr.\nNoget -4S,00 kr.", "2026-09", bankToday, bankMonth, bankHistory);
+check("bank plan: a purchase already written in is not chosen", bankPlan.rows[0], { date: "2026-09-30", note: "NETTO ÅRHUS C", amount: 12345, categoryId: "m", tick: false, why: "already" });
+check("bank plan: the same shop and day with another amount is a new purchase, in the shop's usual category", bankPlan.rows[1], { date: "2026-09-30", note: "NETTO ÅRHUS C", amount: 5000, categoryId: "m", tick: true, why: "" });
+check("bank plan: a note you have written before keeps your spelling", bankPlan.rows[2].note, "Spotify");
+check("bank plan: and its usual category", bankPlan.rows[2].categoryId, "s");
+check("bank plan: with a minus on some lines, a line without one is money in and not chosen", bankPlan.rows[3], { date: "2026-09-30", note: "Løn", amount: 2500000, categoryId: "", tick: false, why: "money-in" });
+check("bank plan: a line from another month is left out", bankPlan.elsewhere, [{ date: "2026-08-29", note: "Gammel", amount: 1000 }]);
+check("bank plan: what could not be read is handed back", bankPlan.unclear, ["Noget -4S,00 kr."]);
+const noMinus = budget.planBankImport("30. sep.\nNetto 45,00\nRema 1000 12,00\nLøn +100,00", "2026-09", bankToday, { categories: [], spending: [] }, []);
+check("bank plan: with no minus anywhere, everything but a plus line is a purchase", noMinus.rows.map((row) => [row.note, row.tick, row.why]), [["Netto", true, ""], ["Rema 1000", true, ""], ["Løn", false, "money-in"]]);
+const unsignedAmongMinus = budget.planBankImport("30. sep.\nNetto -45,00 kr.\nRefusion 20,00 kr.", "2026-09", bankToday, { categories: [], spending: [] }, []);
+check("bank plan: with a minus on some lines, a line with no sign at all is money in", unsignedAmongMinus.rows.map((row) => [row.note, row.tick, row.why]), [["Netto", true, ""], ["Refusion", false, "money-in"]]);
+const twoSame = budget.planBankImport("30. sep.\nKaffe -30,00 kr.\nKaffe -30,00 kr.", "2026-09", bankToday, { categories: [], spending: [{ id: "k", date: "2026-09-30", categoryId: "", amount: 3000, note: "Kaffe" }] }, []);
+check("bank plan: one written purchase covers only one of two equal lines", twoSame.rows.map((row) => row.why), ["already", ""]);
+check("bank category: a text that starts with a note you had gets its category", budget.bankCategoryId(bankHistory, "REMA 1000 AARHUS C", bankMonth), "m");
+check("bank category: a text that only looks the same at the start of a word does not", budget.bankCategoryId(bankHistory, "Nettoman", bankMonth), "");
+check("bank category: an unknown shop has none", budget.bankCategoryId(bankHistory, "Føtex", bankMonth), "");
+
 // --- Spreadsheet text ---
 check("csv amount: kroner and øre", budget.csvAmount(123456), "1234,56");
 check("csv amount: zero", budget.csvAmount(0), "0,00");
@@ -743,7 +811,7 @@ function pretendPage() {
 		URL, URLSearchParams, Blob, setTimeout, confirm: window.confirm, alert: window.alert, location: {},
 		FIREBASE_CONFIG: null, USE_FIREBASE_EMULATOR: false,   // accounts off: nothing here talks to Firebase
 	});
-	for (const file of ["budget.js", "password.js", "account.js", "kid.js", "app.js"]) {
+	for (const file of ["budget.js", "password.js", "account.js", "kid.js", "scan.js", "app.js"]) {
 		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
 	}
 	return { context, handlers, saved, view: () => shown, run: (code) => vm.runInContext(code, context) };
@@ -816,6 +884,61 @@ if (page !== null) {
 		page.run("viewMonth = '2026-10'; data.months['2026-10'].categories.push({ id: 'c', name: 'Gaver', limit: 5000 }); shareCategories(['Gaver']); render();");
 		check("screens: a new category reaches the other month, and the month it was made in keeps its own limit", page.run("[data.months['2026-09'].categories.length, data.months['2026-10'].categories.length, data.months['2026-10'].categories[2].limit]"), [3, 3, 5000]);
 		page.run("data = cleanData(" + keep + "); viewMonth = '2026-09'; activeTab = 'settings'; accountName = 'mama'; render();");
+	});
+	attempt("screens: adding purchases from a picture of the bank", () => {
+		const keep = page.run("JSON.stringify(data)");
+		page.run("accountName = null;");   // on this device only: nothing to send anywhere
+		page.run("data = cleanData(" + JSON.stringify({ months: { "2026-09": { categories: [{ id: "m", name: "Mad", limit: 100000 }, { id: "s", name: "Sjov", limit: 0 }], spending: [] } } }) + "); viewMonth = '2026-09'; activeTab = 'overview'; render();");
+		check("screens: the button for a picture is on Overblik", page.view().includes('id="bank-picture"') && page.view().includes("Læs fra skærmbillede"), true);
+
+		const job = (extra) => "bankImport = Object.assign({ status: 'ready', monthKey: '2026-09', pictureUrl: 'blob:x', stage: 'loading', share: 0, rows: [], elsewhere: [], unclear: [], problem: '' }, " + JSON.stringify(extra) + "); render();";
+		page.run(job({ status: "reading", share: 0.4, stage: "reading" }));
+		check("screens: while reading, a progress bar and a way to stop", ["Læser billedet", "<progress", 'value="40"', 'data-action="close-bank-import"'].every((word) => page.view().includes(word)), true);
+		page.run(job({ status: "failed", problem: "Læseprogrammet kunne ikke hentes." }));
+		check("screens: a failure says what went wrong", page.view().includes("Det lykkedes ikke") && page.view().includes("Læseprogrammet kunne ikke hentes."), true);
+
+		const rows = [
+			{ date: "2026-09-30", note: "Netto", amountText: "123,45", categoryId: "m", tick: true, why: "", touched: false },
+			{ date: "2026-09-30", note: "Netto", amountText: "50", categoryId: "", tick: true, why: "", touched: false },
+			{ date: "2026-09-29", note: "<b>Gammel</b>", amountText: "99", categoryId: "s", tick: false, why: "already", touched: false },
+		];
+		page.run(job({ rows: rows, unclear: ["Noget -4S,00 kr."], elsewhere: [{ date: "2026-08-29", note: "x", amount: 1000 }] }));
+		let html = page.view();
+		allHtml += html;
+		check("screens: the lines found are listed for checking", ["Fundet 3 linjer til september 2026", 'id="bank-form"', "Tilføj 2 udgifter", "findes allerede", "Se billedet"].every((word) => html.includes(word)), true);
+		check("screens: what could not be read is listed, and the other months are mentioned", ["Kunne ikke læses (1)", "Noget -4S,00 kr.", "1 linje er fra andre måneder (august 2026)"].every((word) => html.includes(word)), true);
+		check("screens: a text from the picture is shown safely", html.includes("<b>Gammel</b>"), false);
+		check("screens: the picture's shop and category show in the row", html.includes('value="Netto"') && html.includes('<option value="m" selected>Mad</option>'), true);
+
+		// Change a category on one line: the other line with the same shop and no category follows.
+		const editBox = (index, field, extra) => page.run("editBankRow(Object.assign({ dataset: { scan: '" + field + "' }, classList: { add() {}, remove() {} }, closest: () => ({ dataset: { index: '" + index + "' }, classList: { toggle() {} } }) }, " + JSON.stringify(extra) + "))");
+		editBox(0, "category", { value: "s" });
+		check("screens: choosing a category once fills it in for the same shop on other lines", page.run("bankImport.rows.map((row) => row.categoryId)"), ["s", "s", "s"]);
+		editBox(1, "category", { value: "m" });
+		check("screens: a category you chose yourself is left alone", page.run("bankImport.rows.map((row) => row.categoryId)"), ["s", "m", "s"]);
+
+		// A box with an amount that cannot be understood stops the adding.
+		editBox(1, "amount", { value: "abc" });
+		page.run("addBankRows();");
+		check("screens: an unreadable amount adds nothing", page.run("data.months['2026-09'].spending.length"), 0);
+		editBox(1, "amount", { value: "50,5" });
+		editBox(0, "note", { value: "  Netto Århus  " });
+		page.run("addBankRows();");
+		check("screens: the chosen lines are added, with the edits, to the month of the picture", page.run("data.months['2026-09'].spending.map((item) => [item.date, item.note, item.amount, item.categoryId])"), [
+			["2026-09-30", "Netto Århus", 12345, "s"],
+			["2026-09-30", "Netto", 5050, "m"],
+		]);
+		check("screens: the card closes after adding", page.run("bankImport"), null);
+
+		// Not ticked: nothing is added; and changing month closes the card.
+		page.run(job({ rows: [{ date: "2026-09-30", note: "A", amountText: "10", categoryId: "", tick: false, why: "", touched: false }] }));
+		page.run("addBankRows();");
+		check("screens: with nothing ticked nothing is added", page.run("data.months['2026-09'].spending.length"), 2);
+		const click = (action) => page.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+		click("next-month");
+		check("screens: another month closes the card", page.run("bankImport"), null);
+
+		page.run("data = cleanData(" + keep + "); viewMonth = '2026-09'; activeTab = 'overview'; accountName = 'mama'; render();");
 	});
 	attempt("screens: Overblik counts what the kid wrote", () => {
 		page.run("activeTab = 'overview'; render();");

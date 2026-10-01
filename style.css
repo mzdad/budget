@@ -861,3 +861,99 @@ td.good,
 		break-after: avoid;
 	}
 }
+
+/* ---- Reading a picture of the bank (Overblik -> Læs fra skærmbillede) ---- */
+
+progress {
+	width: 100%;
+	height: 14px;
+	margin-top: 8px;
+	accent-color: var(--accent);
+}
+
+.scan-picture {
+	display: block;
+	width: 100%;
+	height: auto;
+	margin-top: 8px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+}
+
+/* One line of the bank's list: tick, text, amount - and under it the day and the category. */
+.scan-row {
+	display: grid;
+	grid-template-columns: 28px 1fr 7.5em;
+	gap: 4px 8px;
+	align-items: center;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--line);
+}
+
+.scan-row.off {
+	opacity: 0.6;
+}
+
+.scan-row input {
+	margin-top: 0;
+}
+
+.scan-row input[type="checkbox"] {
+	width: 24px;
+	height: 24px;
+	min-height: 0;
+}
+
+.scan-row input[data-scan="amount"] {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.scan-under {
+	grid-column: 2 / 4;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.scan-why {
+	grid-column: 2 / 4;
+	color: var(--warn);
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.scan-date {
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.scan-under select {
+	flex: 1;
+	min-width: 0;
+	margin-top: 0;
+}
+
+/* What could not be read: boxed, so it is not missed. */
+.scan-unclear {
+	margin-top: 14px;
+	padding: 10px 12px;
+	border: 1px solid var(--warn);
+	border-radius: 10px;
+}
+
+.scan-unclear h3 {
+	margin: 0 0 4px;
+}
+
+.scan-lines {
+	margin: 6px 0 0;
+	padding-left: 18px;
+	font-size: 0.9rem;
+	overflow-wrap: anywhere;
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}

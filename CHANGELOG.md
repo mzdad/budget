@@ -3,6 +3,33 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.12.0 - 2026-10-01
+
+- **Add purchases from a screenshot of the bank.** On Overblik, under "Tilføj udgift", there is a new
+  button **"Læs fra skærmbillede"**. Choose a screenshot of the bank's list of purchases and the page
+  reads it and shows what it found, for you to check before anything is saved:
+  - Each line has a tick, a text, an amount, the day and a category. Change the text or the amount, pick
+    another category, or untick a line. "Se billedet" shows the picture again for comparing.
+  - A shop you wrote before gets its usual category, also when the bank's text is longer ("REMA 1000
+    AARHUS C" finds "Rema 1000"). Pick a category on one line and the same shop on the other lines
+    follows.
+  - **Lines it could not read are listed** in a box ("Kunne ikke læses"), never guessed, so you can write
+    them in yourself.
+  - A purchase already written in (same day and amount) is not ticked ("findes allerede"). A line that
+    looks like money coming in is not ticked either ("ligner penge ind").
+  - Only lines from the month on screen are added; lines from other months are counted and left out
+    (choose the picture again in that month).
+  - It reads dark-mode screenshots too. Dates like "Tirsdag 30. september", "30. sep.", "30-09-2026",
+    "30/09", "I dag" and "I går" are understood; amounts like "-45,00 kr.", "−1.234,50 kr." and "+25.000,00".
+- **How it works, and what leaves the phone.** The picture is read **on the phone** with a free reader
+  (Tesseract.js). The picture is never sent anywhere. The reader itself (about 6 MB) is downloaded from
+  jsdelivr the first time you use the button, so that first time needs internet. Sending the picture to
+  a Claude model would read better, but it costs money for every picture, so it was not chosen.
+- **Tested** on pictures drawn by the test itself (light, dark and small blurry ones) and with the
+  page's own checks. Real bank screenshots look different from bank to bank: if one reads badly, tell
+  me what the bank's list looks like.
+- New file `scan.js`.
+
 ## 1.11.1 - 2026-10-01
 
 - **Bug fix: a category you make now goes into the other months too.** Before, each month kept its

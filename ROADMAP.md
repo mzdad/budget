@@ -2,28 +2,34 @@
 
 Not built yet. The things that are built are in [CHANGELOG.md](CHANGELOG.md). Newest idea first.
 
-## Add purchases from a screenshot of the bank (asked for 2026-10-01)
+## Add purchases from a screenshot of the bank - BUILT in 1.12.0, still to improve
 
-Send a screenshot of the bank's list of purchases, and the page adds them on Overblik instead of
-you typing them one at a time. Mostly useful for catching up on earlier months; for the current
-month it is fine to write them in as the days come.
+Built: "Læs fra skærmbillede" on Overblik (see CHANGELOG 1.12.0). It reads the picture on the phone
+(free, nothing leaves the phone). Sending the picture to a Claude model would read better but costs
+money for every picture and needs a small server, so it was left out (decided 2026-10-01).
 
-What it should do:
-- Read each line (date, text, amount) and show them in a list **before** anything is saved, so you
-  can untick one or fix it.
-- Guess the category from the text with the same help as the Note box (a text you used before gets
-  its usual category).
-- **Say clearly what it could not read** ("3 lines were unclear: ...") and leave those out, so you
-  can add them yourself. Never save a guess silently.
-- Skip purchases already written in (same day, same amount, same text), so a second screenshot
-  that overlaps the first does not add things twice.
+Still to do, once it has been tried on real screenshots from the bank:
+- Teach it the way YOUR bank lays out its list (a name and an amount on separate lines, a little
+  picture in front of each shop, a total per day, and so on). Needs a real example.
+- Several pictures at once, and pictures stitched from a long scroll.
+- If the reading is too weak: a stronger reader, or an optional "send to Claude" button for someone
+  who is willing to pay for it.
 
-Things to decide when we get to it (they change how it is built):
-- **How the text is read from the picture.** Reading it inside the page (free, nothing leaves the
-  phone, but it makes more mistakes) or sending it to a Claude model (reads much better, but the
-  picture of the bank leaves the phone and needs a small server to keep the key secret, and it costs
-  a little per picture). Bank screens show account numbers, so privacy matters here.
-- Which banks / which look of screenshot to start with (every bank lists things differently).
+## Choose the currency: euro, dollar, pound and more (asked for 2026-10-01)
+
+A choice (in Indstillinger) of which currency the page uses, instead of only kroner: euro, US dollar,
+British pound and more. Today every amount is shown as kroner by one function (`formatKr` in
+`budget.js`), and the amounts are stored as whole "øre" (hundredths), which works the same for any
+currency that has hundredths, so the stored numbers would not need to change. Things to decide when we
+get to it:
+- **No conversion, only the label.** Changing the currency would NOT recalculate your numbers (1.000 kr.
+  would just become 1.000 €); real exchange rates would be a different, bigger feature. The choice is
+  for someone who budgets in another currency from the start.
+- Whether the choice is kept per account (follows you to every device) or per device.
+- How the numbers look: Danish style (1.250,00 kr.) or the style of the currency's country.
+- The things that mention "kr" in words or files: the spreadsheet export, the kid's page, and the bank
+  screenshot reader (it must then understand €, $ and £ on the bank's list).
+- It goes well together with the language switch below, so the two could be done as one piece of work.
 
 ## Danish / English language switch (asked for 2026-10-01)
 

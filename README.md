@@ -37,6 +37,17 @@ A small monthly budget page for phone and PC. Danish, kroner.
   lowers Opsparing on Fremtid. You can delete a post or take the link away at any time (what the kid
   wrote stays in your numbers). It needs an account, and the link is the key: there is no password,
   so send it only to the kid. (Code: `kid.js`; the numbers: "The kids' own page" in `budget.js`.)
+- **Add purchases from a picture of the bank.** On Overblik, "Læs fra skærmbillede": choose a
+  screenshot of the bank's list of purchases and the page reads it, on the phone, and lists the
+  purchases for you to check before anything is saved (untick one, fix a text or an amount, pick a
+  category). A shop you have used before gets its usual category. Lines it could not read are listed
+  separately, so you can write them in yourself; purchases already written in are not added twice;
+  lines from other months are left out. The picture is never sent anywhere; the reader (Tesseract.js,
+  about 6 MB) is downloaded from jsdelivr the first time it is used. (Code: `scan.js` reads the
+  picture; "Reading the bank's list from a picture" in `budget.js` makes purchases of the text.)
+- **Categories are the same in every month.** A category you make is added to every saved month (with
+  no limit there; each month has its own limits). Renaming or deleting one only changes the month you
+  are in.
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
   - **No account:** saved on the device only (the browser's localStorage). Nothing is sent
@@ -57,6 +68,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
 | `app.js` | The screens, taps, saving, and the sign-in flow |
 | `account.js` | Talks to Firebase (sign in, save and watch the months, and the kids' pages). No screen code |
 | `kid.js` | The kid's own page (opened with a kid's link): what the kid has, and a box to write what they used |
+| `scan.js` | Reads the text in a picture (a screenshot of the bank's list) on the phone, with Tesseract.js. No screen code |
 | `ROADMAP.md` | Ideas for later, not built yet |
 | `password.js` | Decides whether a new password is strong enough |
 | `firebase-config.js` | Which Firebase project to use (`null` until set up) |

@@ -1080,6 +1080,218 @@ function categoryIdForNote(history, note, month) {
 }
 
 
+// --- Reading the bank's list from a picture ----------------------------------
+//
+// scan.js turns a screenshot of the bank's list of purchases into plain text, one line of text per
+// line on the screen. These functions turn that text into purchases. They are careful: a line they
+// are not sure about is never guessed at, it is handed back in `unclear` so you can write it in
+// yourself. (The reading of the picture makes mistakes; that is why the page shows everything for
+// checking before anything is saved.)
+
+const BANK_MONTH_NAMES = "januar|jan|februar|feb|marts|mar|april|apr|maj|juni|jun|juli|jul|august|aug|september|sept|sep|oktober|okt|november|nov|december|dec";
+const BANK_MONTH_SHORT = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+const BANK_WEEKDAYS = "mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|man|tir|ons|tor|fre|lør|søn";
+const BANK_SKIP_NOTE = /^(saldo|disponibel|rådighedsbeløb|i alt|total|sum)(\s|$)/i;
+const MOST_BANK_ROWS = 300;
+
+// A date at the start of a line: "30. sep.", "30. september 2026", "30/09", "30-09-2026", "Tirsdag
+// 30. sep.", "I dag", "I går". Returns { day, month, year (null when the line has none), rest } with
+// `rest` being what follows, or null when the line does not start with a date.
+function bankDateAtStart(line, today) {
+	const noWeekday = line.replace(new RegExp("^(?:" + BANK_WEEKDAYS + ")\\.?,?\\s+", "i"), "");
+
+	const relative = /^i\s?(dag|går|forgårs)(?![a-zæøå])[\s,:]*/i.exec(noWeekday);
+	if (relative) {
+		const back = { dag: 0, går: 1, forgårs: 2 }[relative[1].toLowerCase()];
+		const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
+		return { day: day.getDate(), month: day.getMonth() + 1, year: day.getFullYear(), rest: noWeekday.slice(relative[0].length) };
+	}
+
+	const named = new RegExp("^(\\d{1,2})\\.?\\s*(" + BANK_MONTH_NAMES + ")\\.?(?![a-zæøå])(?:\\s+(\\d{4})(?![\\d,.]))?[\\s,;:|]*", "i").exec(noWeekday);
+	if (named) {
+		const month = BANK_MONTH_SHORT.indexOf(named[2].toLowerCase().slice(0, 3)) + 1;
+		return { day: Number(named[1]), month: month, year: named[3] ? Number(named[3]) : null, rest: noWeekday.slice(named[0].length) };
+	}
+
+	const numbers = /^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}|\d{2}))?(?![\d,])[\s,;:|]*/.exec(noWeekday);
+	if (numbers && Number(numbers[2]) >= 1 && Number(numbers[2]) <= 12) {
+		let year = null;
+		if (numbers[3]) {
+			year = numbers[3].length === 2 ? 2000 + Number(numbers[3]) : Number(numbers[3]);
+		}
+		return { day: Number(numbers[1]), month: Number(numbers[2]), year: year, rest: noWeekday.slice(numbers[0].length) };
+	}
+	return null;
+}
+
+// "2026-09-30" for a date from bankDateAtStart (a date without a year gets `defaultYear`), or null
+// when there is no such day (31 February).
+function bankDateKey(found, defaultYear) {
+	const year = found.year === null ? defaultYear : found.year;
+	if (found.day < 1 || found.month < 1 || found.month > 12 || found.day > new Date(year, found.month, 0).getDate()) {
+		return null;
+	}
+	return year + "-" + String(found.month).padStart(2, "0") + "-" + String(found.day).padStart(2, "0");
+}
+
+// An amount at the END of a line: "-45,00", "−45,00 kr.", "1.250,00", "45.00 DKK", "-45". Returns
+// { ore, sign (-1 for a minus, 1 for a plus, 0 for none), index (where it starts in the text) }, or
+// null. A bare number ("Rema 1000") is not an amount: it needs decimals, "kr", or a sign.
+function bankAmountAtEnd(text) {
+	const match = /([-−–—+])?\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)\s*(kr\.?|dkk|,-)?[\s›>»]*$/i.exec(text);
+	if (!match) {
+		return null;
+	}
+	const sign = match[1] || "";
+	const number = match[2];
+	const withDecimals = /,\d{1,2}$/.test(number) || /^\d+\.\d{1,2}$/.test(number);
+	if (!withDecimals && !match[3] && sign === "") {
+		return null;
+	}
+
+	let kroner = number;
+	if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(number)) {
+		kroner = number.replace(/\./g, "").replace(",", ".");   // "1.250,00": the dots are thousands
+	} else {
+		kroner = number.replace(",", ".");                      // "45,00" or "45.00"
+	}
+	const ore = Math.round(parseFloat(kroner) * 100);
+	let signValue = 0;
+	if (sign === "+") {
+		signValue = 1;
+	} else if (sign !== "") {
+		signValue = -1;
+	}
+	return { ore: ore, sign: signValue, index: match.index };
+}
+
+// The text before the amount, tidied: no time of day, no stray lines and dots from the picture.
+function bankNote(text) {
+	return text
+		.replace(/^\d{1,2}[:.]\d{2}\s+/, "")
+		.replace(/[|_~•·]/g, " ")
+		.replace(/\s+/g, " ")
+		.replace(/^[^a-zA-ZæøåÆØÅ0-9]+/, "")   // what a shop's little picture in the list looks like to the reader
+		.replace(/[\s\-–—:,;]+$/g, "")
+		.slice(0, MAX_NOTE_LENGTH)
+		.trim();
+}
+
+// Something that looks like an amount was tried but did not read cleanly ("45,0O", "kr").
+const BANK_LOOKS_LIKE_AMOUNT = /\d[.,]\d|\d\s*(kr|dkk)(?![a-zæøå])|[-−–—+]\s*\d/i;
+
+// Text from a picture -> { lines, unclear }.
+//   lines:   [{ date: "2026-09-30", note, ore, sign, raw }] in the order of the picture. `ore` is
+//            the amount without its sign; `sign` is -1 (minus), 1 (plus) or 0 (no sign).
+//   unclear: the lines that had something of a date or an amount but could not be understood.
+// A date on a line of its own ("Tirsdag 30. september", "I dag") counts for the lines under it. A
+// date without a year gets the year of `monthKey`.
+function parseBankText(text, monthKey, today) {
+	const defaultYear = Number(monthKey.slice(0, 4));
+	const lines = [];
+	const unclear = [];
+	let currentDate = null;
+
+	for (const rawLine of String(text).split(/\r?\n/)) {
+		const line = rawLine.replace(/\s+/g, " ").trim();
+		if (line === "") {
+			continue;
+		}
+		const found = bankDateAtStart(line, today);
+		const rest = found ? found.rest : line;
+		const dateKey = found ? bankDateKey(found, defaultYear) : null;
+
+		const amount = bankAmountAtEnd(rest);
+		if (amount === null) {
+			if (BANK_LOOKS_LIKE_AMOUNT.test(rest)) {
+				unclear.push(line);
+			} else if (found) {
+				currentDate = dateKey;   // a heading with only a date; an impossible one (31 Feb) leaves no date at all
+				if (dateKey === null) {
+					unclear.push(line);
+				}
+			}
+			continue;
+		}
+
+		const note = bankNote(rest.slice(0, amount.index));
+		if (BANK_SKIP_NOTE.test(note)) {
+			continue;   // a balance or a total, not a purchase
+		}
+		if (found) {
+			currentDate = dateKey;
+		}
+		const date = found ? dateKey : currentDate;
+		if (date === null || amount.ore === 0 || amount.ore > MAX_AMOUNT) {
+			unclear.push(line);
+			continue;
+		}
+		lines.push({ date: date, note: note, ore: amount.ore, sign: amount.sign, raw: line });
+	}
+	return { lines: lines, unclear: unclear };
+}
+
+// The category of the month `month` for a bank text: the one the same note had before; else the
+// one of the longest earlier note the text starts with ("REMA 1000 AARHUS C" starts with "Rema 1000").
+function bankCategoryId(history, note, month) {
+	const exact = categoryIdForNote(history, note, month);
+	if (exact !== "") {
+		return exact;
+	}
+	const lower = note.toLowerCase();
+	let best = null;
+	for (const entry of history) {
+		const earlier = entry.note.toLowerCase();
+		const startsWith = lower.startsWith(earlier) && (lower.length === earlier.length || lower[earlier.length] === " ");
+		if (earlier.length >= 3 && startsWith && (best === null || earlier.length > best.length)) {
+			best = entry.note;
+		}
+	}
+	return best === null ? "" : categoryIdForNote(history, best, month);
+}
+
+// Everything the page shows for checking after a picture was read. `month` is the month's data
+// (its purchases and categories) and `history` is noteHistory(). Returns
+//   rows:      the purchases for `monthKey`: { date, note, amount, categoryId, tick, why } in the
+//              order of the picture. `tick` is whether it is chosen from the start; `why` says
+//              what a not-chosen one is: "already" (the same purchase is already written in) or
+//              "money-in" (it looks like money coming in, not a purchase).
+//   elsewhere: lines dated in another month: left out (they belong to that month).
+//   unclear:   lines that could not be understood.
+// Which sign means a purchase: if the picture has any minus at all, only minus lines are purchases
+// (the rest is money in); with no minus anywhere, everything is a purchase except a plus line.
+function planBankImport(text, monthKey, today, month, history) {
+	const parsed = parseBankText(text, monthKey, today);
+	const hasMinus = parsed.lines.some((line) => line.sign === -1);
+	const written = month.spending.map((item) => ({ date: item.date, amount: item.amount, note: item.note.trim().toLowerCase(), used: false }));
+	const rows = [];
+	const elsewhere = [];
+
+	for (const line of parsed.lines.slice(0, MOST_BANK_ROWS)) {
+		if (line.date.slice(0, 7) !== monthKey) {
+			elsewhere.push({ date: line.date, note: line.note, amount: line.ore });
+			continue;
+		}
+		const lower = line.note.toLowerCase();
+		const earlier = history.find((entry) => entry.note.toLowerCase() === lower);
+		const note = earlier ? earlier.note : line.note;   // spelled the way you wrote it before
+
+		const moneyIn = hasMinus ? line.sign !== -1 : line.sign === 1;
+		let why = moneyIn ? "money-in" : "";
+		if (!moneyIn) {
+			const same = written.find((item) => !item.used && item.date === line.date && item.amount === line.ore
+				&& (item.note === "" || lower === "" || item.note === lower || item.note.startsWith(lower) || lower.startsWith(item.note)));
+			if (same) {
+				same.used = true;
+				why = "already";
+			}
+		}
+		rows.push({ date: line.date, note: note, amount: line.ore, categoryId: bankCategoryId(history, line.note, month), tick: why === "", why: why });
+	}
+	return { rows: rows, elsewhere: elsewhere, unclear: parsed.unclear };
+}
+
+
 // --- Cleaning saved data ----------------------------------------------------
 //
 // Saved data and backup files are read back with these, so that a damaged or
@@ -1252,7 +1464,7 @@ if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, sumOf,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
-		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
+		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
 		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,
