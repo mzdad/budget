@@ -3,6 +3,13 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.8.2 - 2026-10-01
+
+- **"Tilføj udgift" keeps the date you used.** After adding a purchase, the date box now stays on
+  that day instead of jumping back to today (or the 1st), so you can write in several purchases
+  from the same day without changing the date each time. It starts over on a new day, and when you
+  go to another month.
+
 ## 1.8.1 - 2026-10-01
 
 - **A folded "Hvor ofte?" box stays folded.** The small box under an income or fixed-bill row opens

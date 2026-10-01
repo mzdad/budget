@@ -79,6 +79,7 @@ let viewMonth = monthKeyOf(new Date());       // the month on screen
 let activeTab = "overview";                   // "overview", "expenses", "future", "plan" or "report"
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
 let lastCategoryId = "";                      // so the next purchase starts on the same category
+let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
 
@@ -448,11 +449,17 @@ function noteOptionsHtml() {
 
 // The form for writing in a purchase. The date box only allows days in the month
 // on screen, so a purchase can never end up in the wrong month.
+//
+// It starts on the day of your last purchase, so you can write in several purchases from the same
+// day without changing the date each time. That only holds for the same month, and only the same
+// day you wrote it (a page left open overnight starts on the new day). Otherwise: today, or the
+// 1st when the month on screen is not this month.
 function addFormHtml(month) {
 	const today = dateKeyOf(new Date());
 	const firstDay = viewMonth + "-01";
 	const lastDay = viewMonth + "-" + String(lastDayOfMonth(viewMonth)).padStart(2, "0");
-	const dateValue = today.slice(0, 7) === viewMonth ? today : firstDay;
+	const keepLast = lastDate.chosenOn === today && lastDate.date.slice(0, 7) === viewMonth;
+	const dateValue = keepLast ? lastDate.date : (today.slice(0, 7) === viewMonth ? today : firstDay);
 
 	return `
 		<form id="add-form" class="card" autocomplete="off">
@@ -1375,6 +1382,7 @@ function addSpending(form) {
 		month.spending.push({ id: newId(), date: date, categoryId: categoryId, amount: amount, note: note });
 	});
 	lastCategoryId = categoryId;
+	lastDate = { date: date, chosenOn: dateKeyOf(new Date()) };
 
 	// Draw again so every number updates, then tell the user it worked.
 	const where = categoryName(getMonth(viewMonth), categoryId);
