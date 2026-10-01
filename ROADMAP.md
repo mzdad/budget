@@ -16,8 +16,10 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
     login offers to move them into the account (that already existed).
   - Colours, language and currency can still be chosen, since they are only about how it looks.
   - Only when accounts are switched on; without Firebase the page works as before.
-  - Tested with 26 new checks, and by breaking each rule on purpose to see the checks fail. Not run end to end against the
-    local Firebase test copy this time (its tool is not installed here); the sign-in path itself was not changed.
+  - Tested with 26 new checks, by breaking each rule on purpose to see the checks fail, and end to end against the
+    local Firebase test copy (the real project was not touched): create an account, the old device numbers moved in, stay
+    logged in after a reload (no note flashing), log out (empty page, note back), log in again (numbers back), wrong
+    password refused. The 114 privacy-rule checks still pass.
 
 ## Done in 1.16.0
 
