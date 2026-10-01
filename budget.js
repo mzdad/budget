@@ -45,6 +45,66 @@ const MOST_SPENDING_PER_MONTH = 2000;
 const MOST_POT_ENTRIES_PER_MONTH = 500;
 
 
+// --- The currency ------------------------------------------------------------
+//
+// Amounts are stored as whole hundredths (øre, cents, pence) whatever the currency is. The currency only
+// decides how they are SHOWN ("12.500 kr.", "€12,500") and what the amount boxes ask for. Nothing is
+// recalculated when it is changed: 1.000 kr. just becomes 1.000 €.
+
+const CURRENCIES = ["DKK", "EUR", "USD", "GBP", "SEK", "NOK", "CHF", "PLN", "CAD", "AUD", "NZD", "CZK"];
+const DEFAULT_CURRENCY = "DKK";
+let currentCurrency = DEFAULT_CURRENCY;
+
+function setCurrency(code) {
+	currentCurrency = CURRENCIES.includes(code) ? code : DEFAULT_CURRENCY;
+}
+
+function getCurrency() {
+	return currentCurrency;
+}
+
+// The currency's name in the page's language: "euro", "Euro", "danske kroner" (or the code, where the
+// browser cannot say).
+function currencyName(code) {
+	try {
+		return new Intl.DisplayNames(uiLocale(), { type: "currency" }).of(code);
+	} catch (error) {
+		return code;
+	}
+}
+
+// The currency of a country, for a device that has never been used: the country in the browser's
+// language ("en-GB" is the United Kingdom). Kroner when it says nothing we know.
+const COUNTRY_CURRENCY = {
+	DK: "DKK", US: "USD", GB: "GBP", SE: "SEK", NO: "NOK", CH: "CHF", PL: "PLN", CA: "CAD", AU: "AUD", NZ: "NZD", CZ: "CZK",
+	AT: "EUR", BE: "EUR", CY: "EUR", DE: "EUR", EE: "EUR", ES: "EUR", FI: "EUR", FR: "EUR", GR: "EUR", HR: "EUR", IE: "EUR",
+	IT: "EUR", LT: "EUR", LU: "EUR", LV: "EUR", MT: "EUR", NL: "EUR", PT: "EUR", SI: "EUR", SK: "EUR",
+};
+
+function currencyOfPhone(languages) {
+	for (const code of (languages || []).filter(Boolean)) {
+		const country = String(code).split("-")[1];
+		if (country && COUNTRY_CURRENCY[country.toUpperCase()]) {
+			return COUNTRY_CURRENCY[country.toUpperCase()];
+		}
+	}
+	return DEFAULT_CURRENCY;
+}
+
+// The label of an amount box, and the kid's question: in kroner as they have always been, in another
+// currency with its code ("Beløb i EUR").
+function amountLabel() {
+	return currentCurrency === "DKK" ? t("Beløb i kroner") : t("Beløb i {currency}", { currency: currentCurrency });
+}
+
+function howManyLabel() {
+	return currentCurrency === "DKK" ? t("Hvor mange kroner?") : t("Hvor mange {currency}?", { currency: currentCurrency });
+}
+
+// The currency signs and codes that may stand in a typed amount ("€12,50", "12.50 EUR", "kr. 50").
+const CURRENCY_MARKS = new RegExp("^(?:" + CURRENCIES.join("|") + "|kr\\.?)|(?:" + CURRENCIES.join("|") + "|kr\\.?)$", "i");
+
+
 // --- Amounts ----------------------------------------------------------------
 
 // Turns what the user typed ("49,95", "49.95", "1.250", "1,250.50", "12500 kr") into øre.
@@ -57,7 +117,7 @@ const MOST_POT_ENTRIES_PER_MONTH = 500;
 // comma does the same only when the page is in English ("1,250"): in Danish a comma is only ever the
 // decimal mark, so "12,345" is unreadable.
 function parseAmount(text) {
-	let value = String(text).trim().replace(/\s/g, "").replace(/kr\.?$/i, "");
+	let value = String(text).trim().replace(/\s/g, "").replace(/[€$£]/g, "").replace(CURRENCY_MARKS, "");
 	if (value === "") {
 		return 0;
 	}
@@ -112,13 +172,13 @@ function parseSignedAmount(text) {
 }
 
 // Two number formats: no decimals for whole kroner, two decimals otherwise. One of each is made per
-// language the first time it is needed (Danish: 12.500 kr., English: DKK 12,500).
+// language and currency the first time it is needed (Danish: 12.500 kr., English: DKK 12,500, euro: €12,500).
 const moneyFormats = {};
 
 function moneyFormat(whole) {
-	const key = uiLocale() + (whole ? "|whole" : "|full");
+	const key = uiLocale() + "|" + currentCurrency + (whole ? "|whole" : "|full");
 	if (!moneyFormats[key]) {
-		const options = whole ? { style: "currency", currency: "DKK", maximumFractionDigits: 0 } : { style: "currency", currency: "DKK" };
+		const options = whole ? { style: "currency", currency: currentCurrency, maximumFractionDigits: 0 } : { style: "currency", currency: currentCurrency };
 		moneyFormats[key] = new Intl.NumberFormat(uiLocale(), options);
 	}
 	return moneyFormats[key];
@@ -1197,26 +1257,37 @@ function bankDateKey(found, defaultYear) {
 	return year + "-" + String(found.month).padStart(2, "0") + "-" + String(found.day).padStart(2, "0");
 }
 
+// A sign, a currency sign or code, a sign, the number, and a currency ("kr.", "DKK", "EUR", "€" ...) at the end
+// of a line: "-45,00", "−45,00 kr.", "-€45.00", "$45.00", "EUR 12,50", "1.250,00", "1,250.00", "45.00 DKK", "-45".
+// The groups: 1 sign, 2 currency sign or code in front, 3 sign after it, 4 the number, 5 the currency behind it.
+const BANK_AMOUNT = new RegExp(
+	"([-−–—+])?\\s*((?:^|\\s)(?:eur|usd|gbp|sek|nok|chf|pln|cad|aud|nzd|czk|dkk)\\s+|[€$£])?\\s*([-−–—+])?\\s*(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?|\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+[.,]\\d{1,2}|\\d+)\\s*(kr\\.?|dkk|eur|usd|gbp|sek|nok|chf|pln|cad|aud|nzd|czk|€|\\$|£|,-)?[\\s›>»~]*$",
+	"i",
+);
+
 // An amount at the END of a line: "-45,00", "−45,00 kr.", "1.250,00", "45.00 DKK", "-45". Returns
 // { ore, sign (-1 for a minus, 1 for a plus, 0 for none), index (where it starts in the text), bare,
 // unsure } or null. `bare` is true when only a sign vouches for it: no decimals and no "kr".
 // `unsure` is true when the text ends in a "~" (see BANK_UNSURE_AMOUNT). A bare number without a sign
 // ("Rema 1000") is not an amount: it needs decimals, "kr", or a sign.
 function bankAmountAtEnd(text) {
-	const match = /([-−–—+])?\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+)\s*(kr\.?|dkk|,-)?[\s›>»~]*$/i.exec(text);
+	const match = BANK_AMOUNT.exec(text);
 	if (!match) {
 		return null;
 	}
-	const sign = match[1] || "";
-	const number = match[2];
-	const withDecimals = /,\d{1,2}$/.test(number) || /^\d+\.\d{1,2}$/.test(number);
-	if (!withDecimals && !match[3] && sign === "") {
+	const sign = match[1] || match[3] || "";
+	const number = match[4];
+	const hasCurrency = Boolean(match[2] || match[5]);
+	const withDecimals = /[,.]\d{1,2}$/.test(number);
+	if (!withDecimals && !hasCurrency && sign === "") {
 		return null;
 	}
 
 	let kroner = number;
 	if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(number)) {
 		kroner = number.replace(/\./g, "").replace(",", ".");   // "1.250,00": the dots are thousands
+	} else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(number)) {
+		kroner = number.replace(/,/g, "");                      // "1,250.00": the commas are thousands (English)
 	} else {
 		kroner = number.replace(",", ".");                      // "45,00" or "45.00"
 	}
@@ -1227,7 +1298,7 @@ function bankAmountAtEnd(text) {
 	} else if (sign !== "") {
 		signValue = -1;
 	}
-	return { ore: ore, sign: signValue, index: match.index, bare: !withDecimals && !match[3], unsure: text.trimEnd().endsWith(BANK_UNSURE_AMOUNT) };
+	return { ore: ore, sign: signValue, index: match.index, bare: !withDecimals && !hasCurrency, unsure: text.trimEnd().endsWith(BANK_UNSURE_AMOUNT) };
 }
 
 // The text before the amount, tidied: no time of day, no stray lines and dots from the picture.
@@ -1253,7 +1324,7 @@ const BANK_DECIMALS_SHARE = 0.7;
 const BANK_NO_AMOUNT = " [?]";
 
 // Something that looks like an amount was tried but did not read cleanly ("45,0O", "kr").
-const BANK_LOOKS_LIKE_AMOUNT = /\d[.,]\d|\d\s*(kr|dkk)(?![a-zæøå])|[-−–—+]\s*\d/i;
+const BANK_LOOKS_LIKE_AMOUNT = /\d[.,]\d|\d\s*(kr|dkk|eur|usd|gbp)(?![a-zæøå])|[-−–—+]\s*[\d€$£]|[€$£]\s*\d/i;
 
 // Text from a picture -> { lines, unclear }.
 //   lines:   [{ date: "2026-09-30", note, ore, sign, raw }] in the order of the picture. `ore` is
@@ -1792,6 +1863,7 @@ function sameData(a, b) {
 if (typeof module !== "undefined") {
 	module.exports = {
 		parseAmount, parseSignedAmount, formatKr, amountToInput, decimalMark, csvDelimiter, sumOf,
+		CURRENCIES, DEFAULT_CURRENCY, setCurrency, getCurrency, currencyName, currencyOfPhone, amountLabel, howManyLabel,
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,

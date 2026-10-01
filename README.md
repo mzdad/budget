@@ -47,6 +47,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
   number the reader may have got wrong says "tjek beløbet". The picture is never sent anywhere; the reader (Tesseract.js,
   about 6 MB) is downloaded from jsdelivr the first time it is used. (Code: `scan.js` reads the
   picture; "Reading the bank's list from a picture" in `budget.js` makes purchases of the text.)
+- **Currency.** Indstillinger -> "Valuta · Currency": kroner, euro, US dollar, pound and more. Only the way amounts are
+  shown (and what the amount boxes ask for) changes: nothing is converted. Kept per device; a kid's link carries it
+  (`&cur=EUR`). The bank-picture reader knows €, $ and £.
 - **Danish / English.** Indstillinger -> "Sprog · Language". Every text is written in the code as `t("Dansk tekst")`;
   the Danish text is the key and the English one is in `texts.js`. Numbers, dates and the spreadsheet follow the
   language. Kept per device (a device that has used the page before stays Danish until you choose). A kid's link

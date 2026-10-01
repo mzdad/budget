@@ -203,6 +203,7 @@ function rememberDatesOpen(rowId, isOpen) {
 // buttons) carry data-i18n="the Danish text" and are put in here.
 
 const LANGUAGE_KEY = "budget.language";
+const CURRENCY_KEY = "budget.currency";
 
 // The saved choice. With none: a device that has used this page before stays Danish (a Danish person's
 // computer with an English browser must not turn the page English on its own). A brand new device
@@ -240,6 +241,42 @@ function saveLanguage(id) {
 	} catch (error) {
 		// Only a convenience; the page works without it.
 	}
+}
+
+// The currency, kept per device like the language: the saved choice; a device that has used the page before
+// stays on kroner; a brand new device takes the currency of the country in its browser's language.
+function loadCurrency() {
+	try {
+		const saved = localStorage.getItem(CURRENCY_KEY);
+		if (CURRENCIES.includes(saved)) {
+			return saved;
+		}
+		if ([STORAGE_KEY, SIGNED_IN_HINT_KEY, CATEGORIES_OPEN_KEY, THEME_KEY].some((key) => localStorage.getItem(key) !== null)) {
+			return DEFAULT_CURRENCY;
+		}
+	} catch (error) {
+		// Nothing readable: the country's own.
+	}
+	return currencyOfPhone(navigator.languages && navigator.languages.length > 0 ? navigator.languages : [navigator.language]);
+}
+
+function saveCurrency(code) {
+	try {
+		localStorage.setItem(CURRENCY_KEY, code);
+	} catch (error) {
+		// Only a convenience; the page works without it.
+	}
+}
+
+// The currency to start in: one named by a link (?cur=EUR; a kid's link names it) and then kept on this
+// device, else loadCurrency().
+function currencyForStart() {
+	const fromLink = new URLSearchParams(location.search).get("cur");
+	if (CURRENCIES.includes(fromLink)) {
+		saveCurrency(fromLink);
+		return fromLink;
+	}
+	return loadCurrency();
 }
 
 // The texts in index.html: elements marked data-i18n (the text), data-i18n-aria (aria-label) and
@@ -594,7 +631,7 @@ function addFormHtml(month) {
 	return `
 		<form id="add-form" class="card" autocomplete="off">
 			<h2>${t("Tilføj udgift")}</h2>
-			<label>${t("Beløb i kroner")}
+			<label>${amountLabel()}
 				<input name="amount" inputmode="decimal" placeholder="${t("fx 49,95")}" required>
 			</label>
 			<label>${t("Note (hvis du vil)")}
@@ -967,6 +1004,7 @@ function settingsHtml(month) {
 		+ addPersonHtml()
 		+ appearanceHtml()
 		+ languageHtml()
+		+ currencyHtml()
 		+ exportHtml()
 		+ backupHtml();
 }
@@ -1001,6 +1039,24 @@ function languageHtml() {
 			<p class="hint">${t("Vælg sproget. Valget gælder kun denne telefon eller computer.")}</p>
 			<select id="language-choice" aria-label="${t("Sprog")}">${options}</select>
 		</section>`;
+}
+
+// The "Valuta" box on Indstillinger: the currency the amounts are shown in (nothing is converted).
+function currencyHtml() {
+	const options = CURRENCIES.map((code) => `<option value="${code}"${code === getCurrency() ? " selected" : ""}>${esc(code + " – " + currencyName(code))}</option>`).join("");
+	const heading = getLanguage() === "da" ? "Valuta · Currency" : "Currency · Valuta";
+	return `
+		<section class="card">
+			<h2>${heading}</h2>
+			<p class="hint">${t("Vælg valutaen. Kun måden, beløbene vises på, ændres: tallene regnes ikke om. Valget gælder kun denne telefon eller computer.")}</p>
+			<select id="currency-choice" aria-label="${t("Valuta")}">${options}</select>
+		</section>`;
+}
+
+function changeCurrency(code) {
+	setCurrency(code);
+	saveCurrency(getCurrency());
+	render();
 }
 
 // A new language: put the texts of index.html in, and draw the screen again.
@@ -1103,7 +1159,7 @@ function rowHtml(section, row) {
 	return `
 		<div class="row" data-section="${section.key}" data-id="${esc(row.id)}">
 			<input data-field="name" value="${esc(row.name)}" placeholder="${t("Navn")}" maxlength="${MAX_NAME_LENGTH}" aria-label="${t("Navn")}" autocomplete="off">
-			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="${t("Beløb i kroner")}" autocomplete="off">
+			<input data-field="amount" value="${amountToInput(row[section.amountField])}" placeholder="0" inputmode="decimal" aria-label="${amountLabel()}" autocomplete="off">
 			<button class="icon" data-action="delete-row" aria-label="${t("Slet rækken")}">✕</button>
 			${section.hasDates ? datesHtml(row, section) : ""}
 		</div>`;
@@ -1554,6 +1610,10 @@ document.addEventListener("change", (event) => {
 		changeLanguage(input.value);
 		return;
 	}
+	if (input.id === "currency-choice") {
+		changeCurrency(input.value);
+		return;
+	}
 	if (input.id === "bank-picture") {
 		const file = input.files[0];
 		input.value = "";   // so choosing the same picture again still counts as a change
@@ -1708,7 +1768,7 @@ function kidTokenOf(person) {
 // The link to give the kid. (On this computer's test copy it carries ?emulator, so the kid's page
 // uses the test copy too.)
 function kidLinkUrl(token) {
-	const link = kidLink(location.origin + location.pathname, accountName, token) + "&lang=" + getLanguage();
+	const link = kidLink(location.origin + location.pathname, accountName, token) + "&lang=" + getLanguage() + "&cur=" + getCurrency();
 	return USE_FIREBASE_EMULATOR ? link + "&emulator" : link;
 }
 
@@ -1866,7 +1926,7 @@ function potCardHtml(person) {
 			<div class="big-number ${person.balance < 0 ? "bad" : ""}">${formatKr(person.balance)}</div>
 			<p class="message" role="status">${esc(message)}</p>
 			<div class="pot-form" data-person="${name}">
-				<label>${t("Beløb i kroner")}
+				<label>${amountLabel()}
 					<input name="amount" inputmode="decimal" placeholder="${t("fx 300")}" autocomplete="off">
 				</label>
 				<label>${t("Hvad? (hvis du vil)")}
@@ -2114,7 +2174,7 @@ function bankRowHtml(row, index, month) {
 		<div class="scan-row ${row.tick ? "" : "off"}" data-index="${index}">
 			<input type="checkbox" class="scan-tick" data-scan="tick" ${row.tick ? "checked" : ""} aria-label="${t("Tilføj denne udgift")}">
 			<input data-scan="note" value="${esc(row.note)}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("Tekst")}" aria-label="${t("Tekst")}" autocomplete="off">
-			<input data-scan="amount" value="${esc(row.amountText)}" inputmode="decimal" aria-label="${t("Beløb i kroner")}" autocomplete="off">
+			<input data-scan="amount" value="${esc(row.amountText)}" inputmode="decimal" aria-label="${amountLabel()}" autocomplete="off">
 			${why}
 			<div class="scan-under">
 				<span class="scan-date">${esc(shortDayText(row.date))}</span>
@@ -2835,6 +2895,7 @@ function offerToMoveDeviceData() {
 // --- Start ---------------------------------------------------------------------------
 
 setLanguage(languageForStart());
+setCurrency(currencyForStart());
 applyStaticTexts();
 applyTheme(currentTheme);   // (index.html has already put the colours on; this also sets the phone's top bar)
 

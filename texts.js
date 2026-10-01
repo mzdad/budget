@@ -409,4 +409,8 @@ const ENGLISH = {
 	"Indstillinger": "Settings",
 	"Vælg sproget. Valget gælder kun denne telefon eller computer.": "Choose the language. The choice only applies to this phone or computer.",
 	"Sprog": "Language",
+	"Beløb i {currency}": "Amount in {currency}",
+	"Hvor mange {currency}?": "How many {currency}?",
+	"Vælg valutaen. Kun måden, beløbene vises på, ændres: tallene regnes ikke om. Valget gælder kun denne telefon eller computer.": "Choose the currency. Only the way the amounts are shown changes: the numbers are not converted. The choice only applies to this phone or computer.",
+	"Valuta": "Currency",
 };

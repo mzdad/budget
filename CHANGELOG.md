@@ -3,6 +3,25 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.15.0 - 2026-10-01
+
+- **Choose the currency.** Under Indstillinger there is a new box **"Valuta · Currency"**: kroner (DKK), euro, US dollar, British
+  pound, Swedish and Norwegian kroner, Swiss franc, zloty, Canadian, Australian and New Zealand dollars, and Czech koruna.
+  Every amount on every screen, in the report and on the kids' pages is shown in it (12.500 kr., 12.500 €, US$12,500 ...,
+  in the number style of the language).
+  - **Nothing is converted.** The numbers you have written stay as they are: 1.000 kr. becomes 1.000 €. The choice is for
+    budgeting in another currency from the start, not for exchange rates.
+  - **The amount boxes ask in the currency** ("Beløb i EUR"); in kroner they say what they always said ("Beløb i kroner").
+    A typed amount may carry the currency's sign or code: €12,50, 12.50 EUR, $1,250.50, kr. 50.
+  - **Kept per device** (like the language and the colours; no change to Firebase's rules). A device that has used the page
+    before stays on kroner; a brand new device takes the currency of the country in its browser's language
+    (en-GB: pound, en-US: dollar, de-DE: euro, anything else: kroner).
+  - **Kids' links carry the currency** (`&cur=EUR`), so the kid's page shows money in the same currency.
+  - **The bank reader knows €, $ and £** (in front of or behind the amount, with the minus before or after the sign) and the
+    codes EUR, USD, GBP ..., and English thousands (1,250.00).
+- **To remember:** because the choice is per device, a phone and a computer on the same account can show different
+  currencies. Choose the same on both. (Roadmap 2.4: keep it in the account.)
+
 ## 1.14.0 - 2026-10-01
 
 - **Danish / English.** Under Indstillinger there is a new box **"Sprog · Language"** with Dansk and English.

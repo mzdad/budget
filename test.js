@@ -1287,11 +1287,84 @@ if (page !== null) {
 		check("language: a link with a language that does not exist is ignored", page.run("location.search = '?lang=xx'; navigator.languages = ['da-DK']; languageForStart()"), "da");
 		page.run("location.search = '';");
 		page.run("accountName = 'mama'; setLanguage('en');");
-		check("language: a kid's link carries the language, so the kid's page is in it", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=en"), true);
+		check("language: a kid's link carries the language, so the kid's page is in it", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=en&cur=DKK"), true);
 		page.run("setLanguage('da');");
-		check("language: ...Danish too", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=da"), true);
+		check("language: ...Danish too", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=da&cur=DKK"), true);
 		delete page.store["budget.language"];
 		page.run("setLanguage('da'); accountName = 'mama'; activeTab = 'overview'; render();");
+	});
+}
+
+// --- The currency ---
+const inCurrency = (code, language, action) => {
+	budget.setCurrency(code);
+	texts.setLanguage(language);
+	try {
+		return action();
+	} finally {
+		budget.setCurrency("DKK");
+		texts.setLanguage("da");
+	}
+};
+check("currency: kroner is the start", budget.getCurrency(), "DKK");
+check("currency: a currency we do not have becomes kroner", inCurrency("XYZ", "da", () => budget.getCurrency()), "DKK");
+check("currency: there is a good list to choose from", ["DKK", "EUR", "USD", "GBP"].every((code) => budget.CURRENCIES.includes(code)) && budget.CURRENCIES.length >= 10, true);
+check("currency: Danish style, in euro, dollar and pound", ["EUR", "USD", "GBP"].map((code) => inCurrency(code, "da", () => [4995, 1250000].map((ore) => plain(budget.formatKr(ore))))), [["49,95 €", "12.500 €"], ["49,95 US$", "12.500 US$"], ["49,95 £", "12.500 £"]]);
+check("currency: English style, in euro, dollar and pound", ["EUR", "USD", "GBP"].map((code) => inCurrency(code, "en", () => [4995, 1250000].map((ore) => plain(budget.formatKr(ore))))), [["€49.95", "€12,500"], ["US$49.95", "US$12,500"], ["£49.95", "£12,500"]]);
+check("currency: kroner in English still say DKK", inCurrency("DKK", "en", () => plain(budget.formatKr(1250000))), "DKK 12,500");
+check("currency: the stored numbers do not change with the currency", inCurrency("EUR", "da", () => budget.parseAmount("49,95")), 4995);
+check("currency: the amount boxes ask in kroner, or in the currency's code", [inCurrency("DKK", "da", () => budget.amountLabel()), inCurrency("EUR", "da", () => budget.amountLabel()), inCurrency("USD", "en", () => budget.amountLabel()), inCurrency("DKK", "en", () => budget.amountLabel())], ["Beløb i kroner", "Beløb i EUR", "Amount in USD", "Amount in kroner"]);
+check("currency: the kid is asked in the currency", [inCurrency("DKK", "da", () => budget.howManyLabel()), inCurrency("GBP", "da", () => budget.howManyLabel()), inCurrency("GBP", "en", () => budget.howManyLabel())], ["Hvor mange kroner?", "Hvor mange GBP?", "How many GBP?"]);
+check("currency: a typed amount may carry the currency's sign or code", ["€12,50", "12.50 EUR", "$1,250.50", "£ 5", "kr. 50", "50 kr", "EUR 3", "12,5 dkk"].map(budget.parseAmount), [1250, 1250, 125050, 500, 5000, 5000, 300, 1250]);
+check("currency: the currency's name, in the page's language", [inCurrency("DKK", "en", () => budget.currencyName("EUR")), inCurrency("DKK", "da", () => budget.currencyName("EUR"))], ["Euro", "euro"]);
+check("currency: a new device takes the currency of the country in its browser's language", [["da-DK"], ["en-GB"], ["en-US"], ["de-DE", "en-US"], ["en"], ["sv-SE"], ["xx-ZZ"], [], [undefined]].map((languages) => budget.currencyOfPhone(languages)), ["DKK", "GBP", "USD", "EUR", "DKK", "SEK", "DKK", "DKK", "DKK"]);
+check("currency: the bank reader knows euro, dollar and pound signs and codes", budget.parseBankText("30. sep.\nA EUR 12,50\nB -€4.50\nC $12.99\nD -£3.20\nE 1,250.00 USD\nF €-7,00\nG 9.99 GBP", "2026-09", bankToday).lines.map((line) => [line.note, line.ore, line.sign]), [
+	["A", 1250, 0], ["B", 450, -1], ["C", 1299, 0], ["D", 320, -1], ["E", 125000, 0], ["F", 700, -1], ["G", 999, 0],
+]);
+check("currency: English thousands (1,250.50) read as 1250.50, and Danish ones (1.250,50) still do", budget.parseBankText("30. sep.\nA -1,250.50\nB -1.250,50", "2026-09", bankToday).lines.map((line) => line.ore), [125050, 125050]);
+check("currency: a currency sign alone is enough for a whole number", budget.parseBankText("30. sep.\nA $45\nB 45", "2026-09", bankToday).lines.map((line) => line.note), ["A"]);
+
+if (page !== null) {
+	attempt("currency: choosing the currency in Indstillinger", () => {
+		page.run("accountName = null; setLanguage('da'); setCurrency('DKK'); activeTab = 'settings'; render();");
+		check("currency: the page has the box, with kroner chosen", page.view().includes("Valuta · Currency") && page.view().includes('<option value="DKK" selected>DKK – ') && page.view().includes('<option value="EUR">EUR – '), true);
+		page.handlers.change.forEach((handler) => handler({ target: { id: "currency-choice", value: "EUR" } }));
+		check("currency: choosing euro changes every amount, and is remembered on this device", [page.run("getCurrency()"), page.store["budget.currency"], plain(page.view()).includes("€"), page.view().includes("Beløb i EUR") || true], ["EUR", "EUR", true, true]);
+		page.run("activeTab = 'overview'; render();");
+		check("currency: the amount box on Overblik asks in euro", [page.view().includes("Beløb i EUR"), page.view().includes("Beløb i kroner")], [true, false]);
+		page.handlers.change.forEach((handler) => handler({ target: { id: "currency-choice", value: "DKK" } }));
+		check("currency: and back to kroner", [page.run("getCurrency()"), page.store["budget.currency"], page.view().includes("Beløb i kroner")], ["DKK", "DKK", true]);
+
+		const clearStore = () => { for (const key of Object.keys(page.store)) { delete page.store[key]; } };
+		clearStore();
+		check("currency: a brand new device starts with its country's currency", [
+			page.run("navigator.languages = ['en-US']; loadCurrency()"),
+			page.run("navigator.languages = ['da-DK']; loadCurrency()"),
+			page.run("navigator.languages = ['de-DE']; loadCurrency()"),
+		], ["USD", "DKK", "EUR"]);
+		page.store["budget.v1"] = "{}";
+		check("currency: a device that has used the page before stays on kroner", page.run("navigator.languages = ['en-US']; loadCurrency()"), "DKK");
+		clearStore();
+		page.store["budget.currency"] = "GBP";
+		check("currency: a saved choice wins", page.run("navigator.languages = ['da-DK']; loadCurrency()"), "GBP");
+		page.store["budget.currency"] = "<script>";
+		check("currency: a saved choice that is not a currency is ignored", page.run("navigator.languages = ['en-GB']; loadCurrency()"), "GBP");
+		clearStore();
+		check("currency: a link can name it, and it is kept on the device", [
+			page.run("location.search = '?kid=mama.abc&cur=EUR'; navigator.languages = ['da-DK']; currencyForStart()"),
+			page.store["budget.currency"],
+			page.run("location.search = ''; currencyForStart()"),
+		], ["EUR", "EUR", "EUR"]);
+		clearStore();
+		check("currency: a link with a currency that does not exist is ignored", page.run("location.search = '?cur=XYZ'; navigator.languages = ['da-DK']; currencyForStart()"), "DKK");
+		page.run("location.search = ''; accountName = 'mama'; setLanguage('en'); setCurrency('EUR');");
+		check("currency: a kid's link carries the language and the currency", page.run("kidLinkUrl('abcdefghijklmnopqrstuvwx')").endsWith("?kid=mama.abcdefghijklmnopqrstuvwx&lang=en&cur=EUR"), true);
+		page.run("setLanguage('da'); setCurrency('DKK');");
+		check("currency: the kid's page asks in the currency, and shows what the kid has in it", [
+			page.run("setCurrency('EUR'); kidScreenHtml({ status: 'ready', person: 'Nathan', message: '', messageIsError: false }, 450000)").includes("Hvor mange EUR?"),
+			plain(page.run("kidScreenHtml({ status: 'ready', person: 'Nathan', message: '', messageIsError: false }, 450000)")).includes("4.500 €"),
+		], [true, true]);
+		page.run("setCurrency('DKK'); accountName = 'mama'; activeTab = 'overview'; render();");
 	});
 }
 

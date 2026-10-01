@@ -5,6 +5,19 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.15.0
+
+- **2.3 Choose the currency: euro, dollar, pound and more** (you said: "Later, I want it possible to change currency, for
+  euro dollar pounds and more", and then "do 2.1-2-3"). Indstillinger -> "Valuta · Currency" (12 currencies). The
+  decisions I made for the open questions:
+  - **No conversion, only the label**: 1.000 kr. becomes 1.000 €; nothing is recalculated.
+  - **Per device**, not per account (no change to Firebase's rules): see 2.4 for keeping it in the account.
+  - **Number style follows the language** (49,95 € in Danish, €49.95 in English), and the amount boxes ask "Beløb i EUR".
+  - **The things that said kr:** the amount boxes and the kid's question ("Hvor mange kroner?") now name the currency; the
+    spreadsheet holds plain numbers; the kid's link carries `&cur=`; the bank-picture reader reads €, $, £, the currency
+    codes and English thousands (1,250.00).
+  - A device that has used the page before stays on kroner; a brand new one takes its browser's country's currency.
+
 ## Done in 1.14.0
 
 - **2.2 Danish / English language switch** (you said: "danish/english shifter for language", and later "do 2.1-2-3").
@@ -101,7 +114,8 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 2.3 | **Choose the currency**: euro, US dollar, British pound and more (you asked for it, 1 October 2026). | Today every amount is shown as kroner by one function (`formatKr` in `budget.js`), and the amounts are stored as whole hundredths ("øre"), which works for any currency that has hundredths, so the stored numbers would not change. To decide: **no conversion, only the label** (1.000 kr. would become 1.000 €, nothing recalculated; real exchange rates are a different, bigger feature); whether the choice is kept per account or per device; Danish number style (1.250,00 kr.) or the currency's own country's; and the things that say "kr" in words or files: the spreadsheet export, the kid's page and the bank-picture reader (it must then understand €, $ and £). Goes well together with 2.2. | M |
+| 2.4 | **Keep the currency, the language and the colours in the account**, so a phone and a computer on the same account always agree. | They are kept per device today (in 1.13.0, 1.14.0 and 1.15.0) because keeping them in the account needs a change to Firebase's rules, which you would have to publish by hand once more. A phone and a computer can therefore show different currencies for the same numbers: choose the same on both for now. | S-M |
+| 2.5 | **More currencies**, and currencies with no hundredths (yen, Icelandic króna). | The list has 12 currencies that all have hundredths. A currency without them would show the stored hundredths wrongly, so it needs its own handling. Tell me which you need. | S |
 
 ## 3. Money and planning
 

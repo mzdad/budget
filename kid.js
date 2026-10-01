@@ -94,7 +94,7 @@ function kidScreenHtml(state, total) {
 		</section>
 		<form id="kid-form" class="card" autocomplete="off">
 			<h2>${t("Brugte du penge?")}</h2>
-			<label>${t("Hvor mange kroner?")}
+			<label>${howManyLabel()}
 				<input name="amount" inputmode="decimal" placeholder="${t("fx 25")}" required>
 			</label>
 			<label>${t("Hvad købte du? (hvis du vil)")}
