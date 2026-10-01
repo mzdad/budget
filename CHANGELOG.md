@@ -3,6 +3,11 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.10.1 - 2026-10-01
+
+- **Udgifter: the category headings are easier to see.** Each category is now a clear band with a
+  green edge, with the name and the total in bold, instead of small grey text.
+
 ## 1.10.0 - 2026-10-01
 
 - **A settings tab (the gear ⚙ at the right end of the tab bar).** Everything about how the page

@@ -426,17 +426,24 @@ label.button.secondary {
 	padding: 0;
 }
 
-/* A category heading on Udgifter, with what was spent in it on the right. */
+/* A category heading on Udgifter: a clear band with a green edge, and what was spent in it on the right. */
 .group-head {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
 	gap: 10px;
-	margin: 18px 0 2px;
+	margin: 20px 0 2px;
+	padding: 8px 10px;
+	background: var(--bar-track);
+	border-left: 4px solid var(--accent);
+	border-radius: 8px;
 }
 
 .group-head h3 {
 	margin: 0;
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: var(--text);
 }
 
 .card .group-head:first-child {
@@ -444,9 +451,9 @@ label.button.secondary {
 }
 
 .group-total {
-	font-size: 0.9rem;
-	font-weight: 600;
-	color: var(--muted);
+	font-size: 1rem;
+	font-weight: 700;
+	color: var(--text);
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
