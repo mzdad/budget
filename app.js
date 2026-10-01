@@ -23,8 +23,8 @@ const MOST_REMEMBERED_ROWS = 300;
 // account's numbers instead of showing (and letting you edit) this device's own copy.
 const SIGNED_IN_HINT_KEY = "budget.signedInAs";
 
-// The three lists on the Plan screen are drawn by the same code. Only the texts
-// and the name of the amount field differ ("limit" for categories).
+// The three lists of rows (income and fixed bills on Plan, categories on Indstillinger) are drawn
+// by the same code. Only the texts and the name of the amount field differ ("limit" for categories).
 const INCOME_SECTION = {
 	key: "income",
 	title: "Indkomst",
@@ -47,8 +47,8 @@ const FIXED_SECTION = {
 };
 const CATEGORY_SECTION = {
 	key: "categories",
-	title: "Penge til hverdagen",
-	hint: "Hvor meget vil du højst bruge?",
+	title: "Kategorier",
+	hint: "Det du bruger penge på, og hvor meget du højst vil bruge på hver.",
 	amountField: "limit",
 	addLabel: "+ Tilføj kategori",
 	mostRows: MOST_CATEGORIES,
@@ -76,7 +76,7 @@ let syncState = "saved";                      // "saved" or "saving"
 
 let data = accountName === null ? loadData() : { months: {} };   // { months: { "2026-09": {...} } }
 let viewMonth = monthKeyOf(new Date());       // the month on screen
-let activeTab = "overview";                   // "overview", "expenses", "future", "plan" or "report"
+let activeTab = "overview";                   // "overview", "expenses", "future", "plan", "settings" or "report"
 let reportScope = null;                       // what the report shows: { type: "month" | "year", key }
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
@@ -308,6 +308,8 @@ function render() {
 		html = expensesHtml(month);
 	} else if (activeTab === "future") {
 		html = futureHtml(month);
+	} else if (activeTab === "settings") {
+		html = settingsHtml(month);
 	} else if (activeTab === "report" && reportScope !== null) {
 		html = reportHtml();
 	} else {
@@ -316,8 +318,8 @@ function render() {
 	document.getElementById("view").innerHTML = html;
 	showSyncStatus();
 
-	// The report is opened from Plan and has no tab of its own, so Plan stays lit.
-	const litTab = activeTab === "report" ? "plan" : activeTab;
+	// The report is opened from Indstillinger (Eksport) and has no tab of its own, so that tab stays lit.
+	const litTab = activeTab === "report" ? "settings" : activeTab;
 	for (const button of document.querySelectorAll(".tabs button")) {
 		const isActive = button.dataset.tab === litTab;
 		button.classList.toggle("active", isActive);
@@ -487,7 +489,7 @@ function addFormHtml(month) {
 // see how you are doing without the space. The fold is remembered (categoriesOpen).
 function categoryBarsHtml(s) {
 	if (s.categories.length === 0 && s.otherSpent === 0) {
-		return '<section class="card"><h2>Dine kategorier</h2><p class="hint">Lav kategorier under Plan.</p></section>';
+		return '<section class="card"><h2>Dine kategorier</h2><p class="hint">Lav kategorier under Indstillinger.</p><button class="secondary" data-tab="settings">Åbn indstillinger</button></section>';
 	}
 
 	let full = "";
@@ -776,8 +778,11 @@ function refreshFutureResults() {
 
 
 // ---- Screen 4: Plan ------------------------------------------------------------
+//
+// The month's money: what comes in, the fixed bills, and what you save. Everything that is about
+// how the page works (account, categories, kids, export, backup) is on the next screen, Indstillinger.
 
-// The account box at the top of Plan. Hidden until accounts are set up (firebase-config.js).
+// The account box at the top of Indstillinger. Hidden until accounts are set up (firebase-config.js).
 function accountHtml() {
 	if (!accountsAvailable()) {
 		return "";
@@ -812,18 +817,27 @@ function accountHtml() {
 }
 
 function planHtml(month) {
-	return accountHtml()
-		+ `<section class="card" id="plan-summary">${planSummaryHtml(month)}</section>`
+	return `<section class="card" id="plan-summary">${planSummaryHtml(month)}</section>`
 		+ planSectionHtml(INCOME_SECTION, month)
 		+ planSectionHtml(FIXED_SECTION, month)
-		+ savingsHtml(month)
+		+ savingsHtml(month);
+}
+
+
+// ---- Screen 5: Indstillinger (the gear) ------------------------------------------
+//
+// Everything about how the page works: your account, the categories, the kids, the report for
+// Excel / PDF, and the backup file.
+
+function settingsHtml(month) {
+	return accountHtml()
 		+ planSectionHtml(CATEGORY_SECTION, month)
 		+ addPersonHtml()
 		+ exportHtml()
 		+ backupHtml();
 }
 
-// The "Eksport" box on Plan: pick a month or a year and open its report.
+// The "Eksport" box on Indstillinger: pick a month or a year and open its report.
 function exportHtml() {
 	let options = `<option value="month:${viewMonth}">Denne måned: ${esc(monthLabel(viewMonth))}</option>`;
 	for (const year of yearsWithData(data.months)) {
@@ -845,7 +859,8 @@ function summaryLineHtml(label, text, extraClass) {
 }
 
 // The box at the top of Plan. It is redrawn on its own after each edit
-// (refreshPlanSummary), so the boxes you are typing in are left alone.
+// (refreshPlanSummary), so the boxes you are typing in are left alone. The limits of the
+// categories are edited on Indstillinger, so there is a way over from here.
 function planSummaryHtml(month) {
 	const s = summarize(month, viewMonth);
 
@@ -867,18 +882,38 @@ function planSummaryHtml(month) {
 		html += '<p class="hint" style="margin-top:8px">Du har fordelt mere, end du har.</p>';
 	}
 	html += '<p class="hint" style="margin-top:8px">Alt gemmes med det samme. Ændringer gælder kun denne måned.</p>';
+	html += '<button type="button" class="link" data-tab="settings">Ret kategorier og grænser →</button>';
 	return html;
 }
 
+// After an edit, the numbers on the screen that depend on it change: the summary on Plan, and the
+// "how much is handed out" line over the categories on Indstillinger. Only the one on screen exists.
 function refreshPlanSummary() {
+	const month = getMonth(viewMonth);
 	const box = document.getElementById("plan-summary");
 	if (box) {
-		box.innerHTML = planSummaryHtml(getMonth(viewMonth));
+		box.innerHTML = planSummaryHtml(month);
 	}
+	const line = document.getElementById("category-summary");
+	if (line) {
+		line.innerHTML = categorySummaryHtml(month);
+	}
+}
+
+// Over the categories: what you have to spend, and how much of it the limits hand out.
+function categorySummaryHtml(month) {
+	const s = summarize(month, viewMonth);
+	const rest = s.unassigned >= 0
+		? `Ikke fordelt endnu: <b>${formatKr(s.unassigned)}</b>`
+		: `Fordelt for meget: <b class="bad-text">${formatKr(-s.unassigned)}</b>`;
+	return `Til rådighed: <b>${formatKr(s.available)}</b> · ${rest}`;
 }
 
 function planSectionHtml(section, month) {
 	let html = `<section class="card"><h2>${section.title}</h2><p class="hint">${section.hint}</p>`;
+	if (section.key === "categories") {
+		html += `<p class="category-summary" id="category-summary">${categorySummaryHtml(month)}</p>`;
+	}
 	for (const row of month[section.key]) {
 		html += rowHtml(section, row);
 	}
@@ -1017,6 +1052,151 @@ function backupHtml() {
 }
 
 
+// ---- The report (opened from Indstillinger -> Eksport) -------------------------------------
+//
+// One screen that is also what gets printed: the buttons carry the class "no-print", which the
+// print styles hide. The numbers come from monthReport() / yearReport() in budget.js, the same
+// ones the spreadsheet is made from.
+
+// A table from a list of headings and a list of rows; every cell is already HTML.
+// A cell can be { html, cls } to give it a class.
+function tableHtml(headings, rows, tableClass) {
+	let html = '<div class="table-scroll"><table' + (tableClass ? ' class="' + tableClass + '"' : "") + ">";
+	if (headings.length > 0) {
+		html += "<thead><tr>" + headings.map((heading) => `<th>${heading}</th>`).join("") + "</tr></thead>";
+	}
+	html += "<tbody>";
+	for (const row of rows) {
+		const isTotal = row.total === true;
+		html += isTotal ? '<tr class="total">' : "<tr>";
+		for (const cell of row.cells) {
+			const text = typeof cell === "object" ? cell.html : cell;
+			const cls = typeof cell === "object" && cell.cls ? ` class="${cell.cls}"` : "";
+			html += `<td${cls}>${text}</td>`;
+		}
+		html += "</tr>";
+	}
+	return html + "</tbody></table></div>";
+}
+
+// An amount that is red when it is negative.
+function amountCell(ore) {
+	return { html: formatKr(ore), cls: ore < 0 ? "bad" : "" };
+}
+
+function purchasesHtml(spending) {
+	if (spending.length === 0) {
+		return '<p class="hint">Ingen udgifter.</p>';
+	}
+	return tableHtml(["Dato", "Kategori", "Note", "Beløb"], spending.map((item) => ({
+		cells: [dateText(item.date).slice(0, 6), { html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
+	})), "purchases");
+}
+
+function monthReportHtml(report) {
+	const s = report.summary;
+	const nameRows = (list) => list.map((row) => ({ cells: [esc(row.name || "(uden navn)"), formatKr(row.amount)] }));
+
+	let html = `<h2>Budget: ${esc(report.label)}</h2>`;
+	html += "<h3>Oversigt</h3>" + tableHtml([], [
+		{ cells: ["Indkomst", formatKr(s.income)] },
+		{ cells: ["Faste udgifter", formatKr(s.fixed)] },
+		{ cells: ["Opsparing", formatKr(s.savings)] },
+		{ cells: ["Til rådighed", formatKr(s.available)], total: true },
+		{ cells: ["Brugt", formatKr(s.spent)] },
+		{ cells: ["Tilbage", amountCell(s.left)], total: true },
+	]);
+	html += "<h3>Indkomst</h3>" + tableHtml([], nameRows(report.income));
+	html += "<h3>Faste udgifter</h3>" + tableHtml([], nameRows(report.fixed));
+
+	const categoryRows = report.categories.map((c) => ({
+		cells: [esc(c.name || "(uden navn)"), formatKr(c.limit), formatKr(c.spent), amountCell(c.left)],
+	}));
+	if (report.otherSpent > 0) {
+		categoryRows.push({ cells: ["Uden kategori", "", formatKr(report.otherSpent), ""] });
+	}
+	html += "<h3>Kategorier</h3>" + tableHtml(["Kategori", "Grænse", "Brugt", "Tilbage"], categoryRows);
+	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	return html;
+}
+
+function yearReportHtml(report) {
+	if (report.rows.length === 0) {
+		return `<h2>Budget: ${esc(report.year)}</h2><p class="hint">Der er ingen gemte måneder i ${esc(report.year)}.</p>`;
+	}
+	const t = report.totals;
+
+	const monthRows = report.rows.map((row) => ({
+		cells: [esc(shortMonthLabel(row.key)), formatKr(row.income), formatKr(row.fixed), formatKr(row.savings), formatKr(row.available), formatKr(row.spent), amountCell(row.left)],
+	}));
+	monthRows.push({
+		cells: ["I alt", formatKr(t.income), formatKr(t.fixed), formatKr(t.savings), formatKr(t.available), formatKr(t.spent), amountCell(t.left)],
+		total: true,
+	});
+
+	const categoryRows = report.categories.map((c) => ({ cells: [esc(c.name), formatKr(c.total)] }));
+
+	let html = `<h2>Budget: ${esc(report.year)}</h2>`;
+	html += "<h3>Måned for måned</h3>" + tableHtml(["Måned", "Indkomst", "Faste", "Opsparing", "Til rådighed", "Brugt", "Tilbage"], monthRows);
+	html += '<p class="hint no-print">Stryg tabellen til siden for at se alle kolonner.</p>';
+	html += "<h3>Brugt pr. kategori</h3>" + tableHtml(["Kategori", "I alt"], categoryRows);
+	html += "<h3>Udgifter</h3>" + purchasesHtml(report.spending);
+	return html;
+}
+
+function reportHtml() {
+	let body = "";
+	if (reportScope.type === "month") {
+		body = monthReportHtml(monthReport(getMonth(reportScope.key), reportScope.key));
+	} else {
+		body = yearReportHtml(yearReport(data.months, reportScope.key));
+	}
+	return `
+		<section class="card no-print">
+			<div class="buttons">
+				<button class="primary" data-action="download-csv">Hent til Excel (.csv)</button>
+				<button class="secondary" data-action="print-report">Udskriv eller gem som PDF</button>
+				<button class="secondary" data-action="close-report">‹ Tilbage til Indstillinger</button>
+			</div>
+		</section>
+		<section class="card report">${body}</section>`;
+}
+
+function openReport() {
+	const choice = document.getElementById("export-scope").value.split(":");
+	reportScope = { type: choice[0], key: choice[1] };
+	activeTab = "report";
+	render();
+	window.scrollTo(0, 0);
+}
+
+// The spreadsheet, as a file. A byte-order mark (\uFEFF) first tells Excel the text is UTF-8,
+// so æ, ø and å come out right.
+function downloadReportCsv() {
+	let text = "";
+	let name = "";
+	if (reportScope.type === "month") {
+		text = monthCsv(monthReport(getMonth(reportScope.key), reportScope.key));
+		name = "budget-" + reportScope.key + ".csv";
+	} else {
+		text = yearCsv(yearReport(data.months, reportScope.key));
+		name = "budget-" + reportScope.key + ".csv";
+	}
+	downloadText(name, "\uFEFF" + text, "text/csv;charset=utf-8");
+}
+
+// Hands the browser a file to save. Used by the spreadsheet and the backup.
+function downloadText(filename, text, mimeType) {
+	const link = document.createElement("a");
+	link.href = URL.createObjectURL(new Blob([text], { type: mimeType }));
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+
 // --- Reacting to the user -----------------------------------------------------
 //
 // One listener for the whole page ("event delegation"): instead of hooking up
@@ -1084,7 +1264,7 @@ document.addEventListener("click", (event) => {
 			openReport();
 			break;
 		case "close-report":
-			activeTab = "plan";
+			activeTab = "settings";
 			render();
 			window.scrollTo(0, 0);
 			break;
@@ -1173,7 +1353,7 @@ document.addEventListener("change", (event) => {
 
 // ---- Børn: your kids' savings in your pile --------------------------------------
 //
-// You keep all your savings in one pile, and some of it is your kids'. Add each kid under Plan,
+// You keep all your savings in one pile, and some of it is your kids'. Add each kid under Indstillinger,
 // and they get a card on Overblik: "Nathan brugte 300 kr" and it says what he has left. Any
 // number of kids, any names. (In the code a kid is a "person" with entries; budget.js calls the
 // whole thing "pots": potBalances.) Each entry is saved in the month it happened in, like a
@@ -1181,7 +1361,7 @@ document.addEventListener("change", (event) => {
 
 let potMessage = null;   // { person, text }: what to say in that person's card, once
 
-// One card for each person, on Overblik. Nothing at all until someone has been added (Plan).
+// One card for each person, on Overblik. Nothing at all until someone has been added (Indstillinger).
 function potCardsHtml() {
 	return potBalances(data.months).map(potCardHtml).join("");
 }
@@ -1295,7 +1475,7 @@ function deletePerson(person) {
 	render();
 }
 
-// The "Børn" box on Plan: a kid's name, and what they have now. Once a kid is added, their card
+// The "Børn" box on Indstillinger: a kid's name, and what they have now. Once a kid is added, their card
 // shows up on Overblik.
 function addPersonHtml() {
 	const people = potBalances(data.months);
@@ -1413,7 +1593,7 @@ function deleteSpending(id) {
 
 // ---- Editing the plan ----------------------------------------------------------
 
-// Called when a name or amount box in a Plan row is changed. We do NOT redraw the
+// Called when a name or amount box in a row (Plan or Indstillinger) is changed. We do NOT redraw the
 // rows here: redrawing would throw away the box you are tabbing into next.
 function editRow(input) {
 	const rowElement = input.closest(".row");

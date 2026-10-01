@@ -612,11 +612,143 @@ check("starter has income rows", starter.income.length > 0, true);
 check("starter ids are stable between calls", budget.starterMonth().fixed[0].id, starter.fixed[0].id);
 check("starter amounts are 0", budget.summarize(starter).available, 0);
 
+// --- Every screen draws, and every button has code behind it ---
+// This once failed in real life: a whole block of app.js (the report) went missing in an edit, and
+// the page kept working until someone pressed "Åbn rapport". The maths checks above can't see that,
+// so this runs the real page code (budget.js + account.js + app.js) against a pretend page, opens
+// every screen, and checks that every button that is drawn is handled by a function that exists.
+const vm = require("vm");
+const fs = require("fs");
+const indexText = fs.readFileSync(__dirname + "/index.html", "utf8");
+
+function pretendPage() {
+	let shown = "";             // what app.js last drew into <main id="view">
+	const saved = [];           // the files the page offered for download
+	const handlers = {};
+	const store = {};
+	// Anything that is not special is another pretend element, so any call or property works.
+	const pretend = new Proxy(function () {}, {
+		get(target, key) {
+			if (key === Symbol.toPrimitive) return () => "";
+			if (key === "dataset") return {};
+			if (key === "classList") return { add() {}, remove() {}, toggle() {}, contains: () => false };
+			if (key === "value" || key === "textContent" || key === "innerHTML") return "";
+			return pretend;
+		},
+		set() { return true; },
+		apply() { return pretend; },
+	});
+	const document = {
+		currentScript: { src: "http://localhost/app.js?v=0.0.0" },
+		getElementById(id) {
+			if (id === "view") return { get innerHTML() { return shown; }, set innerHTML(html) { shown = html; } };
+			if (id === "export-scope") return { value: "month:2026-09" };
+			return pretend;
+		},
+		querySelector: () => pretend,
+		querySelectorAll: () => [],
+		addEventListener(type, fn) { (handlers[type] = handlers[type] || []).push(fn); },
+		createElement() {
+			const link = { click() { saved.push(link.download); }, remove() {} };
+			return link;
+		},
+		body: { appendChild() {} },
+	};
+	const window = { addEventListener() {}, scrollTo() {}, print() {}, alert() {}, confirm: () => true };
+	const localStorage = {
+		getItem: (key) => (key in store ? store[key] : null),
+		setItem: (key, value) => { store[key] = String(value); },
+		removeItem: (key) => { delete store[key]; },
+	};
+	const context = vm.createContext({
+		document, window, localStorage, navigator: { onLine: true }, console,
+		URL, URLSearchParams, Blob, setTimeout, confirm: window.confirm, alert: window.alert, location: {},
+		FIREBASE_CONFIG: null, USE_FIREBASE_EMULATOR: false,   // accounts off: nothing here talks to Firebase
+	});
+	for (const file of ["budget.js", "password.js", "account.js", "app.js"]) {
+		vm.runInContext(fs.readFileSync(__dirname + "/" + file, "utf8"), context, { filename: file });
+	}
+	return { context, handlers, saved, view: () => shown, run: (code) => vm.runInContext(code, context) };
+}
+
+function attempt(name, action) {
+	try {
+		action();
+	} catch (error) {
+		check(name, "threw: " + error.message, "no error");
+	}
+}
+
+let page = null;
+attempt("screens: the page code loads and draws its first screen", () => {
+	page = pretendPage();
+	check("screens: the page code loads and draws its first screen", page.view().length > 0, true);
+});
+
+if (page !== null) {
+	const full = JSON.parse(JSON.stringify(month));   // the September month from the summary checks
+	full.balances = { account: { amount: 1200000, at: 1790000000000 }, savings: { amount: 18000000, at: 1790000000000 } };
+	full.pots = [{ id: "p1", date: "2026-09-01", person: "Nathan", amount: 500000, note: "Start", start: true }];
+	page.run("data = cleanData(" + JSON.stringify({ months: { "2026-09": full, "2026-10": october } }) + "); viewMonth = '2026-09';");
+
+	const screens = {
+		overview: ["Tilføj udgift", "Nathan har"],
+		expenses: ["Brugt i alt", "Mad"],
+		future: ["Penge nu", "Måned for måned"],
+		plan: ["Sådan ser måneden ud", "Indkomst", "Faste udgifter", "Opsparing"],
+		settings: ["Kategorier", "Børn", "Eksport", "Sikkerhedskopi"],
+	};
+	let allHtml = "";
+	for (const [tab, words] of Object.entries(screens)) {
+		attempt("screens: " + tab + " draws", () => {
+			page.run("activeTab = '" + tab + "'; render();");
+			const html = page.view();
+			allHtml += html;
+			check("screens: " + tab + " draws, with " + words.join(" and "), words.every((word) => html.includes(word)), true);
+		});
+	}
+	attempt("screens: the month report draws", () => {
+		page.run("reportScope = { type: 'month', key: '2026-09' }; activeTab = 'report'; render();");
+		allHtml += page.view();
+		check("screens: the month report draws", ["Budget: September 2026", "Oversigt", "Udgifter"].every((word) => page.view().includes(word)), true);
+	});
+	attempt("screens: the year report draws", () => {
+		page.run("reportScope = { type: 'year', key: '2026' }; activeTab = 'report'; render();");
+		allHtml += page.view();
+		check("screens: the year report draws", ["Budget: 2026", "Måned for måned"].every((word) => page.view().includes(word)), true);
+	});
+	attempt("screens: opening a report from Indstillinger works", () => {
+		page.run("activeTab = 'settings'; render(); openReport();");
+		check("screens: opening a report from Indstillinger works", page.run("activeTab") === "report" && page.view().includes("Budget: September 2026"), true);
+	});
+	attempt("screens: the report's spreadsheet is offered for download", () => {
+		page.saved.length = 0;
+		page.run("downloadReportCsv();");
+		check("screens: the report's spreadsheet is offered for download", page.saved, ["budget-2026-09.csv"]);
+	});
+	attempt("screens: the backup file is offered for download", () => {
+		page.saved.length = 0;
+		page.run("exportBackup();");
+		check("screens: the backup file is offered for download", page.saved.length, 1);
+	});
+
+	// Every button that is drawn must be handled. The tab names come from index.html.
+	const handled = fs.readFileSync(__dirname + "/app.js", "utf8");
+	const tabNames = [...indexText.matchAll(/data-tab="(\w+)"/g)].map((match) => match[1]);
+	const wantedActions = new Set([...allHtml.matchAll(/data-action="([\w-]+)"/g)].map((match) => match[1]));
+	const wantedTabs = new Set([...allHtml.matchAll(/data-tab="(\w+)"/g)].map((match) => match[1]));
+	check("screens: every drawn data-action has a case in the click handler", [...wantedActions].filter((name) => !handled.includes('case "' + name + '":')), []);
+	check("screens: every drawn data-tab is a real tab", [...wantedTabs].filter((name) => !tabNames.includes(name)), []);
+	// ... and every case in the click handler calls a function that exists.
+	const clickHandler = handled.slice(handled.indexOf("switch (button.dataset.action)"), handled.indexOf("// A form normally reloads the page"));
+	const called = [...clickHandler.matchAll(/case "[\w-]+":\s*\n\s*(\w+)\(/g)].map((match) => match[1]);
+	check("screens: the click handler has cases to check", called.length > 10, true);
+	check("screens: every function the click handler calls exists", called.filter((name) => page.run("typeof " + name) !== "function"), []);
+}
+
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps
 // an old file next to a new index.html would otherwise mix versions.
-const fs = require("fs");
-const indexText = fs.readFileSync(__dirname + "/index.html", "utf8");
 const ownFiles = [...indexText.matchAll(/(?:src|href)="([^"]+\.(?:js|css))(\?v=[^"]*)?"/g)]
 	.filter((match) => !match[1].startsWith("http"));
 check("version: index.html loads our own files", ownFiles.length >= 6, true);

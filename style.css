@@ -481,6 +481,22 @@ label.button.secondary {
 	white-space: nowrap;
 }
 
+/* The line over the categories: what you have, and how much of it is handed out. */
+.category-summary {
+	margin: 6px 0 4px;
+	font-size: 0.9rem;
+	color: var(--muted);
+}
+
+.category-summary b {
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+}
+
+.category-summary b.bad-text {
+	color: var(--bad);
+}
+
 /* ---- Plan rows ---- */
 
 .row {
@@ -634,6 +650,12 @@ label.button.secondary {
 	font: inherit;
 	font-size: 0.95rem;
 	cursor: pointer;
+}
+
+/* The settings tab is only a gear, so the four word tabs keep their room. */
+.tabs button.gear {
+	flex: 0 0 64px;
+	font-size: 1.5rem;
 }
 
 .tabs button.active {

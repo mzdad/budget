@@ -3,6 +3,20 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.10.0 - 2026-10-01
+
+- **A settings tab (the gear ⚙ at the right end of the tab bar).** Everything about how the page
+  works now lives there: your **account**, the **categories** (add, rename, and what you want to spend
+  on each, with a line saying how much of your money the limits hand out), the **kids**, **Eksport**
+  and the **backup**. Plan is shorter now: only the month's summary, **Indkomst**, **Faste udgifter**
+  and **Opsparing**, with a link over to the categories. Everything works as before, it just sits in a
+  new place. The report's "Tilbage" button goes back to Indstillinger.
+- **Fixed: "Åbn rapport" and "Gem kopi som fil" did nothing since 1.6.0.** An edit in 1.6.0
+  accidentally dropped the code behind the report (Eksport) and the file download, so those two
+  buttons did nothing. It is back, and `node test.js` now opens every screen and checks that every
+  button on it has working code behind it, so this cannot slip through again. (Your numbers were
+  never affected; they are saved as usual. But no backup file was made by that button in between.)
+
 ## 1.9.0 - 2026-10-01
 
 - **Udgifter is split by category.** Each category gets a heading with what was spent in it, and

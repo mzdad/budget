@@ -4,8 +4,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
 
 ## What it does
 
-- **Plan** - write your income, your fixed bills, how much you save, and how much you
-  want to spend on each kind of thing (food, transport, fun ...). An income or fixed-bill row can
+- **Plan** - write your income, your fixed bills and how much you save. An income or fixed-bill row can
   have a first and a last day ("Fra/til dato"), for a new job, a contract that ends, a new
   subscription. In a month where it counts for only some days, it counts pro rata by days. A fixed
   bill or an income (børnepenge) can also come every 2nd, 3rd or 6th month, or once a year (the
@@ -23,9 +22,12 @@ A small monthly budget page for phone and PC. Danish, kroner.
   "brugte" money it goes down, when a kid "fik" money it goes up (only what happens after you
   typed it; a kid's start amount was already in the pile and never counts). Lønkonto never moves
   by itself. (In the code: `balances` in the month, and `moneyNow` in budget.js.)
-- **Eksport** (on Plan) - a report for one month or a whole year, on screen. Download it for
+- **Indstillinger** (the gear at the right end of the tab bar) - everything about how the page
+  works: your account, the **categories** (food, transport, fun ... and how much you want to
+  spend on each), the kids, the export and the backup.
+- **Eksport** (in Indstillinger) - a report for one month or a whole year, on screen. Download it for
   Excel (.csv, Danish format with ; and decimal comma) or print it / save it as PDF.
-- **Børn** - add your kids under Plan, and each gets a card on Overblik with what they have,
+- **Børn** - add your kids under Indstillinger, and each gets a card on Overblik with what they have,
   "brugte" and "fik" buttons, and a history. All the kids' money sits in your one pile; Fremtid
   shows how much of it is theirs. (In the code a kid is a "person" with entries, stored in the
   month's `pots` field.)
@@ -37,7 +39,7 @@ A small monthly budget page for phone and PC. Danish, kroner.
     computer you sign in on, and kept safe if you lose your phone. Only your own account can
     read it (see `firestore.rules`). The account box is hidden until Firebase is set up: see
     [SETUP-ACCOUNTS.md](SETUP-ACCOUNTS.md).
-- "Gem kopi som fil" on the Plan screen makes a backup file either way.
+- "Gem kopi som fil" in Indstillinger makes a backup file either way.
 
 ## Files
 

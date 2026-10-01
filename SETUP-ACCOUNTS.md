@@ -80,7 +80,7 @@ account.
 
 ## Afterwards
 
-**Make your account** in the page: **Plan** → **Gem dine tal på en konto** → a username and a
+**Make your account** in the page: the gear **⚙** (Indstillinger) → **Gem dine tal på en konto** → a username and a
 password → **Opret ny konto**. Usernames can use a–z, numbers, `-` and `_` (no æ, ø, å).
 Passwords need at least 10 characters and must be hard to guess; three words and a number
 work well, like `Lilla-tiger-raket-47`. If you already wrote numbers on that device before
