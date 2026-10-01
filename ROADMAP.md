@@ -25,6 +25,15 @@ Things to decide when we get to it (they change how it is built):
   a little per picture). Bank screens show account numbers, so privacy matters here.
 - Which banks / which look of screenshot to start with (every bank lists things differently).
 
+## Danish / English language switch (asked for 2026-10-01)
+
+A switch (in Indstillinger) between Danish and English. Today every word on the screens is written
+straight into the code in Danish, so the work is to gather all the texts in one place, one list per
+language, and have the screens read from it. Things to decide when we get to it: the money stays in
+kroner either way (only the words and the month and day names change); whether the kid's own page
+follows the language of the device it is opened on; and which language a new device starts in
+(the phone's own setting is the natural pick).
+
 ## Colour themes (asked for 2026-10-01)
 
 A way to pick a look for the page, with more than one theme. The first one asked for is a **red and
