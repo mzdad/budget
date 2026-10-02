@@ -5,6 +5,17 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.20.0
+
+- **4.3 A kid's link on the home screen opens the kid's page** (you said: "when I gave my kids the link, and put the link
+  as a shortcut, it made them login so the link didn't work"). A bug from 1.11.0: the manifest started every icon at the
+  plain page. Fixed three ways: no start address in the page's manifest (an icon starts where it was made), a manifest of
+  its own on the kid's page (start address = the kid's link), and a box on the "not logged in" note where a kid can paste
+  the link once (this is what rescues icons made before the fix, and iPhone icons, which cannot see what Safari
+  remembered). Tested with 27 new checks, by breaking each rule on purpose, and in the browser with a parent on one "device"
+  and the kid's icon on another (local test copy of Firebase). **Not tried on a real phone** (see 5.2): an icon made
+  before this fix keeps the old start address, so paste the link once or make the icon again.
+
 ## Done in 1.19.0
 
 - **2.7 English category names (and the other standard names)** (you sent a screenshot of the English page with Danish

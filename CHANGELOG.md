@@ -3,6 +3,22 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.20.0 - 2026-10-02
+
+- **Fix: a kid's link put on the home screen opened the login instead of the kid's page.** Cause: the page's manifest
+  (`manifest.webmanifest`) said `"start_url": "./"`, so an icon on the home screen always started at the plain page and
+  dropped the `?kid=...` part. The plain page then showed "Du er ikke logget ind" and the login box. (The page remembers a
+  kid's link on the device, but an icon on an iPhone has its own storage, apart from Safari's, so it could not find it.)
+  - **The manifest no longer names a start address**, so an icon starts at the address it was made from: the kid's link.
+  - **The kid's page has its own manifest** whose start address is the kid's link (with the language and the currency), put
+    in place when the kid's page opens.
+  - **A way in for icons that were already made:** the "not logged in" note has a small box,
+    **"Har du fået et link af en forælder?"**, to paste the link into. It opens the kid's page and remembers it on that
+    device, so the icon opens it every time after (one time only). It takes the whole link, or just the part after `?kid=`.
+  - **To remember:** an icon made BEFORE this version keeps starting at the plain page: paste the link once, or make the
+    icon again from the kid's link. I could not try this on a real phone: only the local test copy of Firebase and a
+    second "device" in the browser (see roadmap 5.2).
+
 ## 1.19.0 - 2026-10-01
 
 - **Standard names in the page's language.** A budget that was started in Danish keeps the Danish standard names (Løn, Husleje,

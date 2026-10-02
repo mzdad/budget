@@ -1462,6 +1462,83 @@ if (page !== null) {
 	});
 }
 
+// --- The kid's home-screen icon, and a pasted link ---
+{
+	const manifestFile = JSON.parse(fs.readFileSync(__dirname + "/manifest.webmanifest", "utf8"));
+	check("shortcut: the page's manifest names no start address, so an icon starts where it was made (the kid's link)", ["start_url", "scope"].filter((name) => name in manifestFile), []);
+	check("shortcut: the manifest still has what a home-screen icon needs", [manifestFile.name, manifestFile.display, manifestFile.icons.length >= 2], ["Månedsbudget", "standalone", true]);
+}
+
+if (page !== null) {
+	const kidToken = "abcdefghijklmnopqrstuvwx";
+	const kidKeyText = "mama." + kidToken;
+	const fresh = (setup) => { const p = pretendPage(); p.run("location.origin = 'https://mzdad.github.io'; location.pathname = '/budget/';" + (setup || "")); return p; };
+	const plain = (value) => JSON.parse(JSON.stringify(value));
+
+	attempt("shortcut: the kid's own manifest and start address", () => {
+		const p = fresh("setLanguage('en'); setCurrency('EUR');");
+		const link = "https://mzdad.github.io/budget/?kid=" + kidKeyText + "&lang=en&cur=EUR";
+		check("shortcut: the kid's start address is the kid's link, with the language and the currency", p.run("kidStartUrl({ parent: 'mama', token: '" + kidToken + "' })"), link);
+		const manifest = plain(p.run("kidManifest('" + link + "')"));
+		check("shortcut: the kid's manifest starts at the kid's link, inside its scope", [manifest.start_url, manifest.scope, manifest.start_url.startsWith(manifest.scope), manifest.display], [link, "https://mzdad.github.io/budget/", true, "standalone"]);
+		check("shortcut: its icons are whole addresses (it is not read from the page's folder)", manifest.icons.map((icon) => icon.src), ["https://mzdad.github.io/budget/icon-192.png", "https://mzdad.github.io/budget/icon-512.png"]);
+		check("shortcut: it has a name in the page's language", [manifest.name, manifest.lang], ["Monthly budget", "en"]);
+		const holder = { href: "manifest.webmanifest" };
+		p.context.document.querySelector = (selector) => (selector === 'link[rel="manifest"]' ? holder : {});
+		p.run("useKidManifest({ parent: 'mama', token: '" + kidToken + "' })");
+		check("shortcut: the page's own manifest is replaced by the kid's", [holder.href.startsWith("blob:"), holder.href !== "manifest.webmanifest"], [true, true]);
+		URL.revokeObjectURL(holder.href);
+		const k = fresh("var used = []; useKidManifest = function (key) { used.push(key); }; startKidFirebase = async function () {}; watchKidOwnPage = function () { return function () {}; };");
+		k.context.document.body.classList = { add() {} };
+		k.run("startKidMode({ parent: 'mama', token: '" + kidToken + "' });");
+		check("shortcut: opening the kid's page puts the kid's manifest in place", plain(k.run("used")), [{ parent: "mama", token: kidToken }]);
+		p.context.document.querySelector = () => null;
+		check("shortcut: with no manifest tag on the page nothing breaks", p.run("useKidManifest({ parent: 'mama', token: '" + kidToken + "' }); 'fine'"), "fine");
+	});
+
+	attempt("shortcut: reading a pasted link", () => {
+		const p = fresh();
+		const read = (text) => plain(p.run("readPastedKidLink(" + JSON.stringify(text) + ")"));
+		const only = { key: kidKeyText, lang: null, cur: null };
+		check("pasted link: the whole link, with its language and currency", read("https://mzdad.github.io/budget/?kid=" + kidKeyText + "&lang=en&cur=EUR"), { key: kidKeyText, lang: "en", cur: "EUR" });
+		check("pasted link: only the part after ?kid=", read(kidKeyText), only);
+		check("pasted link: spaces and a new line around it are ignored", read("  https://mzdad.github.io/budget/?kid=" + kidKeyText + "\n"), only);
+		check("pasted link: a pasted key with spaces and a new line around it is cleaned", read("  " + kidKeyText + " \n"), only);
+		check("pasted link: a link with only the end of the address", [read("?kid=" + kidKeyText), read("/budget/?kid=" + kidKeyText + "&emulator")], [only, only]);
+		check("pasted link: a token that is too short is not one", [read("mama.abc"), read("https://mzdad.github.io/budget/?kid=mama.abc")], [null, null]);
+		check("pasted link: other text is not one", [read("hello"), read(""), read("   "), read("https://mzdad.github.io/budget/"), read("javascript:alert(1)"), read("kid=" + kidKeyText + "=")], [null, null, null, null, null, null]);
+		check("pasted link: nothing at all is not one", [plain(p.run("readPastedKidLink(undefined)")), plain(p.run("readPastedKidLink(null)"))], [null, null]);
+	});
+
+	attempt("shortcut: opening a pasted link", () => {
+		const p = fresh("var assigned = []; location.assign = function (address) { assigned.push(address); };");
+		check("pasted link: a good link is remembered on this device and opened", [p.run("openPastedKidLink('https://mzdad.github.io/budget/?kid=" + kidKeyText + "&lang=en&cur=EUR')"), p.store["budget.kid"], plain(p.run("assigned")), p.store["budget.language"], p.store["budget.currency"]], [true, kidKeyText, ["https://mzdad.github.io/budget/?kid=" + kidKeyText], "en", "EUR"]);
+		const q = fresh("var assigned = []; location.assign = function (address) { assigned.push(address); };");
+		check("pasted link: only the key works too, and sets no language", [q.run("openPastedKidLink('" + kidKeyText + "')"), q.store["budget.kid"], plain(q.run("assigned")).length, q.store["budget.currency"]], [true, kidKeyText, 1, undefined]);
+		const r = fresh("var assigned = []; location.assign = function (address) { assigned.push(address); };");
+		check("pasted link: a language or currency that does not exist is not kept", [r.run("openPastedKidLink('?kid=" + kidKeyText + "&lang=xx&cur=ZZZ')"), r.store["budget.language"] === "da" ? "seeded" : r.store["budget.language"], r.store["budget.currency"]], [true, "seeded", undefined]);
+		const s = fresh("var assigned = []; location.assign = function (address) { assigned.push(address); };");
+		check("pasted link: a bad one does nothing", [s.run("openPastedKidLink('hello')"), s.store["budget.kid"], plain(s.run("assigned"))], [false, undefined, []]);
+	});
+
+	attempt("shortcut: the box for a pasted link", () => {
+		const p = fresh("FIREBASE_CONFIG = {}; accountName = null; data = signedOutData(); activeTab = 'overview'; render();");
+		check("pasted link: nobody logged in sees the box, with the form", [p.view().includes('id="kid-link-form"'), p.view().includes("Har du fået et link af en forælder?"), p.view().includes('<details class="explain">')], [true, true, true]);
+		p.run("setLanguage('en'); render();");
+		check("pasted link: the box in English", [p.view().includes("Did you get a link from a parent?"), p.view().includes("Paste the link here"), p.view().includes("Open the link")], [true, true, true]);
+		p.run("setLanguage('da'); var assigned = []; location.assign = function (address) { assigned.push(address); }; var messages = []; setMessage = function (id, text, isError) { messages.push([id, text, isError]); };");
+		const send = (text) => p.handlers.submit.forEach((handler) => handler({ target: { id: "kid-link-form", elements: { link: { value: text } } }, preventDefault() {} }));
+		send("nonsense");
+		check("pasted link: a link that is not one gets a message, and nothing opens", [plain(p.run("messages")), plain(p.run("assigned"))], [[["kid-link-message", "Det ligner ikke et link til børnesiden. Kopiér hele linket igen.", true]], []]);
+		send("https://mzdad.github.io/budget/?kid=" + kidKeyText);
+		check("pasted link: a good link opens the kid's page", [plain(p.run("assigned")), plain(p.run("messages")).length], [["https://mzdad.github.io/budget/?kid=" + kidKeyText], 1]);
+		p.run("accountName = 'mama'; accountReady = true; kidPagesLoaded = true; kidPages = {}; kidEntries = {}; render();");
+		check("pasted link: logged in there is no such box", p.view().includes('id="kid-link-form"'), false);
+		page.run("accountName = null; activeTab = 'overview'; render();");
+		check("pasted link: and without accounts neither", page.view().includes('id="kid-link-form"'), false);
+	});
+}
+
 // --- English as the start language, and the language button at the top ---
 if (page !== null) {
 	const english = texts.ENGLISH_TEXTS();

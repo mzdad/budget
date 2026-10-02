@@ -39,6 +39,9 @@ A small monthly budget page for phone and PC. Danish, kroner.
   lowers Opsparing on Fremtid. You can delete a post or take the link away at any time (what the kid
   wrote stays in your numbers). It needs an account, and the link is the key: there is no password,
   so send it only to the kid. (Code: `kid.js`; the numbers: "The kids' own page" in `budget.js`.)
+  **A shortcut on the kid's home screen** starts at the kid's link (the manifest names no start address, and
+  the kid's page has a manifest of its own). An icon that opens the plain page instead (made before 1.20.0, or an
+  iPhone icon, which cannot see what Safari remembered) has a box on the "not logged in" note to paste the link into, once.
 - **Add purchases from a picture of the bank.** On Overblik, "Læs fra skærmbillede": choose a
   screenshot of the bank's list of purchases and the page reads it, on the phone, and lists the
   purchases for you to check before anything is saved (untick one, fix a text or an amount, pick a

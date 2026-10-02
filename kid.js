@@ -43,6 +43,92 @@ function rememberKidKey(text) {
 	}
 }
 
+// ---- The home-screen icon, and a link pasted in -------------------------------------
+//
+// An icon on the home screen starts at the manifest's start_url. manifest.webmanifest has none on
+// purpose, so the icon starts at the address it was made from: the kid's link. (It used to say "./",
+// which dropped ?kid=... and opened the normal page, with the login, instead of the kid's page.) In
+// kid mode we also hand the browser a manifest of our own whose start_url IS the kid's link. And an
+// icon on an iPhone has its own storage, apart from Safari's, so it cannot find a link remembered
+// there: the page shown when nobody is logged in has a box to paste the link into, once.
+
+// The kid's link as this page would give it out: the address of the page, ?kid=..., the language and the currency.
+function kidStartUrl(key) {
+	return kidLink(location.origin + location.pathname, key.parent, key.token) + "&lang=" + getLanguage() + "&cur=" + getCurrency();
+}
+
+// The manifest of the kid's page, as an object. Every address in it must be a whole address,
+// because it is not read from the page's own folder.
+function kidManifest(startUrl) {
+	const folder = new URL("./", startUrl).href;
+	return {
+		name: t("Månedsbudget"),
+		short_name: t("Budget"),
+		lang: getLanguage(),
+		start_url: startUrl,
+		scope: folder,
+		display: "standalone",
+		background_color: "#f4f6f4",
+		theme_color: "#1f7a5a",
+		icons: [
+			{ src: new URL("icon-192.png", folder).href, sizes: "192x192", type: "image/png" },
+			{ src: new URL("icon-512.png", folder).href, sizes: "512x512", type: "image/png" },
+		],
+	};
+}
+
+// Puts the kid's manifest in place of the page's own, so a shortcut made from here starts at the kid's link.
+function useKidManifest(key) {
+	try {
+		const link = document.querySelector('link[rel="manifest"]');
+		if (!link) {
+			return;
+		}
+		const text = JSON.stringify(kidManifest(kidStartUrl(key)));
+		link.href = URL.createObjectURL(new Blob([text], { type: "application/manifest+json" }));
+	} catch (error) {
+		// Only for the home-screen icon; the page works without it.
+		console.warn("Could not set the home-screen address:", error);
+	}
+}
+
+// The link a kid pasted: the whole link (https://.../?kid=mama.abc...&lang=en&cur=DKK), or only
+// the part after ?kid= ("mama.abc..."). Returns { key, lang, cur } or null if it is not one.
+function readPastedKidLink(pasted) {
+	const text = String(pasted || "").trim();
+	if (parseKidKey(text) !== null) {
+		return { key: text, lang: null, cur: null };
+	}
+	try {
+		const url = new URL(text, "https://example.invalid/");
+		const key = url.searchParams.get("kid") || "";
+		if (parseKidKey(key) === null) {
+			return null;
+		}
+		return { key: key, lang: url.searchParams.get("lang"), cur: url.searchParams.get("cur") };
+	} catch (error) {
+		return null;
+	}
+}
+
+// Opens the kid's page from a pasted link: remembers it on this device (so this icon keeps opening
+// it) and goes there. Returns false, doing nothing, if the text is not a kid's link.
+function openPastedKidLink(pasted) {
+	const found = readPastedKidLink(pasted);
+	if (found === null) {
+		return false;
+	}
+	rememberKidKey(found.key);
+	if (LANGUAGES.some((language) => language.id === found.lang)) {
+		saveLanguage(found.lang);
+	}
+	if (CURRENCIES.includes(found.cur)) {
+		saveCurrency(found.cur);
+	}
+	location.assign(location.origin + location.pathname + "?kid=" + found.key + (USE_FIREBASE_EMULATOR ? "&emulator" : ""));
+	return true;
+}
+
 // "Ikke dig?": forget the link on this device and open the normal budget page.
 function leaveKidMode() {
 	try {
@@ -129,6 +215,7 @@ function kidNews() {
 async function startKidMode(key) {
 	kidKey = key;
 	document.body.classList.add("kid-mode");
+	useKidManifest(key);
 	if (kidStop) {
 		kidStop();
 		kidStop = null;

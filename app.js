@@ -163,12 +163,26 @@ function tryBannerHtml() {
 	const button = activeTab === "settings"
 		? ""
 		: `<button class="secondary" data-action="go-login">${t("Log ind eller opret konto")}</button>`;
+	// A kid whose home-screen icon opened this page (an iPhone icon has its own storage and cannot find
+	// the link remembered in Safari) can paste the link here, once.
+	const kidBox = `
+		<details class="explain">
+			<summary>${t("Har du fået et link af en forælder?")}</summary>
+			<form id="kid-link-form" autocomplete="off">
+				<label>${t("Indsæt linket her")}
+					<input name="link" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false">
+				</label>
+				<button type="submit" class="secondary">${t("Åbn linket")}</button>
+				<p id="kid-link-message" class="message" role="status"></p>
+			</form>
+		</details>`;
 	return `
 		<section class="card try-banner">
 			<h2>${t("Du er ikke logget ind")}</h2>
 			<p>${t("Opret en konto eller log ind først for at få den fulde version med gemte tal. Indtil da kan du kun prøve det af: det du skriver, bliver ikke gemt og er væk, når du lukker siden.")}</p>
 			${kept}
 			${button}
+			${kidBox}
 		</section>`;
 }
 
@@ -1669,6 +1683,11 @@ document.addEventListener("submit", (event) => {
 	} else if (event.target.id === "bank-form") {
 		event.preventDefault();
 		addBankRows();
+	} else if (event.target.id === "kid-link-form") {
+		event.preventDefault();
+		if (!openPastedKidLink(event.target.elements.link.value)) {
+			setMessage("kid-link-message", t("Det ligner ikke et link til børnesiden. Kopiér hele linket igen."), true);
+		}
 	}
 });
 
