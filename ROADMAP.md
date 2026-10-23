@@ -5,6 +5,19 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.21.0
+
+- **5.5 Nothing is wider than a phone** (you said: "when I'm on the phone and I press expenses I sometimes need to zoom
+  out to see the whole page"). Cause: the big amount at the top of Udgifter (also Overblik, Fremtid and the kid's page) is
+  too wide for its card once it is about 10,000 or more, and that widened the whole page. Now such a number shrinks to fit.
+  Measuring on a phone-sized screen also showed two more that widened the page, now fixed: the two date boxes on Plan
+  (small phones) and a long category name next to its amount on Udgifter (when the phone's text size is larger than
+  normal). Checked on all five tabs, in both languages, at 320, 360 and 375 px and with 125% and 150% text. **Not tried
+  on your own phone**, so if Udgifter still needs zooming out, tell me the phone and I will look at that case.
+- **2.8 Plan: the "Hver måned" boxes always start folded** (you said: 'when I go in plan, the "every month" ones should always
+  start minimized'). The page used to remember that you had opened one, for ever. Rows with dates or a frequency still
+  start open.
+
 ## Done in 1.20.0
 
 - **4.3 A kid's link on the home screen opens the kid's page** (you said: "when I gave my kids the link, and put the link

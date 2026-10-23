@@ -3,6 +3,26 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.21.0 - 2026-10-23
+
+- **Fix: Udgifter (and Overblik and Fremtid) had to be zoomed out on a phone.** Cause: the big number at the top
+  ("Brugt i alt", "Tilbage" ...) is written in large letters, and an amount of about 10,000 or more (like
+  12,345.67) is wider than the card it sits in on a 375 px phone. The card could not hold it, so the whole page
+  became wider than the phone and the browser made you zoom out to see it all. Now a big number that does not fit gets
+  a smaller font, just small enough (`fitBigNumbers` in `app.js`; it runs by itself whenever the screen changes, so the
+  kid's page is covered too). A number that fits looks exactly as before.
+- **Fix: a long category name on Udgifter pushed the amount out to the right** when the phone's text size is set
+  larger than normal (a name like "Dagligvarer og husholdningsartikler" next to its amount). The name now wraps.
+- **Fix: Plan was too wide on a small phone** when a row had a "Fra/til dato" box open: the two date boxes would not
+  shrink below their own width and pushed the page about 25 px wider on a 320 px phone. They can shrink now (and sit one
+  under the other on a very small phone).
+- **A plain "Hver måned" row's small box always starts folded** when you open Plan. Before, the page remembered that you
+  had once opened it, and it stayed open for ever (also after "Ryd"). A row with dates or a frequency still starts open
+  (unless you folded it yourself, which is still remembered).
+- A check of the rest of the page found nothing else: the stress test (4,000 random, broken months through the maths) gave no
+  error and no wrong number, no browser errors on any of the five tabs in both languages, and none of them is wider than a
+  320 px phone.
+
 ## 1.20.0 - 2026-10-02
 
 - **Fix: a kid's link put on the home screen opened the login instead of the kid's page.** Cause: the page's manifest

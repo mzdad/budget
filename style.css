@@ -490,8 +490,12 @@ label.button.secondary {
 	border-radius: 8px;
 }
 
+/* min-width 0 + overflow-wrap: a long category name wraps, instead of pushing the amount (and the
+   whole page) out to the right, which meant zooming out on a phone with a big text size. */
 .group-head h3 {
 	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
 	font-size: 1.05rem;
 	font-weight: 700;
 	color: var(--text);
@@ -586,14 +590,27 @@ label.button.secondary {
 	padding: 4px 0;
 }
 
+/* minmax(0, ...) lets the two date boxes shrink: a plain 1fr never goes below the date box's own
+   width, which pushed the whole page wider than a small phone. On a very small phone they go
+   one under the other instead. */
 .dates-line {
 	display: grid;
-	grid-template-columns: 1fr 1fr;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 	gap: 8px;
 }
 
 .dates-line label {
 	margin-top: 0;
+}
+
+.dates-line input {
+	min-width: 0;
+}
+
+@media (max-width: 360px) {
+	.dates-line {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .dates .date-note {

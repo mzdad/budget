@@ -568,6 +568,35 @@ function render() {
 }
 
 
+// A very big amount (like 123,456.78) can be wider than its card at the normal size. It then pushes
+// the whole page wider than the phone, and you have to zoom out to see it all. So a big number that
+// does not fit gets a smaller font, just small enough. (Text is as wide as its font size, so one
+// measurement is enough.)
+const SMALLEST_BIG_NUMBER_PX = 12;
+
+function fitBigNumbers() {
+	for (const element of document.querySelectorAll("#view .big-number")) {
+		element.style.fontSize = "";   // the normal size first: the number may have got shorter
+		if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth) {
+			const normal = parseFloat(getComputedStyle(element).fontSize);
+			const fitting = Math.floor(normal * element.clientWidth / element.scrollWidth);
+			element.style.fontSize = Math.max(fitting, SMALLEST_BIG_NUMBER_PX) + "px";
+		}
+	}
+}
+
+// Fits the big numbers again whenever anything on the screen changes (every screen, and the kid's
+// page, draw into #view, so none of them has to remember to ask), and when the phone is turned.
+function keepBigNumbersInside() {
+	if (typeof MutationObserver !== "function") {
+		return;
+	}
+	const watcher = new MutationObserver(fitBigNumbers);
+	watcher.observe(document.getElementById("view"), { childList: true, characterData: true, subtree: true });
+	window.addEventListener("resize", fitBigNumbers);
+}
+
+
 // Shown instead of the screens while a signed-in account's numbers are on their way.
 function loadingHtml() {
 	if (accountFailed) {
@@ -1253,9 +1282,10 @@ function rowHtml(section, row) {
 }
 
 // The small box under an income or fixed-bill row. It is a <details>: folded to one line of small
-// text (which also says what the row is now) until you need it, and open from the start for a
-// row that has dates or a frequency, unless you have opened or folded it yourself: then it stays
-// the way you left it, in every month (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
+// text (which also says what the row is now) until you need it. A plain "Hver måned" row ALWAYS
+// starts folded: there is nothing to see in it, and Plan stays short. A row that has dates or a
+// frequency starts open, unless you have folded it yourself: then it stays folded, in every month
+// (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
 // A fixed bill can also say how often it comes: every month, every 2nd/3rd/6th month, or once a
 // year. Then the date means "first payment" (only the month counts).
 const EVERY_LABELS = { 1: T("Hver måned"), 2: T("Hver 2. måned"), 3: T("Hver 3. måned"), 6: T("Hver 6. måned"), 12: T("Hvert år") };
@@ -1267,7 +1297,7 @@ function datesHtml(row, section) {
 		frequencyBox = `<label>${t("Hvor ofte?")} <select data-field="every">${options}</select></label>`;
 	}
 	const hasSomething = Boolean(row.from || row.to || row.every > 1);
-	const isOpen = datesOpen[row.id] !== undefined ? datesOpen[row.id] : hasSomething;
+	const isOpen = hasSomething && (datesOpen[row.id] !== undefined ? datesOpen[row.id] : true);
 	return `
 		<details class="dates" ${isOpen ? "open" : ""}>
 			<summary>${esc(datesSummaryText(row, section))}</summary>
@@ -3070,6 +3100,7 @@ setLanguage(languageForStart());
 setCurrency(currencyForStart());
 applyStaticTexts();
 applyTheme(currentTheme);   // (index.html has already put the colours on; this also sets the phone's top bar)
+keepBigNumbersInside();
 
 // Opened with a kid's link (or on a device that remembers one): then it is only the kid's own page,
 // with nothing of the budget on it (kid.js). Otherwise the normal page.

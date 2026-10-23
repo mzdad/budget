@@ -1664,6 +1664,91 @@ if (page !== null) {
 	});
 }
 
+// --- Plan: the "Hver måned" boxes start folded; big numbers never widen the page (1.21.0) ---
+// Two things that once showed up on a phone: a plain "Hver måned" row's small box stayed open for
+// ever once it had been opened (the page remembered it), and an amount like 12,345.67 was wider than
+// its card, which made the whole page wider than the phone so you had to zoom out.
+attempt("plan: the boxes under the rows", () => {
+	const p = pretendPage();
+	const planData = { months: { "2026-09": {
+		income: [{ id: "inc", name: "Løn", amount: 2500000 }],
+		fixed: [
+			{ id: "plain", name: "Husleje", amount: 900000 },
+			{ id: "dated", name: "Ny aftale", amount: 10000, from: "2026-09-10" },
+			{ id: "often", name: "Forsikring", amount: 50000, every: 3, from: "2026-09-01" },
+			{ id: "folded", name: "Kontingent", amount: 20000, from: "2026-09-01" },
+		],
+		categories: [{ id: "mad", name: "Mad", limit: 100000 }],
+	} } };
+	p.run("data = cleanData(" + JSON.stringify(planData) + "); viewMonth = '2026-09'; activeTab = 'plan';");
+	// The opening tag of the small box under a row: "<details class="dates" open>" when it is open.
+	const boxOf = (id) => {
+		const html = p.view();
+		const start = html.indexOf('data-id="' + id + '"');
+		const box = html.indexOf('<details class="dates"', start);
+		return start < 0 || box < 0 ? "missing" : html.slice(box, html.indexOf(">", box));
+	};
+	const isOpen = (id) => boxOf(id).includes(" open");
+
+	p.run("datesOpen = {}; render();");
+	check("plan: nothing remembered: a plain row is folded, rows with dates or a frequency are open", ["plain", "dated", "often", "folded"].map(isOpen), [false, true, true, true]);
+	check("plan: the plain row's box says it is every month", p.view().includes("<summary>Hver måned</summary>"), true);
+
+	p.run("datesOpen = { plain: true, inc: true }; render();");
+	check("plan: a plain row starts folded even if you once opened it", [isOpen("plain"), isOpen("inc")], [false, false]);
+
+	p.run("datesOpen = { dated: true, folded: false }; render();");
+	check("plan: a row with dates stays the way you left it (open, or folded by you)", [isOpen("dated"), isOpen("folded")], [true, false]);
+
+	p.run("rememberDatesOpen('plain', true); render();");
+	check("plan: opening a plain row's box is not remembered into the next drawing", isOpen("plain"), false);
+});
+
+attempt("big numbers: a number wider than its card gets a smaller font", () => {
+	const p = pretendPage();
+	// A pretend big number: its text is `textWidth` wide at the normal size (38.4 px) and gets narrower
+	// with a smaller font, like real text. scrollWidth is never below clientWidth, like in a browser.
+	function fakeBig(cardWidth, textWidth) {
+		const element = { style: { fontSize: "" }, clientWidth: cardWidth, textWidth: textWidth };
+		Object.defineProperty(element, "scrollWidth", { get() { return Math.max(element.clientWidth, element.textWidth * (parseFloat(element.style.fontSize) || 38.4) / 38.4); } });
+		return element;
+	}
+	const wide = fakeBig(309, 395);
+	const fits = fakeBig(309, 200);
+	const hidden = fakeBig(0, 395);
+	p.context.bigOnes = [wide, fits, hidden];
+	p.context.document.querySelectorAll = () => p.context.bigOnes;
+	p.context.getComputedStyle = () => ({ fontSize: "38.4px" });
+	p.run("fitBigNumbers();");
+	const size = parseFloat(wide.style.fontSize);
+	check("big numbers: a number that is too wide gets a smaller font that fits the card", [size < 38.4, size >= 12, wide.scrollWidth <= 309], [true, true, true]);
+	check("big numbers: a number that fits keeps the normal size", fits.style.fontSize, "");
+	check("big numbers: a box that is not on screen is left alone", hidden.style.fontSize, "");
+	wide.textWidth = 150;
+	p.run("fitBigNumbers();");
+	check("big numbers: when the number gets shorter, the normal size comes back", wide.style.fontSize, "");
+	wide.textWidth = 100000;
+	p.run("fitBigNumbers();");
+	check("big numbers: a silly-long number never goes below the smallest size", wide.style.fontSize, "12px");
+
+	// It is watching the screen: any change under #view fits the numbers again (every screen draws there).
+	const watched = [];
+	p.context.MutationObserver = class { constructor(callback) { this.callback = callback; } observe(target, options) { watched.push({ callback: this.callback, options: options }); } };
+	p.run("keepBigNumbersInside();");
+	check("big numbers: it watches what is drawn on the screen", [watched.length, watched[0] && watched[0].options.childList, watched[0] && watched[0].options.subtree], [1, true, true]);
+	wide.textWidth = 395;
+	wide.style.fontSize = "";
+	watched[0].callback();
+	check("big numbers: a change on the screen fits them again", wide.scrollWidth <= 309 && wide.style.fontSize !== "", true);
+
+	// The page starts the watching (for the budget and for the kid's page), and the CSS lets the two date boxes shrink.
+	const appSource = fs.readFileSync(__dirname + "/app.js", "utf8");
+	check("big numbers: app.js starts the watching when the page opens", /^keepBigNumbersInside\(\);/m.test(appSource), true);
+	const styleSource = fs.readFileSync(__dirname + "/style.css", "utf8");
+	check("small phones: the two date boxes can shrink instead of widening the page", /\.dates-line\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/.test(styleSource), true);
+	check("small phones: a long category name on Udgifter wraps instead of pushing the amount out", /\.group-head h3\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/.test(styleSource), true);
+});
+
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps
 // an old file next to a new index.html would otherwise mix versions.
