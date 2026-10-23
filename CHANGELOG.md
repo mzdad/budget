@@ -3,6 +3,17 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.21.1 - 2026-10-23
+
+- **Fix: the small box under each row on Plan now ALWAYS starts folded.** In 1.21.0 I only folded the plain "Hver måned"
+  rows, and a row with dates or a frequency (like "Hver 3. måned, første gang 01.10.2026") still opened by itself.
+  Now every box starts folded when you come to Plan or change month: its one line already says what the row is. A box you
+  open yourself stays open while you work on the screen (adding a row draws it again), but it is forgotten when you go to
+  another tab or month. Nothing is saved on the device any more, and what an older version saved is ignored.
+- **Fix: opening the box of one row opened another row's box too.** The first income row and the first fixed bill
+  of a new budget have the same internal id (`starter-amount-0`), and the page remembered a box by id alone. It is
+  now remembered by section and id.
+
 ## 1.21.0 - 2026-10-23
 
 - **Fix: Udgifter (and Overblik and Fremtid) had to be zoomed out on a phone.** Cause: the big number at the top

@@ -5,6 +5,13 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.21.1
+
+- **2.8 Plan: the small box under each row always starts folded** (you said: 'when I go in plan, the "every month" ones
+  should always start minimized', then sent a screenshot of a "Every 3rd month" row still open). In 1.21.0 I only folded the
+  plain "Every month" rows; now every box starts folded, also one with dates or a frequency. A box you open stays open while
+  you work, and is forgotten when you change tab or month. What the page saved before is no longer used.
+
 ## Done in 1.21.0
 
 - **5.5 Nothing is wider than a phone** (you said: "when I'm on the phone and I press expenses I sometimes need to zoom
@@ -14,10 +21,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
   (small phones) and a long category name next to its amount on Udgifter (when the phone's text size is larger than
   normal). Checked on all five tabs, in both languages, at 320, 360 and 375 px and with 125% and 150% text. **Not tried
   on your own phone**, so if Udgifter still needs zooming out, tell me the phone and I will look at that case.
-- **2.8 Plan: the "Hver måned" boxes always start folded** (you said: 'when I go in plan, the "every month" ones should always
-  start minimized'). The page used to remember that you had opened one, for ever. Rows with dates or a frequency still
-  start open.
-
 ## Done in 1.20.0
 
 - **4.3 A kid's link on the home screen opens the kid's page** (you said: "when I gave my kids the link, and put the link

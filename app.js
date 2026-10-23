@@ -15,10 +15,6 @@ const APP_VERSION = new URL(document.currentScript.src).searchParams.get("v") ||
 const STORAGE_KEY = "budget.v1";
 // Whether the categories card on Overblik is open or folded. Only a convenience, kept on this device.
 const CATEGORIES_OPEN_KEY = "budget.categoriesOpen";
-// The same for the small dates / "Hvor ofte?" box under each income and fixed-bill row: what you
-// chose for each row ({ rowId: true or false }), kept on this device.
-const DATES_OPEN_KEY = "budget.datesOpen";
-const MOST_REMEMBERED_ROWS = 300;
 // Which colours the page has (Indstillinger -> Udseende), kept on this device.
 const THEME_KEY = "budget.theme";
 // A theme is a set of colours in style.css, switched on by data-theme="..." on <html>. The first one,
@@ -99,7 +95,7 @@ let reportShort = false;                      // true: the report leaves out the
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
-let datesOpen = loadDatesOpen();              // rows whose dates box you opened or folded yourself
+let datesOpen = {};                           // { "fixed:row-id": true }: the boxes you opened since you came to this screen (never saved)
 let currentTheme = loadTheme();               // which colours the page has (see THEMES)
 let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
 let standardNamesNote = "";                   // what the standard-names button said, shown once
@@ -242,28 +238,21 @@ function saveCategoriesOpen(isOpen) {
 	}
 }
 
-function loadDatesOpen() {
-	try {
-		const saved = JSON.parse(localStorage.getItem(DATES_OPEN_KEY));
-		return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
-	} catch (error) {
-		return {};
-	}
+// Remembers that you opened (or folded) this row's box, so it does not fold again while you are
+// working on the screen (adding a row draws it again). Not saved anywhere: coming back to Plan,
+// or another month, starts with every box folded (see forgetOpenDates).
+function rememberDatesOpen(key, isOpen) {
+	datesOpen[key] = isOpen;
 }
 
-// Remembers that you opened or folded this row's box. Only the newest MOST_REMEMBERED_ROWS rows
-// are kept, so rows you deleted long ago don't pile up.
-function rememberDatesOpen(rowId, isOpen) {
-	delete datesOpen[rowId];
-	datesOpen[rowId] = isOpen;   // (re-added last, so it counts as the newest)
-	for (const oldest of Object.keys(datesOpen).slice(0, -MOST_REMEMBERED_ROWS)) {
-		delete datesOpen[oldest];
-	}
-	try {
-		localStorage.setItem(DATES_OPEN_KEY, JSON.stringify(datesOpen));
-	} catch (error) {
-		// Only a convenience; the page works without it.
-	}
+// A row is known by its section AND its id: the starter income row and the first starter fixed bill
+// have the same id ("starter-amount-0"), so the id alone would open both boxes together.
+function datesKey(sectionKey, rowId) {
+	return sectionKey + ":" + rowId;
+}
+
+function forgetOpenDates() {
+	datesOpen = {};
 }
 
 // ---- The language ---------------------------------------------------------------------
@@ -1282,10 +1271,10 @@ function rowHtml(section, row) {
 }
 
 // The small box under an income or fixed-bill row. It is a <details>: folded to one line of small
-// text (which also says what the row is now) until you need it. A plain "Hver måned" row ALWAYS
-// starts folded: there is nothing to see in it, and Plan stays short. A row that has dates or a
-// frequency starts open, unless you have folded it yourself: then it stays folded, in every month
-// (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
+// text (which also says what the row is now, like "Hver 3. måned, første gang 01.10.2026") until you
+// need it. EVERY box starts folded when you come to Plan or change month, also one with dates or
+// a frequency: the line already says what it is, and Plan stays short. One you opened yourself
+// stays open while you work on the screen (datesOpen). (The maths is in budget.js: amountIn, isDueIn.)
 // A fixed bill can also say how often it comes: every month, every 2nd/3rd/6th month, or once a
 // year. Then the date means "first payment" (only the month counts).
 const EVERY_LABELS = { 1: T("Hver måned"), 2: T("Hver 2. måned"), 3: T("Hver 3. måned"), 6: T("Hver 6. måned"), 12: T("Hvert år") };
@@ -1296,8 +1285,7 @@ function datesHtml(row, section) {
 		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${t(EVERY_LABELS[every])}</option>`).join("");
 		frequencyBox = `<label>${t("Hvor ofte?")} <select data-field="every">${options}</select></label>`;
 	}
-	const hasSomething = Boolean(row.from || row.to || row.every > 1);
-	const isOpen = hasSomething && (datesOpen[row.id] !== undefined ? datesOpen[row.id] : true);
+	const isOpen = datesOpen[datesKey(section.key, row.id)] === true;
 	return `
 		<details class="dates" ${isOpen ? "open" : ""}>
 			<summary>${esc(datesSummaryText(row, section))}</summary>
@@ -1575,6 +1563,7 @@ document.addEventListener("click", (event) => {
 	const tabButton = event.target.closest("[data-tab]");
 	if (tabButton) {
 		activeTab = tabButton.dataset.tab;
+		forgetOpenDates();   // every dates box starts folded again
 		render();
 		window.scrollTo(0, 0);
 		return;
@@ -1589,18 +1578,21 @@ document.addEventListener("click", (event) => {
 		case "previous-month":
 			closeBankImport();   // a picture belongs to the month it was chosen in
 			viewMonth = shiftMonth(viewMonth, -1);
+			forgetOpenDates();
 			render();
 			window.scrollTo(0, 0);
 			break;
 		case "next-month":
 			closeBankImport();
 			viewMonth = shiftMonth(viewMonth, 1);
+			forgetOpenDates();
 			render();
 			window.scrollTo(0, 0);
 			break;
 		case "this-month":
 			closeBankImport();
 			viewMonth = monthKeyOf(new Date());
+			forgetOpenDates();
 			render();
 			window.scrollTo(0, 0);
 			break;
@@ -1742,7 +1734,7 @@ document.addEventListener("click", (event) => {
 	const summary = event.target.closest(".dates > summary");
 	const rowElement = summary && summary.closest(".row");
 	if (rowElement) {
-		rememberDatesOpen(rowElement.dataset.id, !summary.parentElement.open);
+		rememberDatesOpen(datesKey(rowElement.dataset.section, rowElement.dataset.id), !summary.parentElement.open);
 	}
 });
 

@@ -888,6 +888,8 @@ function pretendPage(options) {
 	if (!options || options.language !== null) {
 		store["budget.language"] = (options && options.language) || "da";
 	}
+	// pretendPage({ store: { key: "text" } }) starts with things already saved on the device.
+	Object.assign(store, options && options.store);
 	const languageButton = { textContent: "" };
 	// Anything that is not special is another pretend element, so any call or property works.
 	const pretend = new Proxy(function () {}, {
@@ -1664,12 +1666,16 @@ if (page !== null) {
 	});
 }
 
-// --- Plan: the "Hver måned" boxes start folded; big numbers never widen the page (1.21.0) ---
-// Two things that once showed up on a phone: a plain "Hver måned" row's small box stayed open for
-// ever once it had been opened (the page remembered it), and an amount like 12,345.67 was wider than
-// its card, which made the whole page wider than the phone so you had to zoom out.
+// --- Plan: the small boxes always start folded; big numbers never widen the page (1.21.0, 1.21.1) ---
+// Two things that once showed up on a phone and a PC: the small box under a row ("Hver måned", "Hver
+// 3. måned, første gang ...") stayed open (the page remembered it, or opened it for a row with a
+// frequency), and an amount like 12,345.67 was wider than its card, which made the whole page wider
+// than the phone so you had to zoom out.
 attempt("plan: the boxes under the rows", () => {
-	const p = pretendPage();
+	// A PC that used the page before 1.21.1 has every box saved as "open" (the page remembered it).
+	const oldSavedChoices = JSON.stringify({ inc: true, plain: true, dated: true, often: true, folded: true });
+	const p = pretendPage({ store: { "budget.datesOpen": oldSavedChoices } });
+	const foldedTag = '<details class="dates" ';   // the opening tag of a folded box
 	const planData = { months: { "2026-09": {
 		income: [{ id: "inc", name: "Løn", amount: 2500000 }],
 		fixed: [
@@ -1690,18 +1696,44 @@ attempt("plan: the boxes under the rows", () => {
 	};
 	const isOpen = (id) => boxOf(id).includes(" open");
 
-	p.run("datesOpen = {}; render();");
-	check("plan: nothing remembered: a plain row is folded, rows with dates or a frequency are open", ["plain", "dated", "often", "folded"].map(isOpen), [false, true, true, true]);
-	check("plan: the plain row's box says it is every month", p.view().includes("<summary>Hver måned</summary>"), true);
+	// A tap on a tab button, or on a month button, the way the page's own click listener gets it.
+	const tapTab = (tab) => p.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-tab]" ? { dataset: { tab: tab } } : null) } }));
+	const tapAction = (action) => p.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === "[data-action]" ? { dataset: { action: action } } : null) } }));
+	const allBoxes = ["inc", "plain", "dated", "often", "folded"];
 
-	p.run("datesOpen = { plain: true, inc: true }; render();");
-	check("plan: a plain row starts folded even if you once opened it", [isOpen("plain"), isOpen("inc")], [false, false]);
+	p.run("render();");   // as the page started: what was saved on the device before must not be in use
+	check("plan: every box starts folded: plain, with dates, and with a frequency", allBoxes.map(isOpen), [false, false, false, false, false]);
+	check("plan: the folded line says what the row is", ["<summary>Hver måned</summary>", "<summary>Hver 3. måned, første gang 01.09.2026</summary>"].map((line) => p.view().includes(line)), [true, true]);
 
-	p.run("datesOpen = { dated: true, folded: false }; render();");
-	check("plan: a row with dates stays the way you left it (open, or folded by you)", [isOpen("dated"), isOpen("folded")], [true, false]);
+	// A box you open stays open while you work on the screen (adding a row draws everything again).
+	p.run("datesOpen = {}; rememberDatesOpen(datesKey('fixed', 'dated'), true); render();");
+	check("plan: a box you opened stays open when the screen is drawn again, the others stay folded", allBoxes.map(isOpen), [false, false, true, false, false]);
+	p.run("rememberDatesOpen(datesKey('fixed', 'dated'), false); render();");
+	check("plan: and folding it again works", isOpen("dated"), false);
 
-	p.run("rememberDatesOpen('plain', true); render();");
-	check("plan: opening a plain row's box is not remembered into the next drawing", isOpen("plain"), false);
+	// ... but it is not kept for next time: not after a tap on a tab, not after a month button.
+	p.run("activeTab = 'plan'; rememberDatesOpen(datesKey('fixed', 'dated'), true); rememberDatesOpen(datesKey('fixed', 'often'), true); render();");
+	tapTab("settings");
+	tapTab("plan");
+	check("plan: coming back to Plan, every box is folded again", allBoxes.map(isOpen), [false, false, false, false, false]);
+	// (A new month is a copy of the one before it, with the same row ids, so the boxes are really there.)
+	for (const button of ["next-month", "previous-month", "this-month"]) {
+		p.run("viewMonth = '2026-10'; activeTab = 'plan'; rememberDatesOpen(datesKey('fixed', 'dated'), true); rememberDatesOpen(datesKey('fixed', 'often'), true); render();");
+		tapAction(button);
+		check("plan: after the month button " + button + " every box is there and folded again", allBoxes.map(boxOf), allBoxes.map(() => foldedTag));
+	}
+	// What the page did before 1.21.1 saved on the device is not read any more.
+	// A tap on the one-line summary of one row's box, the way the page's own click listener gets it. The
+	// starter income row and the first starter fixed bill really do share one id, so use that.
+	const same = pretendPage();
+	same.run("data = cleanData(" + JSON.stringify({ months: { "2026-09": { income: [{ id: "same", name: "Løn", amount: 100 }], fixed: [{ id: "same", name: "Husleje", amount: 100 }], categories: [] } } }) + "); viewMonth = '2026-09'; activeTab = 'plan'; render();");
+	const tapSummary = (section) => same.handlers.click.forEach((handler) => handler({ target: { closest: (selector) => (selector === ".dates > summary" ? { parentElement: { open: false }, closest: () => ({ dataset: { section: section, id: "same" } }) } : null) } }));
+	tapSummary("fixed");
+	same.run("render();");
+	const sameHtml = same.view();
+	const boxesOfSame = [...sameHtml.matchAll(/<details class="dates" ?(open)?>/g)].map((match) => match[1] !== undefined);
+	check("plan: two rows with the same id in different sections open on their own (income folded, fixed bill open)", boxesOfSame, [false, true]);
+	check("plan: nothing new about open boxes is saved on the device", [Object.keys(p.store).filter((key) => key.includes("datesOpen")), p.store["budget.datesOpen"]], [["budget.datesOpen"], oldSavedChoices]);
 });
 
 attempt("big numbers: a number wider than its card gets a smaller font", () => {
