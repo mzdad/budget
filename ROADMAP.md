@@ -5,6 +5,13 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.25.0
+
+- **3.1 One-off expenses in Fremtid, and a longer horizon.** A card for one-off amounts (cost or income, with a date) and a
+  choice of 12 / 24 / 36 / 60 months. **You must publish `firestore.rules` once** (Firebase console -> Firestore -> Rules,
+  paste the file, Publish) before using one-offs while logged in. Not done: a one-off does not change the month's
+  "left to spend" on Overblik (it is a Fremtid thing); tell me if you want it there too.
+
 ## Done in 1.24.0
 
 - **3.3 Spread a yearly bill over the months** ("put aside per month"). A tick box in the small box under a row that comes
@@ -234,7 +241,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 3.1 | **One-off expenses in Fremtid** (a holiday, say), and a longer horizon than 12 months. | Fremtid only repeats the plan month after month, so a big expense you know is coming is not in it. | M |
 | 3.2 | **A real Excel file (.xlsx)** instead of .csv. | The .csv opens fine in Excel (Danish format), but a real file keeps the look. Needs a library. | M |
 | 3.4 | **On a kid's "fik": a tick for "only moved inside the pile"**, so Opsparing does not change. | A kid's "fik" always raises Opsparing (your choice, option A, 1.8.0); if it was only money moved inside the pile you retype the real Opsparing today. | S |
 

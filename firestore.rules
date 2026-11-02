@@ -68,8 +68,10 @@ service cloud.firestore {
     // pots (your kids' money in your pile) is optional too, and at most 500 entries a month
     // (MOST_POT_ENTRIES_PER_MONTH in budget.js).
     // balances ("money now" on Fremtid: Lønkonto and Opsparing) is optional as well.
+    // oneOffs (one-off amounts on Fremtid: a holiday, a refund) is optional too, at most 100 a month
+    // (MOST_ONE_OFFS_PER_MONTH in budget.js).
     function isValidMonth(data) {
-      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'startBalance', 'balances', 'pots', 'updatedAt'])
+      return data.keys().hasOnly(['income', 'fixed', 'savings', 'categories', 'spending', 'startBalance', 'balances', 'pots', 'oneOffs', 'updatedAt'])
         && data.keys().hasAll(['income', 'fixed', 'savings', 'categories', 'spending', 'updatedAt'])
         && data.income is list && data.income.size() <= 50
         && data.fixed is list && data.fixed.size() <= 100
@@ -80,6 +82,7 @@ service cloud.firestore {
             || (data.startBalance is int && data.startBalance >= 0 && data.startBalance <= 1000000000))
         && (!('balances' in data) || isValidBalances(data.balances))
         && (!('pots' in data) || (data.pots is list && data.pots.size() <= 500))
+        && (!('oneOffs' in data) || (data.oneOffs is list && data.oneOffs.size() <= 100))
         && data.updatedAt == request.time;
     }
 

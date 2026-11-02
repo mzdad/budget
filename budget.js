@@ -43,6 +43,8 @@ const MOST_CATEGORIES = 50;
 const MOST_SPENDING_PER_MONTH = 2000;
 // Entries in the kids' money (Børn) that one month may hold.
 const MOST_POT_ENTRIES_PER_MONTH = 500;
+// One-off amounts (Fremtid: a holiday, a tax refund) that one month may hold. firestore.rules says the same.
+const MOST_ONE_OFFS_PER_MONTH = 100;
 
 
 // --- The currency ------------------------------------------------------------
@@ -302,6 +304,7 @@ function starterMonth() {
 		startBalance: 0,
 		balances: {},
 		pots: [],
+		oneOffs: [],
 	};
 }
 
@@ -365,6 +368,7 @@ function copyPlanOf(month) {
 	copy.startBalance = 0;
 	copy.balances = {};
 	copy.pots = [];   // like purchases, these belong to the month they happened in
+	copy.oneOffs = [];   // each has its own date, and is saved in one month only
 	return copy;
 }
 
@@ -462,11 +466,17 @@ function mergeDeviceMonth(accountMonth, deviceMonth) {
 		}
 	}
 
+	// One-off amounts: added by id too, never twice.
+	const knownOneOffs = new Set((accountMonth.oneOffs || []).map((entry) => entry.id));
+	const newOneOffs = (deviceMonth.oneOffs || []).filter((entry) => !knownOneOffs.has(entry.id));
+	const takenOneOffs = newOneOffs.slice(0, Math.max(0, MOST_ONE_OFFS_PER_MONTH - (accountMonth.oneOffs || []).length));
+
 	const merged = JSON.parse(JSON.stringify(accountMonth));
 	merged.spending = accountMonth.spending.concat(taken);
 	merged.pots = (accountMonth.pots || []).concat(takenPots);
+	merged.oneOffs = (accountMonth.oneOffs || []).concat(takenOneOffs);
 	merged.balances = balances;
-	return { month: merged, added: taken.length + takenPots.length + takenBalances };
+	return { month: merged, added: taken.length + takenPots.length + takenOneOffs.length + takenBalances };
 }
 
 // Newest date first. Within one day, the one added last comes first.
@@ -742,6 +752,22 @@ function barLevel(spent, limit) {
 
 // How many months the "Fremtid" screen looks ahead.
 const FORECAST_MONTHS = 12;
+// The lengths the Fremtid screen offers (in months). FORECAST_MONTHS is the one it starts with.
+const FORECAST_CHOICES = [12, 24, 36, 60];
+
+// Every one-off amount in every saved month, oldest date first: [{ id, name, date, amount, monthKey }].
+// `amount` is signed: negative costs money (a holiday), positive brings it in (a tax refund). A one-off is
+// not part of any month's plan: it is saved in whichever month the page keeps such things in, and counts
+// in the month its DATE is in, on Fremtid only.
+function allOneOffs(months) {
+	const list = [];
+	for (const monthKey of Object.keys(months)) {
+		for (const entry of months[monthKey].oneOffs || []) {
+			list.push({ id: entry.id, name: entry.name, date: entry.date, amount: entry.amount, monthKey: monthKey });
+		}
+	}
+	return list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
 
 // A simple what-if over the next `howMany` months, starting with `startTotal` (see moneyNow; if it
 // is left out, the old single number the month holds, startBalance). It is arithmetic, not a
@@ -752,13 +778,16 @@ const FORECAST_MONTHS = 12;
 // change of income - a new job from October, say - is followed once you have set up that month,
 // and everything after it repeats the newest plan.
 //
+// One-off amounts (oneOffs, see allOneOffs) dated in one of these months are added to that month in both versions.
+//
 // Two versions, because the plan leaves a gap between "what you may spend" and "what you save":
 // - added: you spend exactly your category limits. Everything else stays yours, so your money
 //   grows by income - fixed bills - limits (your savings, plus whatever you have not handed out).
 // - carefulAdded: only your planned savings grow and the rest is spent. Never more than
 //   added, which matters when the limits add up to more than you have.
-function forecast(month, key, howMany, months, startTotal) {
+function forecast(month, key, howMany, months, startTotal, oneOffs) {
 	const savedMonths = months || {};
+	const dated = oneOffs || [];
 	const start = startTotal === undefined ? month.startBalance : startTotal;
 
 	const rows = [];
@@ -774,12 +803,15 @@ function forecast(month, key, howMany, months, startTotal) {
 		const s = summarize(plan, rowKey);
 		const added = s.income - s.fixed - s.limits;
 		const carefulAdded = Math.min(s.savings, added);
-		total += added;
-		carefulTotal += carefulAdded;
+		// What happens once, in this month (a holiday, a refund): in both versions, because it happens either way.
+		const oneOff = sumOf(dated.filter((entry) => entry.date.slice(0, 7) === rowKey), "amount");
+		total += added + oneOff;
+		carefulTotal += carefulAdded + oneOff;
 		rows.push({
 			key: rowKey,
 			added: added,
 			carefulAdded: carefulAdded,
+			oneOff: oneOff,
 			total: total,
 			carefulTotal: carefulTotal,
 			ownPlan: i === 0 || Boolean(ownPlan),
@@ -1883,6 +1915,23 @@ function cleanPots(list) {
 		.slice(0, MOST_POT_ENTRIES_PER_MONTH);
 }
 
+// One-off amounts of one month: { id, name, date, amount } with a signed amount that is not 0.
+function cleanOneOffs(list) {
+	if (!Array.isArray(list)) {
+		return [];
+	}
+	return list
+		.filter((entry) => entry && typeof entry === "object" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
+		.map((entry) => ({
+			id: cleanId(entry.id),
+			name: cleanText(entry.name, MAX_NAME_LENGTH).trim(),
+			date: entry.date,
+			amount: cleanSignedAmount(entry.amount),
+		}))
+		.filter((entry) => entry.amount !== 0)
+		.slice(0, MOST_ONE_OFFS_PER_MONTH);
+}
+
 // The typed "money now" numbers of one month: only "account" and "savings", each { amount, at }.
 // A number without a real moment is dropped, because without it nobody can tell what came after.
 function cleanBalances(raw) {
@@ -1915,6 +1964,7 @@ function cleanMonth(raw) {
 		startBalance: cleanAmount(source.startBalance),
 		balances: cleanBalances(source.balances),
 		pots: cleanPots(source.pots),
+		oneOffs: cleanOneOffs(source.oneOffs),
 	};
 }
 
@@ -1953,7 +2003,7 @@ if (typeof module !== "undefined") {
 		makeKidToken, kidLink, parseKidKey, parentSideOf, cleanKidEntry, withKidEntries, KID_TOKEN_LENGTH,
 		noteHistory, categoryIdForNote,
 		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
-		FORECAST_MONTHS, forecast,
+		FORECAST_MONTHS, FORECAST_CHOICES, forecast, allOneOffs, cleanOneOffs, MOST_ONE_OFFS_PER_MONTH,
 		dateText, shortDateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
 		cleanAmount, cleanMonth, cleanData, sameData,
 		MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES, MOST_SPENDING_PER_MONTH,

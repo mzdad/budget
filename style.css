@@ -534,6 +534,11 @@ label.button.secondary {
 	border-bottom: 1px solid var(--line);
 }
 
+/* "Se frem": the choice of how many months Fremtid looks ahead, at the top of the result card. */
+.horizon {
+	margin: 0 0 8px;
+}
+
 /* "Læg til side hver måned": a tick box with its text beside it (boxes are otherwise full width). */
 .spread-check {
 	display: flex;

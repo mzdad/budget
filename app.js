@@ -17,6 +17,8 @@ const STORAGE_KEY = "budget.v1";
 const CATEGORIES_OPEN_KEY = "budget.categoriesOpen";
 // Which colours the page has (Indstillinger -> Udseende), kept on this device.
 const THEME_KEY = "budget.theme";
+// How many months Fremtid looks ahead (one of FORECAST_CHOICES), kept on this device.
+const HORIZON_KEY = "budget.horizon";
 // A theme is a set of colours in style.css, switched on by data-theme="..." on <html>. The first one,
 // "green", is the page's normal colours (and has no attribute); it follows the phone's light or dark
 // setting. "red" is red and black, always dark. `bar` is the colour of the phone's top bar.
@@ -94,6 +96,7 @@ let reportScope = null;                       // what the report shows: { type: 
 let reportShort = false;                      // true: the report leaves out the single items and keeps the totals
 let lastCategoryId = "";                      // so the next purchase starts on the same category
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
+let forecastMonths = loadHorizon();           // how many months Fremtid looks ahead
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = {};                           // { "fixed:row-id": true }: the boxes you opened since you came to this screen (never saved)
 let editingSpendingId = null;                 // the id of the purchase on Udgifter that is open for editing, or null
@@ -228,6 +231,23 @@ function loadCategoriesOpen() {
 		return localStorage.getItem(CATEGORIES_OPEN_KEY) !== "0";   // open unless it was folded
 	} catch (error) {
 		return true;
+	}
+}
+
+function loadHorizon() {
+	try {
+		const saved = Number(localStorage.getItem(HORIZON_KEY));
+		return FORECAST_CHOICES.includes(saved) ? saved : FORECAST_MONTHS;
+	} catch (error) {
+		return FORECAST_MONTHS;
+	}
+}
+
+function saveHorizon(months) {
+	try {
+		localStorage.setItem(HORIZON_KEY, String(months));
+	} catch (error) {
+		// Only a convenience; the page works without it.
 	}
 }
 
@@ -947,7 +967,89 @@ function futureHtml(month) {
 				<p class="hint">${t("Skriv tallene fra banken. Det nyeste, du skriver, gælder altid.")}${hasKids ? " " + t("Opsparing går ned, når et barn bruger penge, og op, når et barn får penge.") : ""} ${t("Lønkonto ændrer sig ikke af sig selv.")}</p>
 			</details>
 		</section>
+		${oneOffCardHtml()}
 		<div id="future-results">${futureResultsHtml(month)}</div>`;
+}
+
+// The card for one-off amounts on Fremtid: a holiday, a tax refund. Each has a date, and counts in the
+// month the date is in (forecast in budget.js). They are saved like the typed account numbers, in one saved
+// month (monthToKeepBalancesIn), not in the plan of the month they fall in.
+function oneOffCardHtml() {
+	const lastShown = shiftMonth(viewMonth, forecastMonths - 1);
+	let list = "";
+	for (const entry of allOneOffs(data.months)) {
+		const key = entry.date.slice(0, 7);
+		const outside = key < viewMonth || key > lastShown ? `<small>${t("Ikke med i tallene (uden for de viste måneder)")}</small>` : "";
+		list += `
+			<li>
+				<div class="what">${esc(entry.name || t("(uden navn)"))}<small>${esc(dateText(entry.date))}</small>${outside}</div>
+				<span class="money ${entry.amount < 0 ? "bad-text" : ""}">${formatKr(entry.amount)}</span>
+				<button class="icon" data-action="delete-oneoff" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}" aria-label="${t("Slet engangsbeløbet")}">✕</button>
+			</li>`;
+	}
+	return `
+		<section class="card" id="oneoff-card">
+			<h2>${t("Engangsbeløb")}</h2>
+			<p class="hint">${t("Noget, der kun sker én gang, fx en ferie eller en skatterefusion. Det kommer med i Fremtid i den måned, datoen ligger i.")}</p>
+			${list === "" ? "" : `<ul class="list">${list}</ul>`}
+			<details class="explain"${list === "" ? " open" : ""}>
+				<summary>${t("+ Tilføj et engangsbeløb")}</summary>
+				<form id="oneoff-form" autocomplete="off">
+					<label>${t("Hvad er det?")}
+						<input name="name" maxlength="${MAX_NAME_LENGTH}" placeholder="${t("fx Ferie")}">
+					</label>
+					<label>${amountLabel()}
+						<input name="amount" inputmode="decimal" placeholder="${t("fx 5000")}" required>
+					</label>
+					<label>${t("Hvad sker der?")}
+						<select name="kind">
+							<option value="out">${t("Det koster penge")}</option>
+							<option value="in">${t("Det giver penge")}</option>
+						</select>
+					</label>
+					<label>${t("Dato")}
+						<input type="date" name="date" required>
+					</label>
+					<button type="submit" class="secondary">${t("Tilføj")}</button>
+					<p id="oneoff-message" class="message" role="status"></p>
+				</form>
+			</details>
+		</section>`;
+}
+
+function addOneOff(form) {
+	const ore = parseAmount(form.elements.amount.value);
+	if (ore === null || ore <= 0) {
+		setMessage("oneoff-message", t("Skriv et beløb større end 0, fx 5000."), true);
+		return;
+	}
+	const date = form.elements.date.value;
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+		setMessage("oneoff-message", t("Vælg en dato."), true);
+		return;
+	}
+	const keeper = monthToKeepBalancesIn();
+	if (getMonth(keeper).oneOffs.length >= MOST_ONE_OFFS_PER_MONTH) {
+		setMessage("oneoff-message", t("For mange engangsbeløb ({max}). Slet nogle.", { max: MOST_ONE_OFFS_PER_MONTH }), true);
+		return;
+	}
+	const name = form.elements.name.value.trim().slice(0, MAX_NAME_LENGTH);
+	const amount = form.elements.kind.value === "in" ? ore : -ore;
+	changeMonth((month) => {
+		month.oneOffs.push({ id: newId(), name: name, date: date, amount: amount });
+	}, keeper);
+	render();
+	setMessage("oneoff-message", t("Tilføjet."), false);
+}
+
+function deleteOneOff(id, monthKey) {
+	if (!confirm(t("Slet engangsbeløbet?"))) {
+		return;
+	}
+	changeMonth((month) => {
+		month.oneOffs = month.oneOffs.filter((entry) => entry.id !== id);
+	}, monthKey);
+	render();
 }
 
 // What goes in a number box: what was typed (0 shows as "0"), or an empty box if nothing was typed.
@@ -1010,7 +1112,7 @@ function futureResultsHtml(month) {
 		return '<section class="card"><p>' + t("Skriv din indkomst under <b>Plan</b> først.") + "</p></section>";
 	}
 
-	const f = forecast(month, viewMonth, FORECAST_MONTHS, data.months, startTotalFor(month));
+	const f = forecast(month, viewMonth, forecastMonths, data.months, startTotalFor(month), allOneOffs(data.months));
 	const tone = f.endTotal < 0 ? "bad" : "good";
 
 	// When you have set up later months differently (a new job, say), "the same every month"
@@ -1020,19 +1122,25 @@ function futureResultsHtml(month) {
 		: t("Lægges til hver måned <b>{amount}</b>", { amount: formatKr(f.perMonth) });
 	const carefulText = t("Kun opsparingen: <b>{amount}</b>", { amount: formatKr(f.carefulEndTotal) });
 
+	// A column for the one-off amounts, only when one of the months shown has one.
+	const hasOneOffs = f.rows.some((row) => row.oneOff !== 0);
 	let rows = "";
 	for (const row of f.rows) {
 		rows += `
 			<tr>
 				<td>${esc(shortMonthLabel(row.key))}${row.ownPlan ? "" : " *"}</td>
 				<td class="${row.added < 0 ? "bad" : ""}">${formatKr(row.added)}</td>
+				${hasOneOffs ? `<td class="${row.oneOff < 0 ? "bad" : ""}">${row.oneOff === 0 ? "" : formatKr(row.oneOff)}</td>` : ""}
 				<td class="${row.total < 0 ? "bad" : ""}">${formatKr(row.total)}</td>
 			</tr>`;
 	}
 
 	return `
 		<section class="card">
-			<div class="label">${t("Om {n} måneder har du", { n: FORECAST_MONTHS })}</div>
+			<label class="horizon">${t("Se frem")}
+					<select id="horizon-choice">${FORECAST_CHOICES.map((months) => `<option value="${months}"${months === forecastMonths ? " selected" : ""}>${monthsText(months)}</option>`).join("")}</select>
+				</label>
+				<div class="label">${t("Om {n} måneder har du", { n: forecastMonths })}</div>
 			<div class="big-number ${tone}">${formatKr(f.endTotal)}</div>
 			<p class="hint">${t("Ved udgangen af {month}.", { month: esc(monthInSentence(f.lastKey)) })}</p>
 			<div class="facts">
@@ -1052,9 +1160,9 @@ function futureResultsHtml(month) {
 				<summary class="fold-title">${t("Måned for måned")}</summary>
 				<div class="table-scroll">
 					<table>
-						<thead><tr><th>${t("Måned")}</th><th>${t("Lægges til")}</th><th>${t("Penge i alt")}</th></tr></thead>
+						<thead><tr><th>${t("Måned")}</th><th>${t("Lægges til")}</th>${hasOneOffs ? `<th>${t("Engangsbeløb")}</th>` : ""}<th>${t("Penge i alt")}</th></tr></thead>
 						<tbody>
-							<tr><td>${t("Start")}</td><td></td><td>${formatKr(f.start)}</td></tr>${rows}
+							<tr><td>${t("Start")}</td><td></td>${hasOneOffs ? "<td></td>" : ""}<td>${formatKr(f.start)}</td></tr>${rows}
 						</tbody>
 					</table>
 				</div>
@@ -1691,6 +1799,9 @@ document.addEventListener("click", (event) => {
 		case "delete-kid-entry":
 			deleteKidsEntry(button.dataset.token, button.dataset.id);
 			break;
+		case "delete-oneoff":
+			deleteOneOff(button.dataset.id, button.dataset.month);
+			break;
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
@@ -1757,6 +1868,9 @@ document.addEventListener("submit", (event) => {
 	if (event.target.id === "add-form") {
 		event.preventDefault();
 		addSpending(event.target);
+	} else if (event.target.id === "oneoff-form") {
+		event.preventDefault();
+		addOneOff(event.target);
 	} else if (event.target.id === "edit-spending-form") {
 		event.preventDefault();
 		saveSpendingEdit(event.target);
@@ -1818,6 +1932,12 @@ document.addEventListener("change", (event) => {
 	const input = event.target;
 	if (input.id === "language-choice") {
 		changeLanguage(input.value);
+		return;
+	}
+	if (input.id === "horizon-choice") {
+		forecastMonths = Number(input.value);
+		saveHorizon(forecastMonths);
+		render();
 		return;
 	}
 	if (input.id === "currency-choice") {

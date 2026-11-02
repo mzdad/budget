@@ -138,6 +138,11 @@ async function main() {
 	check("pots: 500 entries (the most)", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), pots: list(Array.from({ length: 500 }, (_, i) => potEntry(i))) }), "ALLOW");
 	check("pots: 501 entries", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), pots: list(Array.from({ length: 501 }, (_, i) => potEntry(i))) }), "DENY");
 	check("pots: not a list", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), pots: str("x") }), "DENY");
+	const oneOff = (i) => ({ mapValue: { fields: { id: str("o" + i), name: str("Ferie"), date: str("2026-12-10"), amount: int(-800000) } } });
+	check("one-off amounts added (optional field)", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), oneOffs: list([oneOff(1), oneOff(2)]) }), "ALLOW");
+	check("one-offs: 100 entries (the most)", await write(alice, "budgets/alice/months/2026-10", { ...goodFields(), oneOffs: list(Array.from({ length: 100 }, (_, i) => oneOff(i))) }), "ALLOW");
+	check("one-offs: 101 entries", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), oneOffs: list(Array.from({ length: 101 }, (_, i) => oneOff(i))) }), "DENY");
+	check("one-offs: not a list", await write(alice, "budgets/alice/months/2026-11", { ...goodFields(), oneOffs: str("x") }), "DENY");
 	// "Money now" (Lønkonto / Opsparing on Fremtid): { account: { amount, at }, savings: { amount, at } }
 	const map = (fields) => ({ mapValue: { fields } });
 	const typedNumber = (amount, at) => map({ amount: int(amount), at: int(at) });

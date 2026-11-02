@@ -98,6 +98,7 @@ const month = {
 	startBalance: 1000000,
 	balances: {},
 	pots: [],
+	oneOffs: [],
 };
 const s = budget.summarize(month);
 check("income total", s.income, 2600000);
@@ -1795,6 +1796,30 @@ check("spread: a year of shares is the bill (to the øre when it divides evenly)
 check("spread: the plan counts the share, not the bill", budget.summarize({ income: [{ id: "i", name: "Løn", amount: 3000000 }], fixed: [spreadBill], savings: 0, categories: [], spending: [] }, "2026-05").fixed, 100000);
 check("spread: spread without a first day or without 'every' is ignored when saved data is cleaned", budget.cleanMonth({ fixed: [{ id: "a", name: "a", amount: 100, spread: true }, { id: "b", name: "b", amount: 100, every: 12, spread: true }, { id: "c", name: "c", amount: 100, every: 12, from: "2026-03-15", spread: true }] }).fixed.map((row) => row.spread === true), [false, false, true]);
 check("spread: the report says it", budget.windowText(spreadBill), "hvert år lægges til side hver måned fra 15.03.2026");
+
+// --- One-off amounts and a longer look ahead on Fremtid (1.25.0) ---
+const planForOneOffs = { income: [{ id: "i", name: "Løn", amount: 3000000 }], fixed: [{ id: "f", name: "Husleje", amount: 1000000 }], savings: 500000, categories: [{ id: "c", name: "Mad", limit: 1000000 }], spending: [], startBalance: 0, balances: {}, pots: [], oneOffs: [] };
+const holiday = { id: "h", name: "Ferie", date: "2027-02-10", amount: -800000 };
+const refund = { id: "r", name: "Skat", date: "2027-04-02", amount: 300000 };
+const plain12 = budget.forecast(planForOneOffs, "2027-01", 12, {}, 0);
+const withOneOffs = budget.forecast(planForOneOffs, "2027-01", 12, {}, 0, [holiday, refund]);
+check("one-off: without any, the forecast is as before", [plain12.endTotal, plain12.rows[1].oneOff], [12000000, 0]);
+check("one-off: a cost and a refund move the end total by their sum", withOneOffs.endTotal, plain12.endTotal - 800000 + 300000);
+check("one-off: each lands in the month of its date", withOneOffs.rows.map((row) => row.oneOff).slice(0, 4), [0, -800000, 0, 300000]);
+check("one-off: running totals include it from that month on", [withOneOffs.rows[0].total, withOneOffs.rows[1].total, withOneOffs.rows[3].total], [1000000, 2000000 - 800000, 4000000 - 800000 + 300000]);
+check("one-off: the 'only savings' version carries it too", withOneOffs.carefulEndTotal, plain12.carefulEndTotal - 500000);
+check("one-off: the monthly amount is not changed by it", [withOneOffs.perMonth, withOneOffs.varies], [plain12.perMonth, false]);
+check("one-off: dated outside the months shown does not count", budget.forecast(planForOneOffs, "2027-01", 12, {}, 0, [{ id: "x", name: "x", date: "2028-06-01", amount: -1 }, { id: "y", name: "y", date: "2026-12-31", amount: -1 }]).endTotal, plain12.endTotal);
+const long = budget.forecast(planForOneOffs, "2027-01", 60, {}, 0, [{ ...holiday, date: "2030-06-01" }]);
+check("look ahead: 60 months shown, ending in the 60th month, and a late one-off counts", [long.rows.length, long.lastKey, long.endTotal], [60, "2031-12", 60 * 1000000 - 800000]);
+check("look ahead: the choices", budget.FORECAST_CHOICES, [12, 24, 36, 60]);
+const savedOneOffs = { "2027-01": { oneOffs: [refund, holiday] }, "2026-12": { oneOffs: [{ id: "z", name: "Z", date: "2026-12-24", amount: 100 }] }, "2027-02": {} };
+check("one-off: all of them, oldest date first, with the month they are saved in", budget.allOneOffs(savedOneOffs).map((entry) => [entry.id, entry.monthKey]), [["z", "2026-12"], ["h", "2027-01"], ["r", "2027-01"]]);
+check("one-off: saved data is cleaned (no zero amount, no bad date, long names cut)", budget.cleanOneOffs([{ id: "a", name: "  Ferie ", date: "2027-02-10", amount: -500 }, { id: "b", name: "x", date: "2027-02-10", amount: 0 }, { id: "c", name: "x", date: "nope", amount: 5 }, "junk", { id: "d", name: "N".repeat(100), date: "2027-02-11", amount: 5 }]).map((entry) => [entry.id, entry.name.length, entry.amount]), [["a", 5, -500], ["d", 60, 5]]);
+check("one-off: a month without the field gets an empty list", budget.cleanMonth({ income: [] }).oneOffs, []);
+check("one-off: a new month copied from this one starts with none", budget.copyPlanOf({ ...planForOneOffs, oneOffs: [holiday] }).oneOffs, []);
+const mergedOneOffs = budget.mergeDeviceMonth({ ...planForOneOffs, oneOffs: [holiday] }, { ...planForOneOffs, oneOffs: [holiday, refund] });
+check("one-off: signing in on a device with some adds only the new ones", [mergedOneOffs.month.oneOffs.map((entry) => entry.id), mergedOneOffs.added], [["h", "r"], 1]);
 
 // --- Udgifter: a purchase can be edited (1.22.0) ---
 attempt("udgifter: edit a purchase", () => {

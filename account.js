@@ -151,6 +151,10 @@ async function saveAccountMonth(username, key, month) {
 	if (month.pots && month.pots.length > 0) {
 		fields.pots = month.pots;
 	}
+	// And for one-off amounts on Fremtid (a holiday, a refund).
+	if (month.oneOffs && month.oneOffs.length > 0) {
+		fields.oneOffs = month.oneOffs;
+	}
 	// And for the typed account numbers (Lønkonto, Opsparing on Fremtid).
 	if (month.balances && Object.keys(month.balances).length > 0) {
 		fields.balances = month.balances;

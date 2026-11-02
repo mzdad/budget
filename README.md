@@ -17,7 +17,8 @@ A small monthly budget page for phone and PC. Danish, kroner.
 - **Fremtid** - type what is on your two accounts, **Lønkonto** and **Opsparing** (each shows
   when it was last updated), and it keeps the plan going for 12 months from the total and shows
   what you would have (two versions: spending exactly your category limits, and only saving your
-  planned savings). Each month uses its own plan if you have set it up (a new job from October,
+  planned savings), for 12, 24, 36 or 60 months. **One-off amounts** (a holiday, a tax refund: a name, an amount, a date)
+  count in the month their date is in. Each month uses its own plan if you have set it up (a new job from October,
   say); a month you have not set up repeats the month before it. It is arithmetic, not a
   prediction. The newest number you type always wins. Opsparing follows the kids: when a kid
   "brugte" money it goes down, when a kid "fik" money it goes up (only what happens after you

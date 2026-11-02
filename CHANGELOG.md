@@ -3,6 +3,21 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.25.0 - 2026-11-02
+
+- **New: one-off amounts on Fremtid** (a holiday, a tax refund). A new card "Engangsbeløb" at the top of Fremtid: a name,
+  an amount, "Det koster penge / Det giver penge" and a date. Each counts in the month its date is in, in both versions of
+  the result ("spend exactly the limits" and "only the savings"), and shows in its own column in "Måned for måned". A
+  one-off dated outside the months shown says so on its line. They are only in Fremtid: Overblik and the reports are
+  unchanged. (`oneOffs` in the month; `allOneOffs` and `forecast` in `budget.js`.)
+- **New: look further ahead.** "Se frem" at the top of the result card: 12, 24, 36 or 60 months (kept on the device).
+- **Firebase: `firestore.rules` changed (a new optional field `oneOffs`, at most 100 a month). Publish the rules before
+  using one-off amounts** (SETUP-ACCOUNTS.md, step 6). A month is only sent with `oneOffs` when it has some, so
+  nothing else is affected, but until the new rules are published, a month with a one-off cannot be saved online (the page
+  then says "Kontoen måtte ikke gemme det"). `dev_rules_checks.js`: 118 checks pass, 4 of them new.
+- A one-off is saved in one saved month (like the typed account numbers), so a month you have not set up is never created
+  just to hold it. A new month copied from the last one starts with none.
+
 ## 1.24.0 - 2026-11-02
 
 - **New: a bill that does not come every month can be "put aside per month".** In the small box under an income or
