@@ -1431,7 +1431,7 @@ function purchasesHtml(spending) {
 		return '<p class="hint">' + t("Ingen udgifter.") + "</p>";
 	}
 	return tableHtml([t("Dato"), t("Kategori"), t("Note"), t("Beløb")], spending.map((item) => ({
-		cells: [dateText(item.date).slice(0, 6), { html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
+		cells: [shortDateText(item.date),{ html: esc(item.category), cls: "wrap" }, { html: esc(item.note), cls: "wrap" }, formatKr(item.amount)],
 	})), "purchases");
 }
 
@@ -2060,7 +2060,7 @@ function potCardHtml(person) {
 			: `data-action="delete-pot" data-id="${esc(entry.id)}" data-month="${esc(entry.monthKey)}"`;
 		history += `
 			<li>
-				<div class="what">${esc(text)}<small>${esc(dateText(entry.date).slice(0, 6) + own)}</small></div>
+				<div class="what">${esc(text)}<small>${esc(shortDateText(entry.date) + own)}</small></div>
 				<span class="money ${entry.amount < 0 ? "bad-text" : ""}">${formatKr(entry.amount)}</span>
 				<button class="icon" ${remove} aria-label="${t("Slet")}">✕</button>
 			</li>`;

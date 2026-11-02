@@ -1242,6 +1242,9 @@ check("tn: English, one and many", [texts.tn(1, "{n} måned", "{n} måneder"), t
 check("english: amounts show with English number style", [0, 4995, 123456, 1250000].map((ore) => plain(budget.formatKr(ore))), ["DKK 0", "DKK 49.95", "DKK 1,234.56", "DKK 12,500"]);
 check("english: an amount goes into a box with a dot", [100, 4995].map(budget.amountToInput), ["1", "49.95"]);
 check("english: typed amounts, either style", ["49.95", "49,95", "1,250", "1,250.50", "1.250,50", "12.500", "12,34"].map(budget.parseAmount), [4995, 4995, 125000, 125050, 125050, 1250000, 1234]);
+check("english: short date has no trailing slash", budget.shortDateText("2026-09-30"), "30/09");
+check("a group of thousands never starts with 0", ["0.125", "0,125", "0.500"].map(budget.parseAmount), [null, null, null]);
+check("small amounts with decimals still read", ["0.50", "0,5", "0.05"].map(budget.parseAmount), [50, 50, 5]);
 check("english: and what is not an amount", ["abc", "1,2,3", "1,250.5.0"].map(budget.parseAmount), [null, null, null]);
 check("english: month names", [budget.monthLabel("2026-09"), budget.shortMonthLabel("2026-09"), budget.dayLabel("2026-09-30")], ["September 2026", "Sept 2026", "Wednesday 30 September"]);
 check("english: dates in numbers", budget.dateText("2026-09-30"), "30/09/2026");

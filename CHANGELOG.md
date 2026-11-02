@@ -3,6 +3,19 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.21.2 - 2026-11-02
+
+- **Fix: on an iPhone the page zoomed in when you tapped Amount or Note, and stayed zoomed** (seen in a screen
+  recording: the header and tab bar were cut off at the edges afterwards). Cause: a box inside a `<label>` inherited the
+  label's 14 px text (`font: inherit`), and iPhone Safari zooms in on any box under 16 px. Boxes now have 16 px.
+- **Fix: the date box on Overblik stuck out past the right edge of its card on an iPhone.** An iPhone date box has a width
+  of its own; it now shrinks to its card (`min-width: 0`, `appearance: none`).
+- **Fix: in English the short dates in the report's purchase list and in a kid's history ended in a slash** ("27/10/").
+  New `shortDateText` in `budget.js`: "27/10" in English, "27.10." in Danish.
+- **Fix: "0.125" was read as 125 kr.** A group of thousands never starts with 0, so "0.125" and "0,125" are now "not an
+  amount" (red box) instead of a wrong number. "0.50" and "0,5" read as before.
+- **Not tried on a real iPhone**: the two iPhone fixes are CSS and the tests do not cover CSS.
+
 ## 1.21.1 - 2026-10-23
 
 - **Fix: the small box under each row on Plan now ALWAYS starts folded.** In 1.21.0 I only folded the plain "Hver måned"

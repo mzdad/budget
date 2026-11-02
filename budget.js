@@ -128,7 +128,7 @@ function parseAmount(text) {
 		const decimal = lastDot > lastComma ? "." : ",";
 		const thousands = decimal === "." ? "," : ".";
 		const whole = value.slice(0, value.lastIndexOf(decimal));
-		const group = new RegExp("^\\d{1,3}(\\" + thousands + "\\d{3})*$");
+		const group = new RegExp("^[1-9]\\d{0,2}(\\" + thousands + "\\d{3})*$");
 		if (!group.test(whole)) {
 			return null;
 		}
@@ -140,7 +140,8 @@ function parseAmount(text) {
 			return null;   // in Danish a comma is only ever the decimal mark, and "12,345" has too many decimals
 		}
 		if (pieces.length > 2 || pieces[1].length === 3) {
-			if (!new RegExp("^\\d{1,3}(\\" + mark + "\\d{3})+$").test(value)) {
+			// A group of thousands never starts with 0: "0.125" is not 125 kr, it is not an amount.
+			if (!new RegExp("^[1-9]\\d{0,2}(\\" + mark + "\\d{3})+$").test(value)) {
 				return null;
 			}
 			value = pieces.join("");
@@ -791,6 +792,12 @@ function dateText(dateKey) {
 	const parts = dateKey.split("-");
 	const mark = getLanguage() === "da" ? "." : "/";
 	return parts[2] + mark + parts[1] + mark + parts[0];
+}
+
+// "2026-09-30" -> "30.09." (Danish) or "30/09" (English): the day and month, for lists
+function shortDateText(dateKey) {
+	const parts = dateKey.split("-");
+	return getLanguage() === "da" ? parts[2] + "." + parts[1] + "." : parts[2] + "/" + parts[1];
 }
 
 function byDateOldestFirst(list) {
@@ -1926,7 +1933,7 @@ if (typeof module !== "undefined") {
 		noteHistory, categoryIdForNote,
 		EVERY_CHOICES, isPeriodic, monthsBetween, isDueIn, nextDueKey, everyText,
 		FORECAST_MONTHS, forecast,
-		dateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
+		dateText, shortDateText, monthReport, yearReport, yearsWithData, csvAmount, csvText, monthCsv, yearCsv,
 		cleanAmount, cleanMonth, cleanData, sameData,
 		MOST_INCOME_ROWS, MOST_FIXED_ROWS, MOST_CATEGORIES, MOST_SPENDING_PER_MONTH,
 	};

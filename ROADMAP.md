@@ -5,6 +5,16 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.21.2
+
+- **5.6 iPhone: no zoom when a box is tapped, and the date box stays inside its card** (you sent a screen recording of the
+  page zooming in and staying zoomed). Boxes now have 16 px text, and the date box can shrink. Also from a full check of
+  the code: English short dates lost their trailing slash, and "0.125" is no longer read as 125 kr. **Not tried on your
+  phone**: reload and tap Amount; the page should not zoom.
+- **Left open from that check** (small, not done): removing a kid's link can drop the kid's entries if a month already
+  has 500 entries; a kid's link has no limit on entries; Tesseract, zxcvbn and Firebase load from a CDN without an
+  integrity check; a backup with more than 2,000 purchases in a month loses the extra ones without saying.
+
 ## Done in 1.21.1
 
 - **2.8 Plan: the small box under each row always starts folded** (you said: 'when I go in plan, the "every month" ones
