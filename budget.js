@@ -596,6 +596,17 @@ function everyText(every) {
 }
 
 
+// A bill that comes less often than monthly can also be "put aside per month" (row.spread): instead of the
+// whole amount in the month it is due and nothing in the others, every month from the first payment's month
+// on (until the last day's month) carries its share, the amount divided by how many months it is between
+// payments. The shares are rounded to whole øre, so a year of them can be a few øre off the bill.
+function spreadAmountIn(row, key) {
+	if (key < row.from.slice(0, 7) || (row.to && key > row.to.slice(0, 7))) {
+		return 0;
+	}
+	return Math.round(row.amount / row.every);
+}
+
 // A row's amount as it counts in the month `key` (the whole amount when the row has no dates or
 // no month is given). Whole-number maths: the result is rounded to whole øre.
 function amountIn(row, key) {
@@ -603,6 +614,9 @@ function amountIn(row, key) {
 		return row.amount;
 	}
 	if (isPeriodic(row)) {
+		if (row.spread) {
+			return spreadAmountIn(row, key);
+		}
 		return isDueIn(row, key) ? row.amount : 0;
 	}
 	if (!row.from && !row.to) {
@@ -630,6 +644,9 @@ function windowText(row) {
 	const parts = [];
 	if (isPeriodic(row)) {
 		parts.push(everyText(row.every));
+		if (row.spread) {
+			parts.push(t("lægges til side hver måned"));
+		}
 	}
 	if (row.from) {
 		parts.push(t("fra {date}", { date: dateText(row.from) }));
@@ -1804,6 +1821,10 @@ function cleanRows(list, amountField, mostRows, dated, periodic) {
 		}
 		if (periodic && clean.from && EVERY_CHOICES.includes(row.every) && row.every > 1) {
 			clean.every = row.every;
+			// "Put aside per month" only means something for a bill that does not come every month.
+			if (row.spread === true) {
+				clean.spread = true;
+			}
 		}
 		return clean;
 	});
@@ -1926,7 +1947,7 @@ if (typeof module !== "undefined") {
 		monthKeyOf, dateKeyOf, shiftMonth, monthLabel, shortMonthLabel, dayLabel, lastDayOfMonth, daysLeftInMonth,
 		newId, starterMonth, renameStandardNames, standardNamesToRename, copyPlanOf, nearestMonthWithData, missingCategoryNames, parseBankText, planBankImport, bankCategoryId, bankColumns, assembleBankText, reconcileAmountReadings, mergeDeviceMonth, spendingNewestFirst, spendingByCategory,
 		summarize, barShare, barLevel,
-		activeDaysIn, amountIn, sumIn, windowText, rowsForReport,
+		activeDaysIn, amountIn, spreadAmountIn, sumIn, windowText, rowsForReport,
 		potBalances, othersTotal, cleanSignedAmount, MOST_POT_ENTRIES_PER_MONTH,
 		latestBalance, potChangeSince, moneyNow, cleanBalances,
 		makeKidToken, kidLink, parseKidKey, parentSideOf, cleanKidEntry, withKidEntries, KID_TOKEN_LENGTH,

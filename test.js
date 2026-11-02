@@ -1784,6 +1784,18 @@ attempt("big numbers: a number wider than its card gets a smaller font", () => {
 	check("small phones: a long category name on Udgifter wraps instead of pushing the amount out", /\.group-head h3\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/.test(styleSource), true);
 });
 
+// --- Bills put aside per month (1.24.0) ---
+const yearlyBill = { id: "ins", name: "Forsikring", amount: 1200000, every: 12, from: "2026-03-15" };
+const spreadBill = { ...yearlyBill, spread: true };
+check("spread: a yearly bill counts its twelfth in every month from the first payment", ["2026-02", "2026-03", "2026-04", "2027-02", "2027-03"].map((key) => budget.amountIn(spreadBill, key)), [0, 100000, 100000, 100000, 100000]);
+check("spread: the same bill not spread is unchanged (whole amount in its month only)", ["2026-03", "2026-04", "2027-03"].map((key) => budget.amountIn(yearlyBill, key)), [1200000, 0, 1200000]);
+check("spread: a last day ends it", ["2026-12", "2027-01"].map((key) => budget.amountIn({ ...spreadBill, to: "2026-12-31" }, key)), [100000, 0]);
+check("spread: every 3rd month counts a third, rounded to whole øre", budget.amountIn({ id: "x", name: "x", amount: 10000, every: 3, from: "2026-01-01", spread: true }, "2026-02"), 3333);
+check("spread: a year of shares is the bill (to the øre when it divides evenly)", Array.from({ length: 12 }, (_, i) => budget.amountIn(spreadBill, budget.shiftMonth("2026-03", i))).reduce((sum, ore) => sum + ore, 0), 1200000);
+check("spread: the plan counts the share, not the bill", budget.summarize({ income: [{ id: "i", name: "Løn", amount: 3000000 }], fixed: [spreadBill], savings: 0, categories: [], spending: [] }, "2026-05").fixed, 100000);
+check("spread: spread without a first day or without 'every' is ignored when saved data is cleaned", budget.cleanMonth({ fixed: [{ id: "a", name: "a", amount: 100, spread: true }, { id: "b", name: "b", amount: 100, every: 12, spread: true }, { id: "c", name: "c", amount: 100, every: 12, from: "2026-03-15", spread: true }] }).fixed.map((row) => row.spread === true), [false, false, true]);
+check("spread: the report says it", budget.windowText(spreadBill), "hvert år lægges til side hver måned fra 15.03.2026");
+
 // --- Udgifter: a purchase can be edited (1.22.0) ---
 attempt("udgifter: edit a purchase", () => {
 	const p = pretendPage();

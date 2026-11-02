@@ -3,6 +3,17 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.24.0 - 2026-11-02
+
+- **New: a bill that does not come every month can be "put aside per month".** In the small box under an income or
+  fixed-bill row, once "Hvor ofte?" is every 2nd, 3rd or 6th month or every year, a tick box "Læg til side hver måned i
+  stedet" appears. Ticked, every month from the first payment's month on (until the last day's month) counts its share,
+  the amount divided by the months between payments, instead of the whole amount in the month it is due and 0 in the
+  others. So "Forsikring 12.000 hvert år" counts 1.000 a month on Plan, Overblik, Fremtid and in the reports. The shares are
+  rounded to whole øre. Not ticked, everything is as before. (`spreadAmountIn` in `budget.js`; the row gets `spread: true`,
+  which needs no change to Firebase's rules.)
+- Fixes in the same area: choosing "Hver måned" again, clearing the first-payment date, or "Ryd" also takes the tick away.
+
 ## 1.23.0 - 2026-11-02
 
 - **New: the page opens without internet.** A "service worker" (`sw.js`) keeps a copy of the page's own files and of

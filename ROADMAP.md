@@ -5,6 +5,13 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.24.0
+
+- **3.3 Spread a yearly bill over the months** ("put aside per month"). A tick box in the small box under a row that comes
+  every 2nd/3rd/6th month or every year. Ticked, each month from the first payment on counts its share instead of the whole
+  bill in one month. It starts at the first payment's month (it does not go back before it); tell me if you want it to
+  start earlier, for money you already put aside before the first bill.
+
 ## Done in 1.23.0
 
 - **5.1 Open the page without internet** (a service worker, `sw.js`). The page's own files and Firebase's program files are
@@ -229,7 +236,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 |---|---|---|---|
 | 3.1 | **One-off expenses in Fremtid** (a holiday, say), and a longer horizon than 12 months. | Fremtid only repeats the plan month after month, so a big expense you know is coming is not in it. | M |
 | 3.2 | **A real Excel file (.xlsx)** instead of .csv. | The .csv opens fine in Excel (Danish format), but a real file keeps the look. Needs a library. | M |
-| 3.3 | **Spread a yearly bill over the months**, as "put aside per month". | A bill that comes once a year is charged in full in its month and 0 in the others. Spread out, each month carries its share. | S |
 | 3.4 | **On a kid's "fik": a tick for "only moved inside the pile"**, so Opsparing does not change. | A kid's "fik" always raises Opsparing (your choice, option A, 1.8.0); if it was only money moved inside the pile you retype the real Opsparing today. | S |
 
 ## 4. Kids

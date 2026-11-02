@@ -534,6 +534,19 @@ label.button.secondary {
 	border-bottom: 1px solid var(--line);
 }
 
+/* "Læg til side hver måned": a tick box with its text beside it (boxes are otherwise full width). */
+.spread-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.spread-check input {
+	width: auto;
+	min-height: 0;
+	margin: 0;
+}
+
 /* A purchase open for editing: the form takes the whole line. */
 .list li.editing {
 	display: block;

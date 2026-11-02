@@ -431,4 +431,8 @@ const ENGLISH = {
 	"Læs fra skærmbillede: log ind først": "Read from a picture: log in first",
 	"Ret udgiften": "Edit the expense",
 	"Gem ændringen": "Save the change",
+	"Læg til side hver måned i stedet": "Put aside every month instead",
+	"lægges til side hver måned": "put aside every month",
+	"Lægges til side fra {month}.": "Put aside from {month}.",
+	"Lægges til side i {month}: {amount} ({total} fordelt på {n} måneder)": "Put aside in {month}: {amount} ({total} spread over {n} months)",
 };

@@ -1319,7 +1319,9 @@ function datesHtml(row, section) {
 	let frequencyBox = "";
 	if (section.hasFrequency) {
 		const options = EVERY_CHOICES.map((every) => `<option value="${every}"${(row.every || 1) === every ? " selected" : ""}>${t(EVERY_LABELS[every])}</option>`).join("");
-		frequencyBox = `<label>${t("Hvor ofte?")} <select data-field="every">${options}</select></label>`;
+		frequencyBox = `<label>${t("Hvor ofte?")} <select data-field="every">${options}</select></label>`
+			// Only for a bill that does not come every month; shown and hidden by refreshDatesOf.
+			+ `<label class="spread-check"${row.every > 1 ? "" : " hidden"}><input type="checkbox" data-field="spread"${row.spread ? " checked" : ""}> ${t("Læg til side hver måned i stedet")}</label>`;
 	}
 	const isOpen = datesOpen[datesKey(section.key, row.id)] === true;
 	return `
@@ -1338,7 +1340,7 @@ function datesHtml(row, section) {
 function datesSummaryText(row, section) {
 	if (row.every > 1) {
 		const first = row.from ? ", " + t("første gang {date}", { date: dateText(row.from) }) : "";
-		return t(EVERY_LABELS[row.every]) + first;
+		return t(EVERY_LABELS[row.every]) + first + (row.spread ? ", " + t("lægges til side hver måned") : "");
 	}
 	const when = windowText(row);
 	if (when !== "") {
@@ -1350,6 +1352,16 @@ function datesSummaryText(row, section) {
 // What the row means for the month on screen, so nobody has to work it out.
 function dateNoteText(row) {
 	const month = monthInSentence(viewMonth);
+
+	if (isPeriodic(row) && row.spread) {
+		if (row.to && viewMonth > row.to.slice(0, 7)) {
+			return t("Betales ikke flere gange.");
+		}
+		if (viewMonth < row.from.slice(0, 7)) {
+			return t("Lægges til side fra {month}.", { month: monthInSentence(row.from.slice(0, 7)) });
+		}
+		return t("Lægges til side i {month}: {amount} ({total} fordelt på {n} måneder)", { month: month, amount: formatKr(amountIn(row, viewMonth)), total: formatKr(row.amount), n: row.every });
+	}
 
 	if (isPeriodic(row)) {
 		if (isDueIn(row, viewMonth)) {
@@ -1394,6 +1406,11 @@ function refreshDatesOf(rowElement, row, section) {
 	const every = rowElement.querySelector('[data-field="every"]');
 	if (every) {
 		every.value = String(row.every || 1);
+	}
+	const spread = rowElement.querySelector('[data-field="spread"]');
+	if (spread) {
+		spread.checked = Boolean(row.spread);
+		spread.closest("label").hidden = !(row.every > 1);
 	}
 }
 
@@ -2669,6 +2686,16 @@ function editRow(input) {
 				}
 			} else if (row) {
 				delete row.every;
+				delete row.spread;   // "put aside per month" only goes with a bill that comes less often
+			}
+		});
+	} else if (field === "spread") {
+		changeMonth((month) => {
+			const row = findRow(month[section.key], id);
+			if (row && input.checked) {
+				row.spread = true;
+			} else if (row) {
+				delete row.spread;
 			}
 		});
 	} else if (field === "from" || field === "to") {
@@ -2684,6 +2711,7 @@ function editRow(input) {
 				delete row[field];
 				if (field === "from") {
 					delete row.every;
+					delete row.spread;
 				}
 			}
 		});
@@ -2721,6 +2749,7 @@ function clearDates(button) {
 			delete row.from;
 			delete row.to;
 			delete row.every;
+			delete row.spread;
 		}
 	});
 	refreshDatesOf(rowElement, findRow(getMonth(viewMonth)[section.key], id), section);
