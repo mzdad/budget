@@ -12,7 +12,8 @@ A small monthly budget page for phone and PC. Danish, kroner.
 - **Overblik** - shows what is left to spend this month, and lets you write in every
   purchase (the Note box suggests notes you have used before, and picks their usual category).
   The categories card can be folded to a small view. Each category has a bar that turns amber near its limit and red above it.
-- **Udgifter** - every purchase, newest first. Delete a mistake with the ✕.
+- **Udgifter** - every purchase, grouped by category, newest first. Fix a purchase with the pencil (✎: amount, note,
+  category, date within the month) or delete it with the ✕.
 - **Fremtid** - type what is on your two accounts, **Lønkonto** and **Opsparing** (each shows
   when it was last updated), and it keeps the plan going for 12 months from the total and shows
   what you would have (two versions: spending exactly your category limits, and only saving your
@@ -70,6 +71,8 @@ A small monthly budget page for phone and PC. Danish, kroner.
 - **Categories are the same in every month.** A category you make is added to every saved month (with
   no limit there; each month has its own limits). Renaming or deleting one only changes the month you
   are in.
+- **Opens without internet.** `sw.js` keeps a copy of the page's files on the device (see the 1.23.0 entry in
+  CHANGELOG.md). The page itself is fetched from the network first, so a new version shows at once.
 - A new month starts as a copy of the last month's plan, with no spending.
 - **Saving your numbers**, two ways:
   - **With an account** (username + password): saved online, the same on every phone and

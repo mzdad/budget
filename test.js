@@ -1820,9 +1820,14 @@ const changelog = fs.readFileSync(__dirname + "/CHANGELOG.md", "utf8");
 const currentVersion = ownFiles[0][2].slice(3);
 check("version: CHANGELOG.md has a section for the current version", changelog.includes("## " + currentVersion), true);
 
-console.log("");
-if (failures > 0) {
-	console.log(failures + " check(s) FAILED");
-	process.exit(1);
-}
-console.log("All checks passed");
+// The worker that lets the page open without internet is checked in its own file (it needs await).
+require("./test_sw.js").run(check, ownFiles.map((match) => match[1])).catch((error) => {
+	check("offline copy: the checks of sw.js ran", "threw: " + error.message, "no error");
+}).then(() => {
+	console.log("");
+	if (failures > 0) {
+		console.log(failures + " check(s) FAILED");
+		process.exit(1);
+	}
+	console.log("All checks passed");
+});

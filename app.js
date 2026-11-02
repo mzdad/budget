@@ -3169,6 +3169,22 @@ applyStaticTexts();
 applyTheme(currentTheme);   // (index.html has already put the colours on; this also sets the phone's top bar)
 keepBigNumbersInside();
 
+// Lets the page open without internet (sw.js). The version is in the worker's address, so every release is a
+// new worker. Not on this computer's test copy of Firebase (?emulator), and not for a copy opened without a
+// version (APP_VERSION is "dev"), so trying things out is never served from an old copy.
+function startOfflineCopy() {
+	if (typeof navigator === "undefined" || !navigator.serviceWorker || APP_VERSION === "dev" || USE_FIREBASE_EMULATOR) {
+		return;
+	}
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("sw.js?v=" + APP_VERSION).catch((error) => {
+			// Only for opening without internet; the page works without it.
+			console.warn("Could not start the offline copy:", error);
+		});
+	});
+}
+startOfflineCopy();
+
 // Opened with a kid's link (or on a device that remembers one): then it is only the kid's own page,
 // with nothing of the budget on it (kid.js). Otherwise the normal page.
 const kidLinkKey = accountsAvailable() ? findKidKey() : null;

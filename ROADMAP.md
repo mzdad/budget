@@ -5,6 +5,14 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.23.0
+
+- **5.1 Open the page without internet** (a service worker, `sw.js`). The page's own files and Firebase's program files are
+  kept on the device and used when the network is missing; `index.html` still comes from the network first, so a release
+  shows at once. A new worker and cache per release. 15 checks in `test_sw.js` with a pretend `caches` and `fetch`.
+  **Not tried on a real phone** (the browser I test in cannot run service workers): add the page to the home screen,
+  open it once online, then switch on flight mode and open it again.
+
 ## Done in 1.22.0
 
 - **2.9 Edit a purchase** (my idea, from the check of the app). A pencil (✎) on each purchase on Udgifter opens it for
@@ -234,7 +242,6 @@ Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 | | What | Why | Size |
 |---|---|---|---|
-| 5.1 | **Open the page without internet** (a "service worker"). | Today the page needs internet to start, even though the numbers are saved on the phone. The Kortpris app has one. | M |
 | 5.2 | **Try a kid's link on a real phone.** | I could only test it against the local test copy of Firebase, never your real project (I never sign in to it). Make a link, open it on a phone, write something, and see it on the kid's card. | S (you) |
 
 ## Not planned

@@ -3,6 +3,19 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.23.0 - 2026-11-02
+
+- **New: the page opens without internet.** A "service worker" (`sw.js`) keeps a copy of the page's own files and of
+  Firebase's program files, and hands them out when the network is missing. Before, the page could not even start without
+  internet, although the numbers were already kept on the phone (the device copy in `account.js`). The page itself
+  (`index.html`) is fetched from the network first, so a release still shows up at once; the copy is used when the network
+  is missing or does not answer within 4 seconds. Files with a version in their address are served from the copy first.
+  Every release is a new worker (it is registered as `sw.js?v=1.23.0`) with a new cache, and the old cache is deleted.
+  Nothing else is touched: Firestore's own traffic, the reader of the bank picture and the password checker go straight to
+  the network. Not started on this computer's test copy of Firebase (`?emulator`) or when the page is opened without a version.
+- **Tests:** `test_sw.js` runs the worker with a pretend `caches` and `fetch` (install, activate, offline, slow network,
+  what it must leave alone). **Not tried on a real phone**: the browser I test in here cannot run service workers.
+
 ## 1.22.0 - 2026-11-02
 
 - **New: edit a purchase on Udgifter.** Each purchase has a pencil (✎) next to the ✕. It opens the purchase in place of
