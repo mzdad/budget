@@ -96,6 +96,7 @@ let lastCategoryId = "";                      // so the next purchase starts on 
 let lastDate = { date: "", chosenOn: "" };    // so the next purchase starts on the same day (see addFormHtml)
 let categoriesOpen = loadCategoriesOpen();    // is the categories card on Overblik open?
 let datesOpen = {};                           // { "fixed:row-id": true }: the boxes you opened since you came to this screen (never saved)
+let editingSpendingId = null;                 // the id of the purchase on Udgifter that is open for editing, or null
 let currentTheme = loadTheme();               // which colours the page has (see THEMES)
 let shareNote = "";                           // what "Brug disse kategorier i alle måneder" said, shown once
 let standardNamesNote = "";                   // what the standard-names button said, shown once
@@ -253,6 +254,7 @@ function datesKey(sectionKey, rowId) {
 
 function forgetOpenDates() {
 	datesOpen = {};
+	editingSpendingId = null;   // a purchase left open for editing is closed too when you change screen or month
 }
 
 // ---- The language ---------------------------------------------------------------------
@@ -861,6 +863,10 @@ function expensesHtml(month) {
 			<div class="group-head"><h3>${esc(group.name)}</h3><span class="group-total">${formatKr(group.total)}</span></div>
 			<ul class="list">`;
 		for (const item of group.items) {
+			if (item.id === editingSpendingId) {
+				html += editSpendingHtml(item, month);
+				continue;
+			}
 			const day = shortDayText(item.date);
 			const title = item.note !== "" ? esc(item.note) : day;
 			const small = item.note !== "" ? `<small>${day}</small>` : "";
@@ -868,12 +874,42 @@ function expensesHtml(month) {
 				<li>
 					<div class="what">${title}${small}</div>
 					<span class="money">${formatKr(item.amount)}</span>
-					<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="${t("Slet udgiften")}">✕</button>
+					<button class="icon" data-action="edit-spending" data-id="${esc(item.id)}" aria-label="${t("Ret udgiften")}">✎</button>
+						<button class="icon" data-action="delete-spending" data-id="${esc(item.id)}" aria-label="${t("Slet udgiften")}">✕</button>
 				</li>`;
 		}
 		html += "</ul>";
 	}
 	return html + "</section>";
+}
+
+// One purchase open for editing, in the place of its line: the same four boxes as when it was written
+// in. The date can only be a day of the month on screen, so a purchase never moves to another month.
+function editSpendingHtml(item, month) {
+	const firstDay = viewMonth + "-01";
+	const lastDay = viewMonth + "-" + String(lastDayOfMonth(viewMonth)).padStart(2, "0");
+	return `
+		<li class="editing">
+			<form id="edit-spending-form" data-id="${esc(item.id)}" autocomplete="off">
+				<label>${amountLabel()}
+					<input name="amount" inputmode="decimal" value="${amountToInput(item.amount)}" required>
+				</label>
+				<label>${t("Note (hvis du vil)")}
+					<input name="note" maxlength="${MAX_NOTE_LENGTH}" value="${esc(item.note)}">
+				</label>
+				<label>${t("Kategori")}
+					<select name="category">${bankCategoryOptionsHtml(month, item.categoryId)}</select>
+				</label>
+				<label>${t("Dato")}
+					<input type="date" name="date" value="${esc(item.date)}" min="${firstDay}" max="${lastDay}" required>
+				</label>
+				<div class="edit-buttons">
+					<button type="submit" class="primary">${t("Gem ændringen")}</button>
+					<button type="button" class="secondary" data-action="cancel-edit-spending">${t("Annullér")}</button>
+				</div>
+				<p id="edit-message" class="message" role="status"></p>
+			</form>
+		</li>`;
 }
 
 // "2026-09-02" -> "2. sep."
@@ -1641,6 +1677,14 @@ document.addEventListener("click", (event) => {
 		case "delete-spending":
 			deleteSpending(button.dataset.id);
 			break;
+		case "edit-spending":
+			editingSpendingId = button.dataset.id;
+			render();
+			break;
+		case "cancel-edit-spending":
+			editingSpendingId = null;
+			render();
+			break;
 		case "set-theme":
 			applyTheme(button.dataset.themeId);
 			saveTheme(currentTheme);
@@ -1696,6 +1740,9 @@ document.addEventListener("submit", (event) => {
 	if (event.target.id === "add-form") {
 		event.preventDefault();
 		addSpending(event.target);
+	} else if (event.target.id === "edit-spending-form") {
+		event.preventDefault();
+		saveSpendingEdit(event.target);
 	} else if (event.target.id === "account-form") {
 		event.preventDefault();
 		signInFromForm(event.target);
@@ -2537,6 +2584,34 @@ function addSpending(form) {
 	const where = categoryName(getMonth(viewMonth), categoryId);
 	render();
 	setMessage("add-message", t("Tilføjet: {amount} til {category}.", { amount: formatKr(amount), category: where }), false);
+}
+
+// "Gem ændringen" on a purchase open for editing: the same checks as when writing one in.
+function saveSpendingEdit(form) {
+	const amount = parseAmount(form.elements.amount.value);
+	if (amount === null || amount <= 0) {
+		setMessage("edit-message", t("Skriv et beløb større end 0, fx 49,95."), true);
+		return;
+	}
+	const date = form.elements.date.value;
+	if (date.slice(0, 7) !== viewMonth) {
+		setMessage("edit-message", t("Datoen skal ligge i {month}.", { month: monthInSentence(viewMonth) }), true);
+		return;
+	}
+	const id = form.dataset.id;
+	const categoryId = form.elements.category.value;
+	const note = form.elements.note.value.trim().slice(0, MAX_NOTE_LENGTH);
+	changeMonth((month) => {
+		const item = findRow(month.spending, id);
+		if (item) {
+			item.amount = amount;
+			item.note = note;
+			item.categoryId = categoryId;
+			item.date = date;
+		}
+	});
+	editingSpendingId = null;
+	render();
 }
 
 function deleteSpending(id) {

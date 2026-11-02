@@ -5,6 +5,11 @@ items move to "Done" with their version, and keep their number. Biggest wins fir
 the size is a rough guess of the work (S = an hour or two, M = a session, L = several sessions).
 Everything built before 1.11.0 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Done in 1.22.0
+
+- **2.9 Edit a purchase** (my idea, from the check of the app). A pencil (✎) on each purchase on Udgifter opens it for
+  editing in place: amount, note, category and date (within the month on screen). Before, you deleted it and wrote it again.
+
 ## Done in 1.21.2
 
 - **5.6 iPhone: no zoom when a box is tapped, and the date box stays inside its card** (you sent a screen recording of the

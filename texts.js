@@ -429,4 +429,6 @@ const ENGLISH = {
 	"Du er ikke logget ind": "You are not logged in",
 	"Opret en konto eller log ind først for at få den fulde version med gemte tal. Indtil da kan du kun prøve det af: det du skriver, bliver ikke gemt og er væk, når du lukker siden.": "Create an account or log in first to get the full version with saved numbers. Until then you can only try it out: what you write is not saved and is gone when you close the page.",
 	"Læs fra skærmbillede: log ind først": "Read from a picture: log in first",
+	"Ret udgiften": "Edit the expense",
+	"Gem ændringen": "Save the change",
 };

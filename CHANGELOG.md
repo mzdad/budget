@@ -3,6 +3,13 @@
 The version number is shown at the bottom of the page. It is set in one place (`index.html`,
 by `python dev_set_version.py X.Y.Z`). Newest first.
 
+## 1.22.0 - 2026-11-02
+
+- **New: edit a purchase on Udgifter.** Each purchase has a pencil (✎) next to the ✕. It opens the purchase in place of
+  its line with the same four boxes as when it was written in (amount, note, category, date); "Gem ændringen" saves it,
+  "Annullér" closes it. The date can only be a day of the month on screen, so a purchase never moves to another month.
+  The form closes when you change screen or month. Before, a wrong amount meant deleting the purchase and writing it again.
+
 ## 1.21.2 - 2026-11-02
 
 - **Fix: on an iPhone the page zoomed in when you tapped Amount or Note, and stayed zoomed** (seen in a screen

@@ -1784,6 +1784,30 @@ attempt("big numbers: a number wider than its card gets a smaller font", () => {
 	check("small phones: a long category name on Udgifter wraps instead of pushing the amount out", /\.group-head h3\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/.test(styleSource), true);
 });
 
+// --- Udgifter: a purchase can be edited (1.22.0) ---
+attempt("udgifter: edit a purchase", () => {
+	const p = pretendPage();
+	const spendData = { months: { "2026-09": {
+		income: [{ id: "inc", name: "Løn", amount: 2500000 }],
+		fixed: [],
+		categories: [{ id: "mad", name: "Mad", limit: 100000 }, { id: "fri", name: "Fritid", limit: 50000 }],
+		spending: [{ id: "s1", date: "2026-09-05", categoryId: "mad", amount: 4995, note: "Rema" }],
+	} } };
+	p.run("data = cleanData(" + JSON.stringify(spendData) + "); viewMonth = '2026-09'; activeTab = 'expenses'; editingSpendingId = 's1'; render();");
+	const html = p.view();
+	check("edit purchase: the open purchase shows the edit form, with its amount", [html.includes('id="edit-spending-form"'), html.includes('value="49,95"')], [true, true]);
+	const form = (amount, date) => "({ dataset: { id: 's1' }, elements: { amount: { value: '" + amount + "' }, note: { value: ' Netto ' }, category: { value: 'fri' }, date: { value: '" + date + "' } } })";
+	// Not an amount, and a day in another month: nothing changes, and the form stays open.
+	p.run("saveSpendingEdit(" + form("abc", "2026-09-06") + ");");
+	p.run("saveSpendingEdit(" + form("10", "2026-10-06") + ");");
+	check("edit purchase: a bad amount or another month changes nothing", p.run("JSON.stringify(data.months['2026-09'].spending[0])"), JSON.stringify(spendData.months["2026-09"].spending[0]));
+	check("edit purchase: the form stays open after a bad try", p.run("editingSpendingId"), "s1");
+	p.run("saveSpendingEdit(" + form("60,5", "2026-09-06") + ");");
+	check("edit purchase: a good edit changes the purchase (same id) and closes the form", [p.run("JSON.stringify(data.months['2026-09'].spending[0])"), p.run("editingSpendingId")], [JSON.stringify({ id: "s1", date: "2026-09-06", categoryId: "fri", amount: 6050, note: "Netto" }), null]);
+	p.run("editingSpendingId = 's1'; forgetOpenDates();");
+	check("edit purchase: changing screen or month closes the form", p.run("editingSpendingId"), null);
+});
+
 // --- The version number in index.html (the release rule) ---
 // Every file of our own that index.html loads must end in the same ?v=x.y.z. A phone that keeps
 // an old file next to a new index.html would otherwise mix versions.

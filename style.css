@@ -534,6 +534,17 @@ label.button.secondary {
 	border-bottom: 1px solid var(--line);
 }
 
+/* A purchase open for editing: the form takes the whole line. */
+.list li.editing {
+	display: block;
+}
+
+.edit-buttons {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
 .list li:last-child {
 	border-bottom: none;
 }
